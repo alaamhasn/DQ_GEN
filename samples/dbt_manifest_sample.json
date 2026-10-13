@@ -1,0 +1,146 @@
+{
+  "metadata": {
+    "dbt_schema_version": "https://schemas.getdbt.com/dbt/manifest/v10.json",
+    "dbt_version": "1.7.4",
+    "generated_at": "2026-10-11T04:30:00Z",
+    "project_name": "enterprise_analytics"
+  },
+  "nodes": {
+    "model.enterprise_analytics.dim_customers": {
+      "raw_code": "select customer_id, email, full_name, created_at, status from {{ ref('stg_customers') }}",
+      "compiled_code": "select customer_id, email, full_name, created_at, status from analytics.staging.stg_customers",
+      "resource_type": "model",
+      "name": "dim_customers",
+      "package_name": "enterprise_analytics",
+      "schema": "marts",
+      "database": "analytics",
+      "description": "Core dimension table for enterprise customers with standardized contact attributes.",
+      "columns": {
+        "customer_id": {
+          "name": "customer_id",
+          "description": "Primary key for the customer table. UUID format.",
+          "data_type": "string"
+        },
+        "email": {
+          "name": "email",
+          "description": "Verified customer email address.",
+          "data_type": "string"
+        },
+        "status": {
+          "name": "status",
+          "description": "Account lifecycle status: active, suspended, closed.",
+          "data_type": "string"
+        }
+      },
+      "meta": {
+        "owner": "Sarah Jenkins",
+        "domain": "Customer Intelligence"
+      },
+      "depends_on": {
+        "nodes": ["model.enterprise_analytics.stg_customers"]
+      }
+    },
+    "model.enterprise_analytics.fct_orders": {
+      "raw_code": "select order_id, customer_id, order_date, total_amount, order_status from {{ ref('stg_orders') }}",
+      "compiled_code": "select order_id, customer_id, order_date, total_amount, order_status from analytics.staging.stg_orders",
+      "resource_type": "model",
+      "name": "fct_orders",
+      "package_name": "enterprise_analytics",
+      "schema": "marts",
+      "database": "analytics",
+      "description": "Transactional order records reconciled with daily ERP bookings.",
+      "columns": {
+        "order_id": {
+          "name": "order_id",
+          "description": "Primary key for orders.",
+          "data_type": "string"
+        },
+        "customer_id": {
+          "name": "customer_id",
+          "description": "Foreign key to dim_customers.",
+          "data_type": "string"
+        },
+        "total_amount": {
+          "name": "total_amount",
+          "description": "Total order amount including tax and discounts.",
+          "data_type": "numeric"
+        }
+      },
+      "meta": {
+        "owner": "David Kim",
+        "domain": "Finance & Sales"
+      },
+      "depends_on": {
+        "nodes": ["model.enterprise_analytics.stg_orders"]
+      }
+    },
+    "test.enterprise_analytics.unique_dim_customers_customer_id.c5e7f": {
+      "resource_type": "test",
+      "name": "unique_dim_customers_customer_id",
+      "raw_code": "{{ test_unique(model=ref('dim_customers'), column_name='customer_id') }}",
+      "compiled_code": "select customer_id, count(*) as n_records from analytics.marts.dim_customers group by customer_id having count(*) > 1",
+      "description": "Validates uniqueness of primary key customer_id in dim_customers.",
+      "column_name": "customer_id",
+      "test_metadata": {
+        "name": "unique",
+        "kwargs": {
+          "column_name": "customer_id",
+          "model": "ref('dim_customers')"
+        }
+      },
+      "attached_node": "model.enterprise_analytics.dim_customers",
+      "depends_on": {
+        "nodes": ["model.enterprise_analytics.dim_customers"]
+      }
+    },
+    "test.enterprise_analytics.not_null_dim_customers_customer_id.9a2b1": {
+      "resource_type": "test",
+      "name": "not_null_dim_customers_customer_id",
+      "raw_code": "{{ test_not_null(model=ref('dim_customers'), column_name='customer_id') }}",
+      "compiled_code": "select * from analytics.marts.dim_customers where customer_id is null",
+      "description": "Validates that customer_id is never null in dim_customers.",
+      "column_name": "customer_id",
+      "test_metadata": {
+        "name": "not_null",
+        "kwargs": {
+          "column_name": "customer_id",
+          "model": "ref('dim_customers')"
+        }
+      },
+      "attached_node": "model.enterprise_analytics.dim_customers",
+      "depends_on": {
+        "nodes": ["model.enterprise_analytics.dim_customers"]
+      }
+    },
+    "test.enterprise_analytics.relationships_fct_orders_customer_id__customer_id__ref_dim_customers_.41bc": {
+      "resource_type": "test",
+      "name": "relationships_fct_orders_customer_id",
+      "raw_code": "{{ test_relationships(model=ref('fct_orders'), column_name='customer_id', to=ref('dim_customers'), field='customer_id') }}",
+      "compiled_code": "select o.customer_id from analytics.marts.fct_orders o left join analytics.marts.dim_customers c on o.customer_id = c.customer_id where c.customer_id is null and o.customer_id is not null",
+      "description": "Ensures foreign key referential integrity between fct_orders and dim_customers.",
+      "column_name": "customer_id",
+      "test_metadata": {
+        "name": "relationships",
+        "kwargs": {
+          "column_name": "customer_id",
+          "to": "ref('dim_customers')",
+          "field": "customer_id"
+        }
+      },
+      "attached_node": "model.enterprise_analytics.fct_orders",
+      "depends_on": {
+        "nodes": ["model.enterprise_analytics.fct_orders", "model.enterprise_analytics.dim_customers"]
+      }
+    }
+  },
+  "sources": {
+    "source.enterprise_analytics.salesforce.customers": {
+      "resource_type": "source",
+      "source_name": "salesforce",
+      "name": "customers",
+      "schema": "raw_crm",
+      "database": "raw_lake",
+      "description": "Raw salesforce contact records ingested via Fivetran."
+    }
+  }
+}

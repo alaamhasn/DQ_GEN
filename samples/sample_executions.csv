@@ -1,0 +1,7 @@
+execution_id,rule_id,timestamp,environment,status,total_records,passed_records,failed_records,failure_pct,threshold,expected_result,actual_result,evidence,notes
+EXEC-20261011-01,RULE-COMP-001,2026-10-11T04:00:00Z,PROD,PASSED,2450000,2450000,0,0.0,0,0 null rows,0 null rows,Snowflake Query 019a-ff1,Completed successfully
+EXEC-20261011-02,RULE-UNIQ-001,2026-10-11T04:05:00Z,PROD,PASSED,1892000,1892000,0,0.0,0,0 duplicates,0 duplicates,PostgreSQL pid 2419,Unique constraint intact
+EXEC-20261011-03,RULE-VAL-001,2026-10-11T04:10:00Z,PROD,WARNING,2450000,2449982,18,0.0007,0,0 invalid emails,18 invalid emails found,Log ref #8412,18 malformed emails flagged in staging
+EXEC-20261011-04,RULE-ACC-001,2026-10-11T04:15:00Z,PROD,PASSED,520100,520100,0,0.0,0.01,0 discrepancy,0 discrepancy,Audit batch #9921,Order totals match line items
+EXEC-20261011-05,RULE-FRESH-001,2026-10-11T04:20:00Z,PROD,PASSED,1,1,0,0.0,24,< 24 hours,2.4 hours latency,ETL run duration 14m,Data fresh within SLA
+EXEC-20261011-06,RULE-REF-001,2026-10-11T04:25:00Z,PROD,FAILED,520100,520093,7,0.0013,0,0 orphan records,7 orphan customer IDs,Table orders_raw,7 unmapped customer IDs quarantined

@@ -1,0 +1,67 @@
+{
+  "metadata": {
+    "dbt_schema_version": "https://schemas.getdbt.com/dbt/catalog/v1.json",
+    "dbt_version": "1.7.4",
+    "generated_at": "2026-10-11T04:40:00Z"
+  },
+  "nodes": {
+    "model.enterprise_analytics.dim_customers": {
+      "metadata": {
+        "type": "BASE TABLE",
+        "schema": "marts",
+        "name": "dim_customers",
+        "database": "analytics",
+        "comment": "Core dimension table for enterprise customers",
+        "owner": "TRANSFORM_ROLE"
+      },
+      "columns": {
+        "customer_id": {
+          "type": "VARCHAR(36)",
+          "index": 1,
+          "name": "customer_id",
+          "comment": "Primary customer UUID"
+        },
+        "email": {
+          "type": "VARCHAR(255)",
+          "index": 2,
+          "name": "email",
+          "comment": "Customer email"
+        },
+        "full_name": {
+          "type": "VARCHAR(150)",
+          "index": 3,
+          "name": "full_name",
+          "comment": "First and last name"
+        },
+        "created_at": {
+          "type": "TIMESTAMP_NTZ",
+          "index": 4,
+          "name": "created_at",
+          "comment": "Registration timestamp"
+        },
+        "status": {
+          "type": "VARCHAR(20)",
+          "index": 5,
+          "name": "status",
+          "comment": "Lifecycle account status"
+        }
+      },
+      "stats": {
+        "row_count": {
+          "id": "row_count",
+          "label": "Row Count",
+          "value": 1845200,
+          "include": true,
+          "description": "Total records in table"
+        },
+        "bytes": {
+          "id": "bytes",
+          "label": "Size in Bytes",
+          "value": 268435456,
+          "include": true,
+          "description": "Table compressed storage"
+        }
+      }
+    }
+  }
+}

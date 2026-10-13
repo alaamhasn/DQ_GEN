@@ -1,0 +1,94 @@
+# ====================================================================
+# Data Quality Documenter - Smart Autocomplete Vocabulary Dictionary
+# ====================================================================
+# Each section starts with [category_name] followed by unique values.
+# New values typed into the application are automatically appended.
+# You can import or export this file via Settings > Smart Autocomplete.
+
+[domains]
+
+
+[owners]
+
+[reviewers]
+
+
+[frequencies]
+Daily (Post-ETL 04:00 UTC)
+Hourly Batch Sync
+Real-Time / Streaming
+Weekly (Sunday 02:00 UTC)
+Monthly Financial Close
+Ad-hoc / Manual Run
+
+[systems]
+Kafka / Flink Streaming
+
+[catalogs]
+
+[schemas]
+BILLING
+
+[tables]
+
+
+[dataTypes]
+VARCHAR(36)
+VARCHAR(100)
+VARCHAR(255)
+CHAR(2)
+BIGINT
+INTEGER
+NUMERIC(18,4)
+TIMESTAMP_NTZ
+TIMESTAMP_TZ
+DATE
+BOOLEAN
+FLOAT
+
+[transformRules]
+Direct 1:1 Mapping
+TRIM(SRC_COL)
+LOWER(TRIM(SRC_COL))
+UPPER(TRIM(SRC_COL))
+COALESCE(SRC_COL, 'UNKNOWN')
+Lookup against ISO-3166
+Currency conversion to USD at daily fixing rate
+UTC normalized timestamp
+Lookup against REF_STATUS_CODES
+
+[dialects]
+Snowflake
+PostgreSQL
+Trino
+MySQL
+SQL Server
+ANSI SQL
+
+[environments]
+PROD
+UAT
+QA
+DEV
+STAGING
+
+[expectedResults]
+0 rows returned (Zero defect records)
+0 duplicates found
+Variance equal to $0.00 (tolerance < $0.01)
+0 invalid emails
+Lag minutes <= 120
+All validation rules pass with 0 defect records
+Reduction of unmatched patient records to < 0.05%
+
+[thresholds]
+0
+0.01
+0.05%
+0.1%
+10
+120
+24
+
+[rootCauses]
+

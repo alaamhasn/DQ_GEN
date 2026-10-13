@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Data Quality Documenter - Portable Windows Edition</title>
+  <meta name="description" content="Offline standalone technical documentation and validation rule management suite for Data Quality Engineers.">
+  <link rel="icon" id="app-favicon" href="assets/logo.png" type="image/png">
+  <link rel="shortcut icon" href="favicon.ico">
+  <link rel="stylesheet" href="styles.css?v=3.5">
+</head>
+<body>
+  <div id="app-container">
+    <!-- Sidebar Navigation -->
+    <aside class="app-sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <img src="assets/logo.png" alt="DQD Logo" class="sidebar-logo" id="sidebar-logo-img" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'36\' height=\'36\' viewBox=\'0 0 36 36\'><rect width=\'36\' height=\'36\' rx=\'6\' fill=\'%231F4E79\'/><path d=\'M9 9h18v18H9z\' fill=\'none\' stroke=\'%23fff\' stroke-width=\'2\'/><path d=\'M15 18l3 3 6-6\' stroke=\'%2300A6A6\' stroke-width=\'2.5\' fill=\'none\' stroke-linecap=\'round\'/></svg>'">
+        <div class="sidebar-brand">
+          <span class="sidebar-brand-name" id="sidebar-app-name">Data Quality Documenter</span>
+          <span class="sidebar-brand-tag">Windows Portable</span>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav" id="sidebar-nav-list">
+        <div class="nav-section-title">Core Operations</div>
+        <a class="nav-item active" data-view="dashboard" id="nav-dashboard">
+          <span class="nav-icon">📊</span>
+          <span>Dashboard</span>
+        </a>
+        <a class="nav-item" data-view="documents" id="nav-documents">
+          <span class="nav-icon">📑</span>
+          <span>Documents</span>
+          <span class="nav-badge" id="badge-doc-count">0</span>
+        </a>
+        <a class="nav-item" data-view="users" id="nav-users">
+          <span class="nav-icon">👥</span>
+          <span>User Directory</span>
+          <span class="nav-badge" id="badge-users-count">0</span>
+        </a>
+        <a class="nav-item" data-view="editor" id="nav-editor">
+          <span class="nav-icon">✏️</span>
+          <span>Create Document</span>
+        </a>
+        <a class="nav-item" data-view="templates" id="nav-templates">
+          <span class="nav-icon">📋</span>
+          <span>Templates</span>
+        </a>
+
+        <div class="nav-section-title">Rules & Data</div>
+        <a class="nav-item" data-view="rules" id="nav-rules">
+          <span class="nav-icon">🛡️</span>
+          <span>Validation Rules</span>
+          <span class="nav-badge" id="badge-rules-count">0</span>
+        </a>
+        <a class="nav-item" data-view="sql-library" id="nav-sql-library">
+          <span class="nav-icon">💾</span>
+          <span>SQL Library</span>
+          <span class="nav-badge" id="badge-sql-library-count">0</span>
+        </a>
+        <a class="nav-item" data-view="executions" id="nav-executions">
+          <span class="nav-icon">⏱️</span>
+          <span>Test Executions</span>
+        </a>
+        <a class="nav-item" data-view="issues" id="nav-issues">
+          <span class="nav-icon">⚠️</span>
+          <span>Issues & Remediation</span>
+          <span class="nav-badge" id="badge-issues-count">0</span>
+        </a>
+
+        <div class="nav-section-title">Discovery & Integration</div>
+        <a class="nav-item" data-view="pdf-import" id="nav-pdf-import">
+          <span class="nav-icon">📄</span>
+          <span>PDF Import</span>
+        </a>
+
+        <div class="nav-section-title" id="nav-sec-governance">Governance & Settings</div>
+        <a class="nav-item" data-view="scorecards" id="nav-scorecards">
+          <span class="nav-icon">📈</span>
+          <span>Scorecards</span>
+        </a>
+        <a class="nav-item" data-view="audit" id="nav-audit">
+          <span class="nav-icon">📜</span>
+          <span>Audit History</span>
+        </a>
+        <a class="nav-item" data-view="settings" id="nav-settings">
+          <span class="nav-icon">⚙️</span>
+          <span>Settings</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-footer-info">
+          <span>Standalone Mode</span>
+          <span style="font-size: 10px; opacity: 0.7;">Zero Server / 100% Offline</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Viewport -->
+    <main class="app-main">
+      <!-- Top Navbar -->
+      <header class="top-navbar">
+        <div class="navbar-left">
+          <div class="view-title-container">
+            <h1 class="view-heading" id="current-view-title">Dashboard</h1>
+            <span class="view-subheading" id="current-view-subtitle">Quality Metrics & Workspace Overview</span>
+          </div>
+        </div>
+
+        <div class="navbar-search" style="position: relative;">
+          <span class="navbar-search-icon">🔍</span>
+          <input type="text" id="global-search-input" placeholder="Search documents, SQL Trino, columns, team..." autocomplete="off">
+          <div id="global-search-dropdown" class="search-dropdown-popover" style="display: none;"></div>
+        </div>
+
+        <div class="navbar-right">
+          <button class="btn btn-outline btn-sm" id="btn-quick-import-dqdoc" title="Import Document (.dqdoc or JSON)">
+            <span>📥</span> Import .dqdoc
+          </button>
+          <input type="file" id="input-quick-import-file" accept=".dqdoc,.json" style="display: none;">
+          <button class="btn btn-primary btn-sm" id="btn-quick-new-doc">
+            <span>➕</span> New Document
+          </button>
+          <button class="btn btn-outline btn-sm" id="btn-quick-backup" title="Download Complete Backup">
+            <span>💾</span> Backup
+          </button>
+        </div>
+      </header>
+
+      <!-- Content Area -->
+      <section class="app-content" id="main-content-view">
+        <!-- VIEWS WILL BE INSERTED / TOGGLED HERE -->
+      </section>
+    </main>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container"></div>
+
+  <!-- Generic Modal Overlay -->
+  <div class="modal-overlay" id="app-modal">
+    <div class="modal-dialog" id="modal-dialog-box">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modal-title-text">Modal Title</h3>
+        <button class="modal-close" id="modal-btn-close">&times;</button>
+      </div>
+      <div class="modal-body" id="modal-body-content">
+        <!-- Dynamic content -->
+      </div>
+      <div class="modal-footer" id="modal-footer-actions">
+        <!-- Dynamic actions -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Dynamic Autocomplete Datalists Container -->
+  <div id="dqd-datalists-container"></div>
+
+  <!-- BUNDLED LIBRARIES (All purely local offline in lib/) -->
+  <script src="config.js?v=4.0"></script>
+  <script src="lib/jspdf.umd.min.js"></script>
+  <script src="lib/jspdf.plugin.autotable.min.js"></script>
+  <script src="lib/pdf.min.js"></script>
+  <script src="lib/xlsx.full.min.js"></script>
+  <script src="lib/chart.umd.min.js"></script>
+  <script src="defaults.js?v=4.0"></script>
+  <script src="app.js?v=4.0"></script>
+</body>
+</html>
