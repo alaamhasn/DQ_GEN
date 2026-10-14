@@ -8861,42 +8861,164 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
       const reader = new FileReader();
       reader.onload = async (e) => {
         try {
-          const parsed = JSON.parse(e.target.result);
-          const doc = parsed.document || parsed;
-          if (!doc.id || !doc.title) {
-            throw new Error('Invalid format: Document must contain an "id" and "title".');
+          const raw = e.target.result;
+          let parsed;
+          try {
+            parsed = JSON.parse(raw);
+          } catch (jsonErr) {
+            throw new Error('File is not valid JSON. Please verify the file contents.');
           }
 
-          // Ensure structure integrity
-          if (!doc.validationType) doc.validationType = 'Model Validation';
-          if (!Array.isArray(doc.usernames)) doc.usernames = doc.owner ? [doc.owner] : [];
-          if (!Array.isArray(doc.dynamicInputs)) doc.dynamicInputs = [];
-          if (!Array.isArray(doc.validatedModels)) doc.validatedModels = [];
-          if (!Array.isArray(doc.validatedTables)) doc.validatedTables = [];
-          if (!Array.isArray(doc.screenshots)) doc.screenshots = [];
-          if (!Array.isArray(doc.sqlQueries) || doc.sqlQueries.length === 0) {
-            doc.sqlQueries = [{ id: 'Q-1', title: 'Primary Trino Validation Query', dialect: 'Trino', query: doc.sqlQuery || '', notes: '' }];
+          if (!parsed || typeof parsed !== 'object') {
+            throw new Error('Invalid format: File content must be a JSON object or array.');
           }
 
-          // Save to IndexedDB database
-          await this.dbPut('documents', doc);
-
-          // Update local memory
-          const existingIdx = this.documents.findIndex(d => d.id === doc.id);
-          if (existingIdx >= 0) {
-            this.documents[existingIdx] = doc;
+          // Handle array of documents, workspace package, or single document
+          let rawDocs = [];
+          if (Array.isArray(parsed)) {
+            rawDocs = parsed;
+          } else if (Array.isArray(parsed.documents)) {
+            rawDocs = parsed.documents;
+          } else if (parsed.document && typeof parsed.document === 'object') {
+            rawDocs = [parsed.document];
+          } else if (parsed.doc && typeof parsed.doc === 'object') {
+            rawDocs = [parsed.doc];
+          } else if (parsed.data && typeof parsed.data === 'object' && !Array.isArray(parsed.data)) {
+            rawDocs = [parsed.data];
           } else {
-            this.documents.unshift(doc);
+            rawDocs = [parsed];
+          }
+
+          if (rawDocs.length === 0) {
+            throw new Error('No document records found in imported file.');
+          }
+
+          const importedDocs = [];
+
+          for (let i = 0; i < rawDocs.length; i++) {
+            const item = rawDocs[i];
+            if (!item || typeof item !== 'object') continue;
+
+            const doc = JSON.parse(JSON.stringify(item));
+
+            // Normalize Title (support title, name, documentTitle, doc_title, label, or filename)
+            doc.title = (doc.title || doc.name || doc.documentTitle || doc.doc_title || doc.document_title || doc.label || doc.validationType || file.name.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ') || `Imported Document ${i + 1}`).trim();
+
+            // Normalize ID (support id, doc_id, document_id, or auto-generate)
+            if (!doc.id || !String(doc.id).trim()) {
+              doc.id = 'DOC-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + Math.floor(1000 + Math.random() * 9000);
+            } else {
+              doc.id = String(doc.id).trim();
+            }
+
+            // Normalization & Defaults
+            if (!doc.version) doc.version = '1.0';
+            if (!doc.status) doc.status = 'Draft';
+            if (!doc.validationType) doc.validationType = doc.documentType || 'Model Validation';
+            if (!doc.team) doc.team = '';
+            if (!doc.businessDomain) doc.businessDomain = doc.domain || '';
+            if (!doc.executiveSummary) doc.executiveSummary = doc.description || '';
+            if (!doc.businessObjective) doc.businessObjective = '';
+
+            // User attribution
+            if (!Array.isArray(doc.usernames)) doc.usernames = doc.owner ? [doc.owner] : [];
+            if (!doc.owner && doc.usernames.length > 0) doc.owner = doc.usernames[0];
+
+            // Sub-collections
+            if (!Array.isArray(doc.dynamicInputs)) doc.dynamicInputs = [];
+            if (!Array.isArray(doc.validatedModels)) doc.validatedModels = [];
+            if (!Array.isArray(doc.validatedTables)) doc.validatedTables = [];
+            if (!Array.isArray(doc.screenshots)) doc.screenshots = [];
+            if (!Array.isArray(doc.rules)) doc.rules = [];
+            if (!Array.isArray(doc.executions)) doc.executions = [];
+            if (!Array.isArray(doc.issues)) doc.issues = [];
+            if (!Array.isArray(doc.approvals)) doc.approvals = [];
+            if (!Array.isArray(doc.versionHistory)) {
+              doc.versionHistory = [
+                { version: doc.version, createdAt: new Date().toISOString(), author: doc.owner || '', summary: 'Imported Document' }
+              ];
+            } else {
+              // Sanitize legacy 'Author' in versionHistory
+              doc.versionHistory.forEach(v => {
+                if (v && v.author && String(v.author).trim().toLowerCase() === 'author') {
+                  v.author = doc.owner || (doc.usernames && doc.usernames[0]) || '';
+                }
+              });
+            }
+
+            // SQL Queries
+            if (!Array.isArray(doc.sqlQueries) || doc.sqlQueries.length === 0) {
+              if (doc.sqlQuery && String(doc.sqlQuery).trim()) {
+                doc.sqlQueries = [{
+                  id: 'Q-1',
+                  title: doc.sqlQueryTitle || 'Primary Validation Query',
+                  dialect: doc.sqlDialect || 'Trino',
+                  query: doc.sqlQuery,
+                  notes: doc.sqlNotes || ''
+                }];
+              } else {
+                doc.sqlQueries = [{
+                  id: 'Q-1',
+                  title: 'Primary Validation Query',
+                  dialect: doc.sqlDialect || 'Trino',
+                  query: '',
+                  notes: ''
+                }];
+              }
+            }
+
+            // Timestamps
+            doc.createdAt = doc.createdAt || new Date().toISOString();
+            doc.updatedAt = new Date().toISOString();
+
+            // Save to IndexedDB
+            await this.dbPut('documents', doc);
+
+            // Sync issues if present
+            if (Array.isArray(doc.issues) && doc.issues.length > 0) {
+              for (const iss of doc.issues) {
+                if (iss && iss.id) {
+                  await this.dbPut('issues', iss);
+                  if (!this.issues.some(i => i.id === iss.id)) {
+                    this.issues.unshift(iss);
+                  }
+                }
+              }
+            }
+
+            // Update in-memory documents list
+            const existingIdx = this.documents.findIndex(d => d.id === doc.id);
+            if (existingIdx >= 0) {
+              this.documents[existingIdx] = doc;
+            } else {
+              this.documents.unshift(doc);
+            }
+
+            importedDocs.push(doc);
           }
 
           this.updateSidebarBadges();
-          this.currentDoc = JSON.parse(JSON.stringify(doc));
-          this.currentDoc._originalId = doc.id;
-          this.navigateTo('editor');
-          this.showToast(`Document "${doc.id}" imported successfully with ${doc.screenshots.length} screenshot(s)!`, 'success');
+
+          // Reset the file input so selecting the same file again triggers change event
+          const fileInput = document.getElementById('input-quick-import-file');
+          if (fileInput) fileInput.value = '';
+
+          if (importedDocs.length === 1) {
+            const singleDoc = importedDocs[0];
+            this.currentDoc = JSON.parse(JSON.stringify(singleDoc));
+            this.currentDoc._originalId = singleDoc.id;
+            this.currentEditorTab = 'tab-meta';
+            this.navigateTo('editor');
+            this.showToast(`Document "${singleDoc.title}" (${singleDoc.id}) imported successfully!`, 'success');
+          } else {
+            this.navigateTo('documents');
+            this.showToast(`Successfully imported ${importedDocs.length} documents!`, 'success');
+          }
         } catch (err) {
           console.error('Import error:', err);
           alert('Failed to import .dqdoc / JSON document: ' + err.message);
+          const fileInput = document.getElementById('input-quick-import-file');
+          if (fileInput) fileInput.value = '';
         }
       };
       reader.readAsText(file);

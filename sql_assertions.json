@@ -1,17 +1,1 @@
-[
-    {
-        "id": "SQL-DOC-20261013-6904-Q-1",
-        "title": "PE V.1",
-        "documentTitle": "PE V.1",
-        "documentId": "DOC-20261013-6904",
-        "queryIndex": 1,
-        "queryTitle": "Primary Trino Validation Query",
-        "dialect": "Trino",
-        "sql": "asdasd asdasd sadas\nasd\nasd\nas\nd\nas\ndasd",
-        "notes": "",
-        "expectedResult": "",
-        "threshold": "120",
-        "createdAt": "2026-10-13T21:30:52.380Z",
-        "updatedAt": "2026-10-14T02:13:44.494Z"
-    }
-]
+[]
