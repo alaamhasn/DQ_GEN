@@ -405,33 +405,153 @@
 
     getAllUserStatistics() {
       const userMap = {};
-      this.documents.forEach(doc => {
-        const users = new Set();
-        if (Array.isArray(doc.usernames)) {
-          doc.usernames.forEach(u => { if (u && String(u).trim()) users.add(String(u).trim()); });
-        }
-        if (doc.owner && String(doc.owner).trim()) users.add(String(doc.owner).trim());
-        if (doc.reviewer && String(doc.reviewer).trim()) users.add(String(doc.reviewer).trim());
 
-        users.forEach(username => {
-          if (!userMap[username]) {
-            userMap[username] = {
-              username,
-              teams: new Set(),
-              documents: [],
-              roles: new Set()
-            };
+      const getOrCreateUser = (rawName) => {
+        if (!rawName || !String(rawName).trim()) return null;
+        const trimmed = String(rawName).trim();
+        const key = trimmed.toLowerCase();
+        if (!userMap[key]) {
+          userMap[key] = {
+            key,
+            username: trimmed,
+            teams: new Set(),
+            documents: [],
+            roles: new Set()
+          };
+        } else {
+          // If the new name has uppercase/title case and existing is all lowercase, improve display name
+          if (trimmed !== trimmed.toLowerCase() && userMap[key].username === userMap[key].username.toLowerCase()) {
+            userMap[key].username = trimmed;
           }
-          if (doc.team && String(doc.team).trim()) {
-            userMap[username].teams.add(String(doc.team).trim());
+        }
+        return userMap[key];
+      };
+
+      this.documents.forEach(doc => {
+        const docUserKeys = new Set();
+
+        // 1. Assigned usernames
+        if (Array.isArray(doc.usernames)) {
+          doc.usernames.forEach(u => {
+            const uEntry = getOrCreateUser(u);
+            if (uEntry) {
+              uEntry.roles.add('Assignee');
+              docUserKeys.add(uEntry.key);
+            }
+          });
+        }
+
+        // 2. Owner
+        if (doc.owner) {
+          const uEntry = getOrCreateUser(doc.owner);
+          if (uEntry) {
+            uEntry.roles.add('Owner');
+            docUserKeys.add(uEntry.key);
           }
-          userMap[username].documents.push(doc);
-          if (doc.owner === username) userMap[username].roles.add('Owner');
-          if (doc.reviewer === username) userMap[username].roles.add('Reviewer');
-          if (Array.isArray(doc.usernames) && doc.usernames.includes(username)) userMap[username].roles.add('Assignee');
+        }
+
+        // 3. Author / CreatedBy
+        if (doc.author) {
+          const uEntry = getOrCreateUser(doc.author);
+          if (uEntry) {
+            uEntry.roles.add('Author');
+            docUserKeys.add(uEntry.key);
+          }
+        }
+
+        // 4. Reviewer
+        if (doc.reviewer) {
+          const uEntry = getOrCreateUser(doc.reviewer);
+          if (uEntry) {
+            uEntry.roles.add('Reviewer');
+            docUserKeys.add(uEntry.key);
+          }
+        }
+
+        // 5. Approvals reviewers
+        if (Array.isArray(doc.approvals)) {
+          doc.approvals.forEach(a => {
+            if (a.reviewer) {
+              const uEntry = getOrCreateUser(a.reviewer);
+              if (uEntry) {
+                uEntry.roles.add('Approver');
+                docUserKeys.add(uEntry.key);
+              }
+            }
+          });
+        }
+
+        // 6. Version history authors
+        if (Array.isArray(doc.versionHistory)) {
+          doc.versionHistory.forEach(v => {
+            if (v.author) {
+              const uEntry = getOrCreateUser(v.author);
+              if (uEntry) {
+                uEntry.roles.add('Revision Author');
+                docUserKeys.add(uEntry.key);
+              }
+            }
+          });
+        }
+
+        // 7. Issues owners
+        if (Array.isArray(doc.issues)) {
+          doc.issues.forEach(i => {
+            if (i.owner) {
+              const uEntry = getOrCreateUser(i.owner);
+              if (uEntry) {
+                uEntry.roles.add('Remediation Owner');
+                docUserKeys.add(uEntry.key);
+              }
+            }
+          });
+        }
+
+        // Link document and team to each unique user involved in this document
+        docUserKeys.forEach(key => {
+          const uEntry = userMap[key];
+          if (uEntry) {
+            if (doc.team && String(doc.team).trim()) {
+              uEntry.teams.add(String(doc.team).trim());
+            }
+            if (!uEntry.documents.some(d => d.id === doc.id)) {
+              uEntry.documents.push(doc);
+            }
+          }
         });
       });
+
       return userMap;
+    },
+
+    getUserRolesInDocument(username, doc) {
+      if (!doc) return [];
+      const normUser = String(username || '').trim().toLowerCase();
+      const roles = new Set();
+
+      if (doc.owner && String(doc.owner).trim().toLowerCase() === normUser) {
+        roles.add('Owner');
+      }
+      if (doc.author && String(doc.author).trim().toLowerCase() === normUser) {
+        roles.add('Author');
+      }
+      if (doc.reviewer && String(doc.reviewer).trim().toLowerCase() === normUser) {
+        roles.add('Reviewer');
+      }
+      if (Array.isArray(doc.usernames) && doc.usernames.some(u => String(u || '').trim().toLowerCase() === normUser)) {
+        roles.add('Assignee');
+      }
+      if (Array.isArray(doc.approvals) && doc.approvals.some(a => String(a.reviewer || '').trim().toLowerCase() === normUser)) {
+        roles.add('Approver');
+      }
+      if (Array.isArray(doc.versionHistory) && doc.versionHistory.some(v => String(v.author || '').trim().toLowerCase() === normUser)) {
+        roles.add('Revision Author');
+      }
+      if (Array.isArray(doc.issues) && doc.issues.some(i => String(i.owner || '').trim().toLowerCase() === normUser)) {
+        roles.add('Remediation Owner');
+      }
+
+      return roles.size > 0 ? Array.from(roles) : ['Contributor'];
     },
 
     getAllTeams() {
@@ -1195,7 +1315,9 @@
 
     renderUserDirectory(container) {
       const allUsersMap = this.getAllUserStatistics();
-      const usernames = Object.keys(allUsersMap).sort();
+      const userKeys = Object.keys(allUsersMap).sort((a, b) => {
+        return allUsersMap[a].username.localeCompare(allUsersMap[b].username, undefined, { sensitivity: 'base' });
+      });
       const allTeams = this.getAllTeams();
 
       container.innerHTML = `
@@ -1204,7 +1326,7 @@
           <div class="metric-tile" style="background: var(--surface-color);">
             <div class="metric-icon-box" style="background: rgba(31,78,121,0.1); color: var(--primary-color);">👥</div>
             <div>
-              <div class="metric-value">${usernames.length}</div>
+              <div class="metric-value">${userKeys.length}</div>
               <div class="metric-label">Total Unique Usernames</div>
             </div>
           </div>
@@ -1232,11 +1354,11 @@
               <div style="font-size: 11px; color: var(--text-muted);">Explore all contributors across data quality specifications, teams, and author roles</div>
             </div>
             <div style="display: flex; gap: 10px; align-items: center;">
-              <input type="text" id="user-dir-filter" class="form-control form-control-sm" style="width: 260px;" placeholder="Filter by username or team...">
+              <input type="text" id="user-dir-filter" class="form-control form-control-sm" style="width: 260px;" placeholder="Filter by username, team, or role...">
             </div>
           </div>
           <div class="card-body" style="padding: 0;">
-            ${usernames.length === 0 ? `
+            ${userKeys.length === 0 ? `
               <div style="padding: 32px; text-align: center; color: var(--text-muted);">
                 No users assigned to documents yet. Assign usernames to documents in the editor.
               </div>
@@ -1246,19 +1368,20 @@
                   <tr>
                     <th>User / Contributor</th>
                     <th>Associated Team(s)</th>
-                    <th>Document Roles</th>
+                    <th>Combined Document Roles</th>
                     <th>Total Related Documents</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  ${usernames.map(u => {
-                    const uData = allUsersMap[u];
+                  ${userKeys.map(k => {
+                    const uData = allUsersMap[k];
+                    const u = uData.username;
                     const teamsArr = Array.from(uData.teams);
                     const rolesArr = Array.from(uData.roles);
                     const initials = u.slice(0, 2).toUpperCase();
                     return `
-                      <tr class="user-dir-row" data-search="${this.escapeHtml((u + ' ' + teamsArr.join(' ')).toLowerCase())}">
+                      <tr class="user-dir-row" data-search="${this.escapeHtml((u + ' ' + teamsArr.join(' ') + ' ' + rolesArr.join(' ')).toLowerCase())}">
                         <td>
                           <div style="display: flex; align-items: center; gap: 10px;">
                             <div class="user-avatar-circle">${initials}</div>
@@ -1271,14 +1394,14 @@
                           ${teamsArr.length > 0 ? teamsArr.map(t => `<span class="parsed-col-pill" style="background: rgba(16,185,129,0.1); color: var(--status-passed);">${this.escapeHtml(t)}</span>`).join(' ') : '<span style="color: var(--text-muted); font-size: 11px;">No Team Specified</span>'}
                         </td>
                         <td>
-                          ${rolesArr.map(r => `<span class="badge badge-info" style="font-size: 10px; margin-right: 4px;">${this.escapeHtml(r)}</span>`).join('')}
+                          ${rolesArr.map(r => `<span class="badge badge-info" style="font-size: 10px; margin-right: 4px; display: inline-block; margin-bottom: 2px;">${this.escapeHtml(r)}</span>`).join('')}
                         </td>
                         <td>
                           <strong style="font-size: 14px; color: var(--primary-color);">${uData.documents.length}</strong>
                           <span style="font-size: 11px; color: var(--text-muted);">doc(s)</span>
                         </td>
                         <td>
-                          <button class="btn btn-primary btn-sm btn-view-user-docs" data-user="${this.escapeHtml(u)}">
+                          <button class="btn btn-primary btn-sm btn-view-user-docs" data-user="${this.escapeHtml(k)}">
                             📂 View Documents (${uData.documents.length})
                           </button>
                         </td>
@@ -1313,19 +1436,25 @@
       });
     },
 
-    showUserDocumentsModal(username) {
+    showUserDocumentsModal(userIdentifier) {
       const allUsersMap = this.getAllUserStatistics();
-      const uData = allUsersMap[username];
+      const key = String(userIdentifier || '').trim().toLowerCase();
+      const uData = allUsersMap[key] || Object.values(allUsersMap).find(u => u.username.toLowerCase() === key || u.key === key);
       if (!uData || !uData.documents || uData.documents.length === 0) {
-        this.showToast(`No documents found for user "${username}"`, 'info');
+        this.showToast(`No documents found for user "${userIdentifier}"`, 'info');
         return;
       }
 
+      const displayName = uData.username;
+      const combinedRolesStr = Array.from(uData.roles).join(', ');
+
       const modalHtml = `
-        <div style="margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center;">
+        <div style="margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
           <div>
-            <strong>Assigned Documents for: <span style="color: var(--primary-color);">${this.escapeHtml(username)}</span></strong>
-            <div style="font-size: 12px; color: var(--text-muted);">${uData.documents.length} total document(s) found</div>
+            <strong>Assigned Documents for: <span style="color: var(--primary-color);">${this.escapeHtml(displayName)}</span></strong>
+            <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+              ${uData.documents.length} total document(s) &bull; Combined Roles: ${this.escapeHtml(combinedRolesStr)}
+            </div>
           </div>
         </div>
         <div style="max-height: 60vh; overflow-y: auto;">
@@ -1335,12 +1464,15 @@
                 <th>Document ID & Title</th>
                 <th>Validation Type</th>
                 <th>Team</th>
+                <th>Document Roles</th>
                 <th>Status</th>
                 <th>Action</th>
               </tr>
             </thead>
             <tbody>
-              ${uData.documents.map(doc => `
+              ${uData.documents.map(doc => {
+                const docRoles = this.getUserRolesInDocument(displayName, doc);
+                return `
                 <tr>
                   <td>
                     <strong>${this.escapeHtml(doc.title || 'Untitled Document')}</strong>
@@ -1348,19 +1480,22 @@
                   </td>
                   <td><span class="badge badge-info" style="font-size: 10px;">${this.escapeHtml(doc.validationType || 'Model Validation')}</span></td>
                   <td>${this.escapeHtml(doc.team || 'N/A')}</td>
+                  <td>
+                    ${docRoles.map(r => `<span class="badge badge-secondary" style="font-size: 10px; margin-right: 4px; display: inline-block; margin-bottom: 2px;">${this.escapeHtml(r)}</span>`).join('')}
+                  </td>
                   <td>${this.getStatusBadge(doc.status)}</td>
                   <td>
                     <button class="btn btn-outline btn-sm btn-user-open-doc" data-id="${doc.id}">✏️ Open</button>
                   </td>
                 </tr>
-              `).join('')}
+              `;}).join('')}
             </tbody>
           </table>
         </div>
       `;
 
-      this.openModal(`Documents by: ${username}`, modalHtml, [
-        { label: 'Close', className: 'btn-outline', onClick: () => this.closeModal() }
+      this.openModal(`Documents by: ${displayName}`, modalHtml, [
+        { label: 'Close', class: 'btn-outline', action: () => this.closeModal() }
       ]);
 
       document.querySelectorAll('.btn-user-open-doc').forEach(btn => {
@@ -9033,14 +9168,13 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
         });
       });
 
-      // Check for page break
-      if (y > pageHeight - 140) {
-        pdf.addPage();
-        y = margin + 20;
-      }
-
       // Section 5: Execution Results & Evidence
       if (doc.executions && doc.executions.length > 0) {
+        if (y > pageHeight - 140) {
+          pdf.addPage();
+          y = margin + 20;
+        }
+
         pdf.setFont('helvetica', 'bold');
         pdf.setFontSize(13);
         pdf.setTextColor(31, 78, 121);
@@ -9116,6 +9250,21 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
         appendixScreenshots.forEach((ss, idx) => {
           embedScreenshot(ss, `Evidence #${idx + 1}: `);
         });
+      }
+
+      // Clean up any trailing blank pages
+      while (pdf.internal.getNumberOfPages() > 1) {
+        const lastPageNum = pdf.internal.getNumberOfPages();
+        const pageData = pdf.internal.pages[lastPageNum];
+        const hasContent = Array.isArray(pageData) && pageData.some(entry => {
+          if (typeof entry !== 'string') return false;
+          return /\b(Tj|TJ|re|f|S|B|Do)\b/.test(entry) || entry.includes('Tj') || entry.includes('re') || entry.includes('Do');
+        });
+        if (!hasContent) {
+          pdf.deletePage(lastPageNum);
+        } else {
+          break;
+        }
       }
 
       // Page Footers & Numbering across all pages
