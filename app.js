@@ -8888,14 +8888,50 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
       pdf.setFillColor(branding.primaryColor || '#1F4E79');
       pdf.rect(0, 0, pageWidth, 6, 'F');
 
-      // Title & Header
-      y += 20;
+      // Top right corner static size logo (forced static W, H)
+      const STATIC_LOGO_W = 48; // static width (pt)
+      const STATIC_LOGO_H = 48; // static height (pt)
+      const logoX = pageWidth - margin - STATIC_LOGO_W;
+      const logoY = margin - 10;
+
+      if (branding.showLogo !== false) {
+        try {
+          const logoEl = document.getElementById('sidebar-logo-img');
+          let logoToDraw = null;
+
+          if (logoEl && logoEl.complete && logoEl.naturalWidth > 0) {
+            try {
+              const canvas = document.createElement('canvas');
+              canvas.width = logoEl.naturalWidth || 96;
+              canvas.height = logoEl.naturalHeight || 96;
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(logoEl, 0, 0);
+              logoToDraw = canvas.toDataURL('image/png');
+            } catch (cvsErr) {
+              logoToDraw = logoEl;
+            }
+          }
+
+          if (!logoToDraw) {
+            logoToDraw = logoEl || branding.logoPath || 'assets/logo.png';
+          }
+
+          pdf.addImage(logoToDraw, 'PNG', logoX, logoY, STATIC_LOGO_W, STATIC_LOGO_H);
+        } catch (logoErr) {
+          console.warn('Could not draw logo in PDF header:', logoErr);
+        }
+      }
+
+      // Title & Header (Left side, bounded so it never overlaps top-right logo)
+      y += 18;
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(18);
       pdf.setTextColor(31, 41, 55);
-      pdf.text(doc.title || 'Data Quality Specification', margin, y);
+      const titleMaxWidth = contentWidth - STATIC_LOGO_W - 24;
+      const splitTitle = pdf.splitTextToSize(doc.title || 'Data Quality Specification', titleMaxWidth);
+      pdf.text(splitTitle, margin, y);
+      y += (splitTitle.length * 18);
 
-      y += 16;
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(9);
       pdf.setTextColor(100, 116, 139);
@@ -8905,7 +8941,8 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
       const teamUsersLine = `Team: ${doc.team || 'General'}   |   Assigned Users: ${(doc.usernames && doc.usernames.length > 0) ? doc.usernames.join(', ') : (doc.owner || 'Unassigned')}   |   Date: ${new Date(doc.updatedAt || doc.createdAt).toLocaleDateString()}`;
       pdf.text(teamUsersLine, margin, y);
 
-      y += 18;
+      // Ensure divider line sits cleanly below both the metadata and the static logo
+      y = Math.max(y + 14, logoY + STATIC_LOGO_H + 10);
       pdf.setDrawColor(226, 232, 240);
       pdf.line(margin, y, pageWidth - margin, y);
       y += 14;
