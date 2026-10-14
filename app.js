@@ -3054,10 +3054,10 @@
                       <td>${this.escapeHtml(iss.rootCause || 'N/A')}</td>
                       <td style="text-align: right; white-space: nowrap;">
                         <div style="display: flex; gap: 6px; justify-content: flex-end;">
-                          <button type="button" class="btn btn-outline btn-sm btn-edit-doc-issue" data-id="${iss.id}" title="Edit Issue">
+                          <button type="button" class="btn btn-outline btn-sm btn-edit-doc-issue" onclick="window.DQD_App.showEditIssueModalById('${this.escapeHtml(iss.id)}'); event.stopPropagation();" data-id="${this.escapeHtml(iss.id)}" title="Edit Issue">
                             <span>✏️</span> Edit
                           </button>
-                          <button type="button" class="btn btn-outline btn-sm btn-delete-doc-issue" data-id="${iss.id}" style="color: #ef4444; border-color: rgba(239, 68, 68, 0.4);" title="Delete Issue">
+                          <button type="button" class="btn btn-outline btn-sm btn-delete-doc-issue" onclick="window.DQD_App.deleteIssue('${this.escapeHtml(iss.id)}'); event.stopPropagation();" data-id="${this.escapeHtml(iss.id)}" style="color: #ef4444; border-color: rgba(239, 68, 68, 0.4);" title="Delete Issue">
                             <span>🗑️</span> Delete
                           </button>
                         </div>
@@ -3599,6 +3599,30 @@
         this.syncDocFromForm();
         this.showAddIssueModal();
       });
+
+      // Delegated events for issues inside editor tab-issues
+      const editorIssuesTab = document.getElementById('tab-issues');
+      if (editorIssuesTab) {
+        editorIssuesTab.addEventListener('click', (e) => {
+          const editBtn = e.target.closest('.btn-edit-doc-issue');
+          if (editBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            const issueId = editBtn.dataset.id;
+            this.showEditIssueModalById(issueId);
+            return;
+          }
+
+          const delBtn = e.target.closest('.btn-delete-doc-issue');
+          if (delBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            const issueId = delBtn.dataset.id;
+            this.deleteIssue(issueId);
+            return;
+          }
+        });
+      }
     },
 
     // Synchronize form values to this.currentDoc
