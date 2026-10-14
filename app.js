@@ -410,6 +410,10 @@
         if (!rawName || !String(rawName).trim()) return null;
         const trimmed = String(rawName).trim();
         const key = trimmed.toLowerCase();
+        // Ignore generic placeholder strings
+        if (key === 'author' || key === 'user' || key === 'unassigned' || key === 'n/a' || key === 'none' || key === 'null' || key === 'undefined') {
+          return null;
+        }
         if (!userMap[key]) {
           userMap[key] = {
             key,
@@ -726,6 +730,20 @@
       if (!window.DQD_DEFAULT_DOC) {
         this.documents = this.documents.filter(d => !d.id.startsWith('DOC-202610-001') && !d.id.startsWith('DOC-20261012-TRINO'));
       }
+
+      // Sanitize documents: eliminate placeholder 'Author' from version history or author fields
+      this.documents.forEach(d => {
+        if (d && Array.isArray(d.versionHistory)) {
+          d.versionHistory.forEach(v => {
+            if (v && v.author && String(v.author).trim().toLowerCase() === 'author') {
+              v.author = d.owner || (Array.isArray(d.usernames) && d.usernames[0]) || '';
+            }
+          });
+        }
+        if (d && d.author && String(d.author).trim().toLowerCase() === 'author') {
+          d.author = d.owner || (Array.isArray(d.usernames) && d.usernames[0]) || '';
+        }
+      });
 
       // 2. Templates (Ensure full data is populated for fast use)
       this.templates = await this.dbGetAll('templates');
@@ -2385,7 +2403,7 @@
             {
               version: "1.0",
               createdAt: now,
-              author: "Author",
+              author: "",
               summary: "Initial Document Creation"
             }
           ]
@@ -5074,7 +5092,7 @@ ${q.query || '-- No SQL specified'}
         </div>
         <div class="form-group">
           <label class="form-label">Author Name</label>
-          <input type="text" id="ver-input-author" class="form-control" value="${this.escapeHtml(this.currentDoc.owner || 'Author')}">
+          <input type="text" id="ver-input-author" class="form-control" value="${this.escapeHtml(this.currentDoc.owner || (Array.isArray(this.currentDoc.usernames) && this.currentDoc.usernames[0]) || '')}" placeholder="e.g. Sarah Jenkins">
         </div>
         <div class="form-group">
           <label class="form-label">Change Summary Notes</label>
