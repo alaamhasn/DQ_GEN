@@ -88,18 +88,22 @@ html, body {
   color: #FFFFFF;
   display: flex;
   flex-direction: column;
-  transition: width var(--transition-normal);
+  transition: width var(--transition-normal), transform var(--transition-normal);
   z-index: 50;
   flex-shrink: 0;
   box-shadow: 2px 0 10px rgba(0,0,0,0.12);
+  position: relative;
 }
 
 .sidebar-header {
-  padding: 18px 20px;
+  padding: 16px 16px 16px 20px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
   border-bottom: 1px solid rgba(255,255,255,0.12);
+  min-height: var(--header-height);
+  position: relative;
 }
 
 .sidebar-logo {
@@ -109,12 +113,36 @@ html, body {
   border-radius: var(--border-radius-sm);
   background: rgba(255,255,255,0.1);
   padding: 2px;
+  flex-shrink: 0;
 }
 
 .sidebar-brand {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  flex: 1;
+  transition: opacity var(--transition-fast), width var(--transition-normal);
+}
+
+.sidebar-collapse-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.85);
+  width: 28px;
+  height: 28px;
+  border-radius: var(--border-radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+.sidebar-collapse-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #FFFFFF;
+  transform: scale(1.05);
 }
 
 .sidebar-brand-name {
@@ -240,7 +268,190 @@ html, body {
 .navbar-left {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
+}
+
+.btn-sidebar-toggle {
+  background: var(--surface-color);
+  border: 1px solid var(--surface-border);
+  color: var(--text-color);
+  width: 36px;
+  height: 36px;
+  border-radius: var(--border-radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-sidebar-toggle:hover {
+  background: var(--surface-alt);
+  border-color: var(--secondary-color, #4472C4);
+  color: var(--secondary-color, #4472C4);
+  transform: translateY(-1px);
+}
+
+.btn-sidebar-toggle:active {
+  transform: translateY(0);
+}
+
+/* ====================================================================
+   COLLAPSED SIDEBAR NAVIGATION (DESKTOP)
+   ==================================================================== */
+#app-container.sidebar-collapsed .app-sidebar,
+.app-sidebar.collapsed {
+  width: var(--sidebar-collapsed-width);
+}
+
+#app-container.sidebar-collapsed .sidebar-header,
+.app-sidebar.collapsed .sidebar-header {
+  padding: 16px 8px;
+  justify-content: center;
+}
+
+#app-container.sidebar-collapsed .sidebar-brand,
+.app-sidebar.collapsed .sidebar-brand,
+#app-container.sidebar-collapsed .sidebar-collapse-btn,
+.app-sidebar.collapsed .sidebar-collapse-btn {
+  display: none !important;
+}
+
+#app-container.sidebar-collapsed .sidebar-logo,
+.app-sidebar.collapsed .sidebar-logo {
+  margin: 0 auto;
+}
+
+#app-container.sidebar-collapsed .nav-section-title,
+.app-sidebar.collapsed .nav-section-title {
+  height: 1px;
+  padding: 0;
+  margin: 12px 10px;
+  background: rgba(255, 255, 255, 0.15);
+  font-size: 0;
+  color: transparent;
+  overflow: hidden;
+}
+
+#app-container.sidebar-collapsed .nav-item,
+.app-sidebar.collapsed .nav-item {
+  justify-content: center;
+  padding: 11px 0;
+  position: relative;
+  margin: 4px 6px;
+}
+
+#app-container.sidebar-collapsed .nav-item > span:not(.nav-icon):not(.nav-badge),
+.app-sidebar.collapsed .nav-item > span:not(.nav-icon):not(.nav-badge) {
+  display: none !important;
+}
+
+#app-container.sidebar-collapsed .nav-icon,
+.app-sidebar.collapsed .nav-icon {
+  margin: 0;
+  font-size: 18px;
+}
+
+#app-container.sidebar-collapsed .nav-badge,
+.app-sidebar.collapsed .nav-badge {
+  position: absolute;
+  top: 3px;
+  right: 6px;
+  font-size: 9px;
+  padding: 1px 5px;
+  min-width: 14px;
+  text-align: center;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+
+#app-container.sidebar-collapsed .sidebar-footer,
+.app-sidebar.collapsed .sidebar-footer {
+  padding: 12px 6px;
+  justify-content: center;
+}
+
+#app-container.sidebar-collapsed .sidebar-footer-info,
+.app-sidebar.collapsed .sidebar-footer-info {
+  display: none;
+}
+
+/* Floating tooltip when sidebar is collapsed */
+#app-container.sidebar-collapsed .nav-item:hover::after,
+.app-sidebar.collapsed .nav-item:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 6px 12px;
+  border-radius: var(--border-radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+  z-index: 1000;
+  pointer-events: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  opacity: 1;
+}
+
+#app-container.sidebar-collapsed .nav-item:hover::before,
+.app-sidebar.collapsed .nav-item:hover::before {
+  content: '';
+  position: absolute;
+  left: calc(100% + 4px);
+  top: 50%;
+  transform: translateY(-50%);
+  border-width: 5px;
+  border-style: solid;
+  border-color: transparent #0f172a transparent transparent;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+/* ====================================================================
+   MOBILE & RESPONSIVE DRAWER OVERLAY
+   ==================================================================== */
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(2px);
+  z-index: 48;
+  opacity: 0;
+  transition: opacity var(--transition-normal);
+  pointer-events: none;
+}
+
+@media (max-width: 900px) {
+  .sidebar-backdrop {
+    display: block;
+  }
+
+  .app-sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 50;
+    width: var(--sidebar-width) !important;
+    transform: translateX(-100%);
+    box-shadow: 4px 0 20px rgba(0,0,0,0.25);
+  }
+
+  #app-container.sidebar-mobile-open .app-sidebar {
+    transform: translateX(0);
+  }
+
+  #app-container.sidebar-mobile-open .sidebar-backdrop {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 .view-title-container {
@@ -543,18 +754,87 @@ html, body {
 }
 
 /* ====================================================================
-   TABLES & BADGES
+   TABLES & BADGES (RESPONSIVE & SCROLLABLE SYSTEM)
    ==================================================================== */
 .table-responsive {
+  width: 100%;
+  max-width: 100%;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   border-radius: var(--border-radius-sm);
+  position: relative;
+  margin-bottom: 0;
+}
+
+/* Fallback for containers directly holding tables */
+.card-body:has(> .table-custom),
+.card-body:has(> .table-responsive),
+#documents-table-container,
+#rules-table-container {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Elegant scrollbar for responsive table containers */
+.table-responsive::-webkit-scrollbar,
+.card-body::-webkit-scrollbar,
+#documents-table-container::-webkit-scrollbar,
+#rules-table-container::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+
+.table-responsive::-webkit-scrollbar-track,
+.card-body::-webkit-scrollbar-track,
+#documents-table-container::-webkit-scrollbar-track,
+#rules-table-container::-webkit-scrollbar-track {
+  background: var(--surface-alt);
+  border-radius: 3px;
+}
+
+.table-responsive::-webkit-scrollbar-thumb,
+.card-body::-webkit-scrollbar-thumb,
+#documents-table-container::-webkit-scrollbar-thumb,
+#rules-table-container::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.table-responsive::-webkit-scrollbar-thumb:hover,
+.card-body::-webkit-scrollbar-thumb:hover,
+#documents-table-container::-webkit-scrollbar-thumb:hover,
+#rules-table-container::-webkit-scrollbar-thumb:hover {
+  background: var(--secondary-color, #4472C4);
 }
 
 .table-custom {
   width: 100%;
+  min-width: 580px;
   border-collapse: collapse;
   text-align: left;
   font-size: 13px;
+}
+
+/* Compact modal and preview tables */
+.modal-body .table-custom,
+.table-custom.table-compact {
+  min-width: 480px;
+}
+
+/* High-column enterprise tables requiring additional width for comfortable readability */
+#documents-table-container .table-custom,
+#table-user-directory,
+#table-source-mappings,
+#table-doc-rules,
+#rules-table-container .table-custom,
+#table-rules-container .table-custom,
+#table-import-rules-preview,
+.card-body.table-responsive .table-custom,
+#tbody-issues-tracker,
+#tbody-dbt-parsed-rows {
+  min-width: 780px;
 }
 
 .table-custom th {

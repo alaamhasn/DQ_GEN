@@ -22,70 +22,75 @@
           <span class="sidebar-brand-name" id="sidebar-app-name">Data Quality Documenter</span>
           <span class="sidebar-brand-tag" id="sidebar-brand-tag">Data Quality Edition</span>
         </div>
+        <button class="sidebar-collapse-btn" id="btn-collapse-sidebar" title="Collapse Sidebar (Ctrl+B)" aria-label="Collapse Sidebar">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
       </div>
 
       <nav class="sidebar-nav" id="sidebar-nav-list">
         <div class="nav-section-title">Core Operations</div>
-        <a class="nav-item active" data-view="dashboard" id="nav-dashboard">
+        <a class="nav-item active" data-view="dashboard" id="nav-dashboard" data-tooltip="Dashboard">
           <span class="nav-icon">📊</span>
           <span>Dashboard</span>
         </a>
-        <a class="nav-item" data-view="documents" id="nav-documents">
+        <a class="nav-item" data-view="documents" id="nav-documents" data-tooltip="Documents">
           <span class="nav-icon">📑</span>
           <span>Documents</span>
           <span class="nav-badge" id="badge-doc-count">0</span>
         </a>
-        <a class="nav-item" data-view="users" id="nav-users">
+        <a class="nav-item" data-view="users" id="nav-users" data-tooltip="User Directory">
           <span class="nav-icon">👥</span>
           <span>User Directory</span>
           <span class="nav-badge" id="badge-users-count">0</span>
         </a>
-        <a class="nav-item" data-view="editor" id="nav-editor">
+        <a class="nav-item" data-view="editor" id="nav-editor" data-tooltip="Create Document">
           <span class="nav-icon">✏️</span>
           <span>Create Document</span>
         </a>
-        <a class="nav-item" data-view="templates" id="nav-templates">
+        <a class="nav-item" data-view="templates" id="nav-templates" data-tooltip="Templates">
           <span class="nav-icon">📋</span>
           <span>Templates</span>
         </a>
 
         <div class="nav-section-title">Rules & Data</div>
-        <a class="nav-item" data-view="rules" id="nav-rules">
+        <a class="nav-item" data-view="rules" id="nav-rules" data-tooltip="Validation Rules">
           <span class="nav-icon">🛡️</span>
           <span>Validation Rules</span>
           <span class="nav-badge" id="badge-rules-count">0</span>
         </a>
-        <a class="nav-item" data-view="sql-library" id="nav-sql-library">
+        <a class="nav-item" data-view="sql-library" id="nav-sql-library" data-tooltip="SQL Library">
           <span class="nav-icon">💾</span>
           <span>SQL Library</span>
           <span class="nav-badge" id="badge-sql-library-count">0</span>
         </a>
-        <a class="nav-item" data-view="executions" id="nav-executions">
+        <a class="nav-item" data-view="executions" id="nav-executions" data-tooltip="Test Executions">
           <span class="nav-icon">⏱️</span>
           <span>Test Executions</span>
         </a>
-        <a class="nav-item" data-view="issues" id="nav-issues">
+        <a class="nav-item" data-view="issues" id="nav-issues" data-tooltip="Issues & Remediation">
           <span class="nav-icon">⚠️</span>
           <span>Issues & Remediation</span>
           <span class="nav-badge" id="badge-issues-count">0</span>
         </a>
 
         <div class="nav-section-title">Discovery & Integration</div>
-        <a class="nav-item" data-view="pdf-import" id="nav-pdf-import">
+        <a class="nav-item" data-view="pdf-import" id="nav-pdf-import" data-tooltip="PDF Import">
           <span class="nav-icon">📄</span>
           <span>PDF Import</span>
         </a>
 
         <div class="nav-section-title" id="nav-sec-governance">Governance & Settings</div>
-        <a class="nav-item" data-view="scorecards" id="nav-scorecards">
+        <a class="nav-item" data-view="scorecards" id="nav-scorecards" data-tooltip="Scorecards">
           <span class="nav-icon">📈</span>
           <span>Scorecards</span>
         </a>
-        <a class="nav-item" data-view="audit" id="nav-audit">
+        <a class="nav-item" data-view="audit" id="nav-audit" data-tooltip="Audit History">
           <span class="nav-icon">📜</span>
           <span>Audit History</span>
         </a>
-        <a class="nav-item" data-view="settings" id="nav-settings">
+        <a class="nav-item" data-view="settings" id="nav-settings" data-tooltip="Settings">
           <span class="nav-icon">⚙️</span>
           <span>Settings</span>
         </a>
@@ -99,11 +104,21 @@
       </div>
     </aside>
 
+    <!-- Mobile Drawer Overlay Backdrop -->
+    <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+
     <!-- Main Viewport -->
     <main class="app-main">
       <!-- Top Navbar -->
       <header class="top-navbar">
         <div class="navbar-left">
+          <button class="btn-sidebar-toggle" id="btn-toggle-sidebar" title="Toggle Sidebar (Ctrl+B)" aria-label="Toggle Navigation Sidebar">
+            <svg class="toggle-icon-svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
           <div class="view-title-container">
             <h1 class="view-heading" id="current-view-title">Dashboard</h1>
             <span class="view-subheading" id="current-view-subtitle">Quality Metrics & Workspace Overview</span>
@@ -117,20 +132,10 @@
         </div>
 
         <div class="navbar-right">
-          <div class="team-profile-widget" id="team-profile-widget" title="Switch Team Profile Workspace">
-            <span style="font-size: 13px;">🏢</span>
-            <label for="team-profile-select" style="font-size: 11px; font-weight: 700; color: var(--text-muted); margin: 0; text-transform: uppercase;">Team:</label>
-            <select id="team-profile-select" class="team-profile-select" title="Switch active team profile">
-              <option value="data_quality">🛡️ Data Quality</option>
-              <option value="data_analysis">📈 Data Analysis</option>
-              <option value="data_engineering">⚙️ Data Engineering</option>
-              <option value="data_modelling">📐 Data Modelling</option>
-            </select>
-          </div>
-          <button class="btn btn-outline btn-sm" id="btn-quick-import-dqdoc" title="Import Document (.dqdoc or JSON)">
-            <span>📥</span> Import .dqdoc
+          <button class="btn btn-outline btn-sm" id="btn-quick-import-dldoc" title="Import Document (.dldoc or JSON)">
+            <span>📥</span> Import .dldoc
           </button>
-          <input type="file" id="input-quick-import-file" accept=".dqdoc,.json" style="display: none;">
+          <input type="file" id="input-quick-import-file" accept=".dldoc,.dqdoc,.json" style="display: none;">
           <button class="btn btn-primary btn-sm" id="btn-quick-new-doc">
             <span>➕</span> New Document
           </button>

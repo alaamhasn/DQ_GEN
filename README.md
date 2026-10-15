@@ -1,39 +1,57 @@
-# Data Quality Documenter - Portable Windows Edition
+# Data Workspace Documenter - Portable Windows Edition
 
-An offline, zero-dependency, portable technical documentation and validation rule management suite built for Data Quality Engineers, Data Stewards, and Analytics Teams on Windows PCs.
+An offline, zero-dependency, portable technical documentation and validation rule management suite built for Data Analysts, Analytics Engineers, Data Stewards, and Governance Teams on Windows PCs.
 
 ---
 
 ## 🚀 Quick Start (No Installation Required)
 
 1. Extract the `Data-Quality-Documenter` folder (or ZIP archive) anywhere on your Windows PC (e.g. `C:\Users\<Name>\Documents\` or a USB drive).
-2. Double-click `index.html` to open it in **Microsoft Edge** or **Google Chrome**.
+2. Double-click `index.html` to open it in **Microsoft Edge**, **Google Chrome**, or any modern browser.
 3. That's it! You are ready to create documents, catalog validation rules, and export professional PDF audit reports.
 
-> **No Node.js, Python, PHP, web server, database server, build commands, or internet connection are required.**
+> **Zero installation overhead**: No Node.js, Python, PHP, web server, database server, build commands, or internet connection are required.
 
 ---
 
 ## 📋 Key Capabilities & Features
 
-1. **Document Templates**: 9 built-in enterprise templates (Validation Rules, Data Quality Assessments, Reconciliation, Incidents, Root Cause Analysis, Remediation Plans, Test Execution Reports, dbt Documentation, Technical Specs).
-2. **Data Source Documentation**: System, Catalog, Schema, Tables/Views, and interactive Source-to-Target Column Mapping matrices.
-3. **Exact SQL Editor & Workbench**: Line numbers, indentation, dialect selection (Snowflake, Trino, PostgreSQL, MySQL, SQL Server, ANSI SQL), Copy SQL, Find in Query, SQL Comments, and separate explanatory notes. Preserves user queries exactly without executing or altering formatting.
-4. **Validation Rules Catalog**: Reusable rules across 12 dimensions (Completeness, Uniqueness, Validity, Accuracy, Consistency, Timeliness, Referential Integrity, Reconciliation, Schema Validation, Business Rules, Duplicate Detection, Freshness).
-5. **Test Result Tracking**: Log runs with timestamps, environment (PROD, UAT, QA, DEV), status (PASSED, FAILED, WARNING, ERROR), record counts, and query ID evidence.
-6. **Document Cloning**: Clone documents with customizable component checklists (metadata, SQL, sources, excluding executions or approvals).
-7. **Version History & Diff Snapshots**: Version tracking (v1.0, v1.1...), author notes, and field change summaries.
-8. **Issue & Remediation Tracker**: 5-Whys Root Cause investigations, Corrective and Preventive Actions (CAPA), deadlines, and owners.
-9. **Quality Scorecards**: Interactive charts (powered by locally bundled Chart.js) showing aggregate pass rates and dimensions breakdown.
-10. **PDF Import & Heuristic Field Mapping**: Locally bundled PDF.js extracts text from legacy PDFs and auto-maps fields with confidence indicators.
-11. **Document and Filesystem Search**: Instant internal search across documents/rules/SQL, plus local Windows folder/file search with snippet highlighting.
-12. **Configurable Required Fields**: Enforces mandatory fields dynamically in Draft, Review, and Final governance modes.
-13. **Excel and CSV Import/Export**: Powered by locally bundled SheetJS (`xlsx.full.min.js`), with formula injection protection (prefixing sensitive leading characters with `'`).
-14. **dbt Artifacts Local Parser**: Drop `manifest.json`, `run_results.json`, or `catalog.json` to convert models and tests into documentation and validation rules.
-15. **Approvals & Local Audit Trail**: Track review sign-offs (Approved, Changes Requested, Rejected) and local event logs. Modifying SQL on approved documents automatically flags them for re-approval.
-16. **Configurable Branding**: Live UI & PDF customization for primary, secondary, and accent colors, app name, and header/footer text.
-17. **Professional PDF Reports**: Generates searchable, high-resolution A4/Letter PDF reports with headers, footers, pagination ("Page X of Y"), and clean table wrapping.
-18. **100% Offline & Private**: Zero external network calls, zero telemetry, zero cloud dependencies.
+1. **Multi-Discipline Engineering Profiles**:
+   - **Data Analysis**: Focused on analytical metric definitions, business objectives, and BI query verification.
+   - **Data Engineering**: Focused on pipeline SLA, upstream/downstream lineage, and ingestion verification.
+   - **Data Modelling**: Focused on entity relationships, schema validations, grain, and DDL specifications.
+2. **Standardized `.dldoc` File Format**:
+   - Native single-file export and import format: `.dldoc` (Data Lineage & Workspace Document).
+   - Full backward compatibility with legacy `.dqdoc` and `.json` documents.
+3. **Flexible Document Lifecycle & Publication**:
+   - Support for both **Draft** and **Published** modes.
+   - Documents can be published directly even with incomplete/draft records with non-blocking guidance, allowing rapid prototyping without administrative lockouts.
+4. **Interactive Lineage & Column Mapping**:
+   - Document source systems, catalogs, schemas, tables/views, and interactive Source-to-Target column transformations.
+5. **SQL Assertion Workbench**:
+   - Preserves queries with line numbering, dialect tags (Snowflake, Trino, PostgreSQL, MySQL, SQL Server, ANSI SQL), query copying, query search, and dedicated audit notes.
+6. **Validation Rules Catalog**:
+   - Catalog assertions across 12 dimensions (Completeness, Uniqueness, Validity, Accuracy, Consistency, Timeliness, Referential Integrity, Reconciliation, Schema Validation, Business Rules, Duplicate Detection, Freshness).
+7. **Automated Test Run Tracking**:
+   - Log execution history across environments (PROD, UAT, QA, DEV), capturing timestamps, pass/fail status, defect counts, defect percentages, and verification evidence.
+8. **Issue & Remediation Runbook (CAPA)**:
+   - Root cause investigation tracking (5-Whys), corrective and preventive actions (CAPA), target SLAs, and assigned remediation owners.
+9. **Interactive Quality Scorecards**:
+   - Live dashboard charts powered by locally bundled Chart.js visualizing pass rates and dimension breakdowns.
+10. **Executive-Ready PDF Reports**:
+    - High-resolution, multi-page PDF generation featuring generous section margins, anti-orphan headers, table pagination, embedded off-screen defect trend charts, formal digital sign-off blocks, and author contact cards.
+11. **PDF Import & Heuristic Field Mapping**:
+    - Bundled PDF.js extracts text from legacy PDF specifications and maps fields automatically.
+12. **Instant Search & Windows Filesystem Search**:
+    - Instant live search across all documents, rules, and queries, plus local directory file search via the Windows File System Access API.
+13. **Excel and CSV Import/Export**:
+    - Powered by bundled SheetJS (`xlsx.full.min.js`), with automatic CSV formula injection sanitization (`=`, `+`, `-`, `@` cell prefixing).
+14. **dbt Artifacts Local Parser**:
+    - Drop `manifest.json`, `run_results.json`, or `catalog.json` to automatically synthesize model lineage and tests into certified documentation.
+15. **Smart Autocomplete & Dictionary (.txt)**:
+    - Auto-learns unique terms (domains, systems, schemas, owners, transformation rules) and persists them to an editable dictionary (`autocomplete_vocabulary.txt`).
+16. **100% Offline & Completely Private**:
+    - Zero external network requests, zero telemetry, and zero third-party cloud dependencies.
 
 ---
 
@@ -41,18 +59,18 @@ An offline, zero-dependency, portable technical documentation and validation rul
 
 ### 1. `config.js` vs. `.env` Import
 
-- **`config.js`**: Contains the baseline application defaults when `index.html` loads. Editing `config.js` in a text editor sets new defaults for any fresh browser profile opening the application.
-- **Import Configuration (`.env` or `config.json`)**: Accessible inside the **Settings** view. Allows users to import settings files without modifying JavaScript files directly. Settings are stored locally in the browser profile.
-- **Settings Export**: You can export your active settings as either a `.env` file or `config.json` file.
+- **`config.js`**: Contains the baseline application defaults when `index.html` loads. Modifying `config.js` sets default branding and features across all fresh browser profiles.
+- **Import Configuration (`.env` or `config.json`)**: Accessible inside **Settings**. Allows loading custom settings without modifying source files.
+- **Settings Export**: Export active settings as either a `.env` file or `config.json` at any time.
 
-### 2. Moving Documents and Settings to Another Windows PC
+### 2. Moving Documents and Settings to Another PC
 
-Because web browsers isolate local storage (`IndexedDB` / `localStorage`) per machine profile:
+Because browsers isolate local storage (`IndexedDB` / `localStorage`) per machine profile:
 
 1. On PC #1: Open **Settings** (or click **Backup** in the top bar) and click **"Download Backup"**.
-2. Save the resulting file: `dqd-full-backup-YYYY-MM-DD.json`.
-3. Copy the `Data-Quality-Documenter/` folder and your backup JSON to PC #2.
-4. On PC #2: Open `index.html`, go to **Settings**, and click **"Restore Backup"**. All your documents, rules, executions, and settings will appear immediately.
+2. Save the resulting file: `dqd-full-backup-YYYY-MM-DD.json` (or individual `.dldoc` files).
+3. Copy the `Data-Quality-Documenter/` folder and your backup file to PC #2.
+4. On PC #2: Open `index.html`, navigate to **Settings**, and click **"Restore Backup"** (or use **Import .dldoc** on the Documents page).
 
 ---
 
@@ -60,28 +78,31 @@ Because web browsers isolate local storage (`IndexedDB` / `localStorage`) per ma
 
 ```text
 Data-Quality-Documenter/
-├── index.html               # Main application entry point
+├── index.html               # Main application single-page interface
 ├── styles.css               # Design system & responsive styles
-├── app.js                   # Pure Vanilla JS application logic
-├── config.js                # Public application defaults
-├── config.env.example       # Example .env configuration file
-├── README.md                # Documentation & instructions
-├── LICENSES.md              # Open source license notices
+├── app.js                   # Application controller & PDF report engine
+├── config.js                # Baseline configuration & profile defaults
+├── config.env.example       # Example .env configuration template
+├── README.md                # Project documentation & user guide
+├── LICENSE                  # MIT License notice
+├── LICENSES.md              # Third-party open source licenses
 ├── assets/
-│   └── logo.png             # Application logo
-├── lib/                     # Locally bundled third-party libraries (Offline)
-│   ├── chart.umd.min.js     # Chart.js 4.4.1 (Scorecards)
-│   ├── jspdf.umd.min.js     # jsPDF 2.5.1 (PDF Generation)
+│   └── logo.png             # Application brand logo
+├── lib/                     # 100% locally bundled offline libraries
+│   ├── chart.umd.min.js     # Chart.js 4.4.1 (Scorecards & Trend Charts)
+│   ├── jspdf.umd.min.js     # jsPDF 2.5.1 (PDF Document Generation)
 │   ├── jspdf.plugin.autotable.min.js # jsPDF-AutoTable 3.8.2
 │   ├── pdf.min.js           # PDF.js 3.11.174 (PDF Text Extraction)
 │   ├── pdf.worker.min.js    # PDF.js Worker
-│   └── xlsx.full.min.js     # SheetJS 0.18.5 (Excel / CSV)
-├── defaults.js              # Bundled default data & initial vocabulary (CORS-free for file://)
+│   └── xlsx.full.min.js     # SheetJS 0.18.5 (Excel / CSV Processing)
+├── defaults.js              # Bundled default data (CORS-free for file://)
+├── search_keywords.json     # Pre-indexed search terms & keywords
+├── sql_assertions.json      # Standard SQL assertion query templates
 ├── templates/
 │   └── templates_catalog.json # 9 Standard documentation templates
 └── samples/
-    ├── autocomplete_vocabulary.txt # Smart autocomplete dictionary file (editable .txt)
-    ├── sample_document.json # Sample customer data quality document
+    ├── autocomplete_vocabulary.txt # Smart autocomplete dictionary (.txt)
+    ├── sample_document.json # Sample customer quality document
     ├── sample_rules.csv     # Sample validation rules catalog
     ├── sample_executions.csv# Sample test execution logs
     ├── dbt_manifest_sample.json # Sample dbt manifest
@@ -91,34 +112,29 @@ Data-Quality-Documenter/
 
 ---
 
-## 🧠 Smart Autocomplete & Memory Dictionary (.txt)
+## 📄 Standard `.dldoc` File Format
 
-The application includes an offline auto-learning dictionary that speeds up repetitive data entry:
-- **Instant Suggestions**: Native HTML5 `<datalist>` auto-completion is attached to key fields (Domains, Owners, Reviewers, Frequency, Source Systems, Catalogs, Schemas, Tables, Data Types, Transformation Rules, Expected Results, Thresholds).
-- **Auto-Learning**: Whenever you save a document, any new unique value typed into any of these fields is automatically remembered and added to the dictionary.
-- **Portable .txt Support**: Go to **Settings > Smart Autocomplete & Unique Input Memory (.txt)** to export your learned dictionary into `autocomplete_vocabulary.txt` or import a team-wide vocabulary file.
+Documents are exported as `.dldoc` (Data Lineage & Workspace Document) files. This format encapsulates:
+- Document metadata, business domains, and target SLAs
+- Source system catalogs, schemas, tables, and column mapping rules
+- SQL assertion queries, dialects, and technical notes
+- Validation rules, dimensions, and thresholds
+- Execution audit histories, defect percentages, and verification logs
+- Remediation runbooks, issues, and CAPA actions
+- Revision histories and governance approval states
 
----
-
-## 🔒 Security & Known Browser Limitations
-
-1. **File System Access API (`file://` Protocol)**:
-   - Modern Chromium browsers (Edge and Chrome) support `window.showDirectoryPicker()` when granted user permission. If running under restrictive policies, the app provides a standard folder file picker fallback (`<input webkitdirectory>`).
-2. **Formula Injection Sanitization**:
-   - All CSV exports sanitize cells starting with `=`, `+`, `-`, `@`, `\t`, or `\r` by prefixing a single apostrophe (`'`) to protect spreadsheet users.
-3. **No External Network Calls**:
-   - The application does not send data, SQL queries, or document contents to any external endpoint or cloud service.
-4. **Local Audit Trail**:
-   - The audit log is stored in the browser profile for personal and local compliance tracking; it is not a centralized tamper-proof server audit log.
+> `.dldoc` files can be shared across teams or stored in Git repositories for formal version control.
 
 ---
 
-## 🧪 Testing Verification
+## 🔒 Security & Offline Integrity
 
-To verify the installation:
-1. Double-click `index.html` in Microsoft Edge or Google Chrome.
-2. Confirm the **Dashboard** opens with metrics and sample data.
-3. Navigate to **Documents** and click **"PDF"** on `Customer Dimension Integrity` to verify offline PDF generation.
-4. Navigate to **PDF Import** and drop a sample PDF to verify text extraction.
-5. Navigate to **Validation Rules** and export CSV to verify formula sanitization.
-6. Navigate to **Settings** and modify the Primary Color to test live CSS property updates.
+1. **No Outbound Network Calls**: The app runs exclusively on client-side JavaScript. No documents, SQL queries, or audit records leave your device.
+2. **CSV Formula Injection Sanitization**: All CSV and Excel exports sanitize fields starting with `=`, `+`, `-`, `@`, `\t`, or `\r` by prefixing a single apostrophe (`'`).
+3. **Safe Local File Access**: The Windows File System Access API operates under strict explicit user approval prompts without administrative privilege elevation.
+
+---
+
+## ⚖️ License
+
+Distributed under the MIT License. Copyright (c) 2026 Alaa Hassan. See [`LICENSE`](LICENSE) and [`LICENSES.md`](LICENSES.md) for full notices.

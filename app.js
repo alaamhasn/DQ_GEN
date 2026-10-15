@@ -80,6 +80,7 @@
       this.defaultLogoBase64 = window.DQD_DEFAULT_LOGO_BASE64 || "";
       const defaults = window.DQD_CONFIG || {
         appName: "Data Quality Documenter",
+        allowPublicationWithMissingFields: true,
         branding: {
           logoPath: "./assets/logo.png",
           primaryColor: "#1F4E79",
@@ -894,19 +895,23 @@
         }
       });
 
-      // 2. Templates (Ensure full data is populated for fast use)
+      // 2. Templates (Clean slate: remove all default templates, keep user-created custom templates)
       this.templates = await this.dbGetAll('templates');
-      let sampleTemplates = window.DQD_DEFAULT_TEMPLATES || [];
-      if (sampleTemplates.length === 0) {
-        sampleTemplates = await this.fetchJsonOrDefault('templates/templates_catalog.json', []);
-      }
-      const tplVersionKey = 'DQD_TEMPLATES_MULTI_TEAM_V1';
-      if (this.templates.length === 0 || !localStorage.getItem(tplVersionKey)) {
-        for (const tpl of sampleTemplates) {
-          await this.dbPut('templates', tpl);
+      const cleanTplKey = 'DQD_REMOVED_DEFAULT_TEMPLATES_V2';
+      if (!localStorage.getItem(cleanTplKey)) {
+        const customTemplates = [];
+        for (const tpl of this.templates) {
+          const isCustom = tpl.isCustom || (tpl.id && tpl.id.startsWith('tpl-custom-'));
+          if (!isCustom) {
+            await this.dbDelete('templates', tpl.id);
+          } else {
+            customTemplates.push(tpl);
+          }
         }
-        this.templates = sampleTemplates;
-        localStorage.setItem(tplVersionKey, 'true');
+        this.templates = customTemplates;
+        localStorage.setItem(cleanTplKey, 'true');
+      } else {
+        this.templates = this.templates.filter(tpl => tpl.isCustom || (tpl.id && tpl.id.startsWith('tpl-custom-')));
       }
 
       // 3. Rules Catalog
@@ -1185,6 +1190,9 @@
     // ====================================================================
 
     attachGlobalEvents() {
+      // Sidebar Toggle & Collapse System
+      this.initSidebarToggle();
+
       // Sidebar navigation clicks
       document.querySelectorAll('.nav-item').forEach(el => {
         el.addEventListener('click', (e) => {
@@ -1194,6 +1202,8 @@
             this.currentDoc = null; // New document
             this.currentEditorTab = 'tab-meta';
           }
+          // On mobile viewports, automatically close the drawer after selecting a view
+          document.getElementById('app-container')?.classList.remove('sidebar-mobile-open');
           this.navigateTo(view);
         });
       });
@@ -1218,8 +1228,8 @@
         this.exportCompleteBackup();
       });
 
-      // Quick Import .dqdoc / JSON file
-      const btnQuickImport = document.getElementById('btn-quick-import-dqdoc');
+      // Quick Import .dldoc / JSON file
+      const btnQuickImport = document.getElementById('btn-quick-import-dldoc') || document.getElementById('btn-quick-import-dqdoc');
       const inputQuickImport = document.getElementById('input-quick-import-file');
       if (btnQuickImport && inputQuickImport) {
         btnQuickImport.addEventListener('click', () => {
@@ -1296,6 +1306,82 @@
       });
     },
 
+    initSidebarToggle() {
+      const btnToggle = document.getElementById('btn-toggle-sidebar');
+      const btnCollapse = document.getElementById('btn-collapse-sidebar');
+      const backdrop = document.getElementById('sidebar-backdrop');
+      const appContainer = document.getElementById('app-container');
+      const sidebar = document.getElementById('sidebar');
+
+      // Populate tooltip attributes on any nav items that might lack them
+      document.querySelectorAll('.nav-item').forEach(item => {
+        if (!item.getAttribute('data-tooltip')) {
+          const textSpan = item.querySelector('span:not(.nav-icon):not(.nav-badge)');
+          if (textSpan) {
+            item.setAttribute('data-tooltip', textSpan.textContent.trim());
+          }
+        }
+      });
+
+      // Restore saved collapsed state for desktop viewports
+      const isSavedCollapsed = localStorage.getItem('dqd_sidebar_collapsed') === 'true';
+      if (isSavedCollapsed && window.innerWidth > 900) {
+        appContainer?.classList.add('sidebar-collapsed');
+        sidebar?.classList.add('collapsed');
+        this.updateSidebarToggleTitles(true);
+      } else {
+        this.updateSidebarToggleTitles(false);
+      }
+
+      const handleToggle = () => {
+        this.toggleSidebar();
+      };
+
+      btnToggle?.addEventListener('click', handleToggle);
+      btnCollapse?.addEventListener('click', handleToggle);
+
+      // Close mobile drawer when clicking the backdrop
+      backdrop?.addEventListener('click', () => {
+        appContainer?.classList.remove('sidebar-mobile-open');
+      });
+
+      // Keyboard shortcut: Ctrl + B or Cmd + B to toggle navigation sidebar
+      window.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+          const activeTag = document.activeElement?.tagName;
+          if (activeTag !== 'INPUT' && activeTag !== 'TEXTAREA' && !document.activeElement?.isContentEditable) {
+            e.preventDefault();
+            this.toggleSidebar();
+          }
+        }
+      });
+    },
+
+    updateSidebarToggleTitles(isCollapsed) {
+      const btnToggle = document.getElementById('btn-toggle-sidebar');
+      const btnCollapse = document.getElementById('btn-collapse-sidebar');
+      const title = isCollapsed ? 'Expand Sidebar (Ctrl+B)' : 'Collapse Sidebar (Ctrl+B)';
+      if (btnToggle) btnToggle.title = title;
+      if (btnCollapse) btnCollapse.title = title;
+    },
+
+    toggleSidebar() {
+      const appContainer = document.getElementById('app-container');
+      const sidebar = document.getElementById('sidebar');
+      if (!appContainer || !sidebar) return;
+
+      if (window.innerWidth <= 900) {
+        // Mobile / Small Screen: Toggle off-canvas drawer
+        appContainer.classList.toggle('sidebar-mobile-open');
+      } else {
+        // Desktop: Toggle between full width (260px) and collapsed icon rail (72px)
+        const isCollapsed = appContainer.classList.toggle('sidebar-collapsed');
+        sidebar.classList.toggle('collapsed', isCollapsed);
+        localStorage.setItem('dqd_sidebar_collapsed', isCollapsed ? 'true' : 'false');
+        this.updateSidebarToggleTitles(isCollapsed);
+      }
+    },
+
     // ====================================================================
     // 5. VIEW: DASHBOARD
     // ====================================================================
@@ -1354,34 +1440,36 @@
             </div>
             <div class="card-body" style="padding: 0;">
               ${this.documents.length === 0 ? '<div style="padding: 24px; text-align: center; color: var(--text-muted);">No documents created yet.</div>' : `
-                <table class="table-custom">
-                  <thead>
-                    <tr>
-                      <th>Document Title</th>
-                      <th>Domain</th>
-                      <th>Status</th>
-                      <th>Updated</th>
-                      <th style="text-align: right;">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${this.documents.slice(0, 5).map(doc => `
+                <div class="table-responsive">
+                  <table class="table-custom">
+                    <thead>
                       <tr>
-                        <td>
-                          <strong>${this.escapeHtml(doc.title || 'Untitled Document')}</strong>
-                          <div style="font-size: 11px; color: var(--text-muted);">${doc.id} | v${doc.version || '1.0'}</div>
-                        </td>
-                        <td>${this.escapeHtml(doc.businessDomain || 'General')}</td>
-                        <td>${this.getStatusBadge(doc.status)}</td>
-                        <td>${doc.updatedAt ? new Date(doc.updatedAt).toLocaleDateString() : 'N/A'}</td>
-                        <td style="text-align: right; white-space: nowrap;">
-                          <button class="btn btn-outline btn-sm btn-action-edit-doc" data-id="${doc.id}" title="Edit Document">✏️ Edit</button>
-                          <button class="btn btn-danger btn-sm btn-action-delete-doc" data-id="${doc.id}" title="Delete Document">🗑️</button>
-                        </td>
+                        <th>Document Title</th>
+                        <th>Domain</th>
+                        <th>Status</th>
+                        <th>Updated</th>
+                        <th style="text-align: right;">Actions</th>
                       </tr>
-                    `).join('')}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      ${this.documents.slice(0, 5).map(doc => `
+                        <tr>
+                          <td>
+                            <strong>${this.escapeHtml(doc.title || 'Untitled Document')}</strong>
+                            <div style="font-size: 11px; color: var(--text-muted);">${doc.id} | v${doc.version || '1.0'}</div>
+                          </td>
+                          <td>${this.escapeHtml(doc.businessDomain || 'General')}</td>
+                          <td>${this.getStatusBadge(doc.status)}</td>
+                          <td>${doc.updatedAt ? new Date(doc.updatedAt).toLocaleDateString() : 'N/A'}</td>
+                          <td style="text-align: right; white-space: nowrap;">
+                            <button class="btn btn-outline btn-sm btn-action-edit-doc" data-id="${doc.id}" title="Edit Document">✏️ Edit</button>
+                            <button class="btn btn-danger btn-sm btn-action-delete-doc" data-id="${doc.id}" title="Delete Document">🗑️</button>
+                          </td>
+                        </tr>
+                      `).join('')}
+                    </tbody>
+                  </table>
+                </div>
               `}
             </div>
           </div>
@@ -1428,10 +1516,10 @@
                     <div style="font-size: 11px; color: var(--text-muted);">View usernames & docs</div>
                   </div>
                 </button>
-                <button class="btn btn-outline" id="dash-quick-import-dqdoc" style="justify-content: flex-start; padding: 12px;">
+                <button class="btn btn-outline" id="dash-quick-import-dldoc" style="justify-content: flex-start; padding: 12px;">
                   <span style="font-size: 20px; margin-right: 8px;">📥</span>
                   <div style="text-align: left;">
-                    <strong>Import .dqdoc</strong>
+                    <strong>Import .dldoc</strong>
                     <div style="font-size: 11px; color: var(--text-muted);">Restore full document</div>
                   </div>
                 </button>
@@ -1462,7 +1550,7 @@
       document.getElementById('dash-tile-users')?.addEventListener('click', () => this.navigateTo('users'));
       document.getElementById('dash-tile-rules')?.addEventListener('click', () => this.navigateTo('rules'));
       document.getElementById('dash-quick-users')?.addEventListener('click', () => this.navigateTo('users'));
-      document.getElementById('dash-quick-import-dqdoc')?.addEventListener('click', () => {
+      (document.getElementById('dash-quick-import-dldoc') || document.getElementById('dash-quick-import-dqdoc'))?.addEventListener('click', () => {
         document.getElementById('input-quick-import-file')?.click();
       });
 
@@ -1547,53 +1635,55 @@
                 No users assigned to documents yet. Assign usernames to documents in the editor.
               </div>
             ` : `
-              <table class="table-custom" id="table-user-directory">
-                <thead>
-                  <tr>
-                    <th>User / Contributor</th>
-                    <th>Associated Team(s)</th>
-                    <th>Combined Document Roles</th>
-                    <th>Total Related Documents</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${userKeys.map(k => {
-                    const uData = allUsersMap[k];
-                    const u = uData.username;
-                    const teamsArr = Array.from(uData.teams);
-                    const rolesArr = Array.from(uData.roles);
-                    const initials = u.slice(0, 2).toUpperCase();
-                    return `
-                      <tr class="user-dir-row" data-search="${this.escapeHtml((u + ' ' + teamsArr.join(' ') + ' ' + rolesArr.join(' ')).toLowerCase())}">
-                        <td>
-                          <div style="display: flex; align-items: center; gap: 10px;">
-                            <div class="user-avatar-circle">${initials}</div>
-                            <div>
-                              <strong>${this.escapeHtml(u)}</strong>
+              <div class="table-responsive">
+                <table class="table-custom" id="table-user-directory">
+                  <thead>
+                    <tr>
+                      <th>User / Contributor</th>
+                      <th>Associated Team(s)</th>
+                      <th>Combined Document Roles</th>
+                      <th>Total Related Documents</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${userKeys.map(k => {
+                      const uData = allUsersMap[k];
+                      const u = uData.username;
+                      const teamsArr = Array.from(uData.teams);
+                      const rolesArr = Array.from(uData.roles);
+                      const initials = u.slice(0, 2).toUpperCase();
+                      return `
+                        <tr class="user-dir-row" data-search="${this.escapeHtml((u + ' ' + teamsArr.join(' ') + ' ' + rolesArr.join(' ')).toLowerCase())}">
+                          <td>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                              <div class="user-avatar-circle">${initials}</div>
+                              <div>
+                                <strong>${this.escapeHtml(u)}</strong>
+                              </div>
                             </div>
-                          </div>
-                        </td>
-                        <td>
-                          ${teamsArr.length > 0 ? teamsArr.map(t => `<span class="parsed-col-pill" style="background: rgba(16,185,129,0.1); color: var(--status-passed);">${this.escapeHtml(t)}</span>`).join(' ') : '<span style="color: var(--text-muted); font-size: 11px;">No Team Specified</span>'}
-                        </td>
-                        <td>
-                          ${rolesArr.map(r => `<span class="badge badge-info" style="font-size: 10px; margin-right: 4px; display: inline-block; margin-bottom: 2px;">${this.escapeHtml(r)}</span>`).join('')}
-                        </td>
-                        <td>
-                          <strong style="font-size: 14px; color: var(--primary-color);">${uData.documents.length}</strong>
-                          <span style="font-size: 11px; color: var(--text-muted);">doc(s)</span>
-                        </td>
-                        <td>
-                          <button class="btn btn-primary btn-sm btn-view-user-docs" data-user="${this.escapeHtml(k)}">
-                            📂 View Documents (${uData.documents.length})
-                          </button>
-                        </td>
-                      </tr>
-                    `;
-                  }).join('')}
-                </tbody>
-              </table>
+                          </td>
+                          <td>
+                            ${teamsArr.length > 0 ? teamsArr.map(t => `<span class="parsed-col-pill" style="background: rgba(16,185,129,0.1); color: var(--status-passed);">${this.escapeHtml(t)}</span>`).join(' ') : '<span style="color: var(--text-muted); font-size: 11px;">No Team Specified</span>'}
+                          </td>
+                          <td>
+                            ${rolesArr.map(r => `<span class="badge badge-info" style="font-size: 10px; margin-right: 4px; display: inline-block; margin-bottom: 2px;">${this.escapeHtml(r)}</span>`).join('')}
+                          </td>
+                          <td>
+                            <strong style="font-size: 14px; color: var(--primary-color);">${uData.documents.length}</strong>
+                            <span style="font-size: 11px; color: var(--text-muted);">doc(s)</span>
+                          </td>
+                          <td>
+                            <button class="btn btn-primary btn-sm btn-view-user-docs" data-user="${this.escapeHtml(k)}">
+                              📂 View Documents (${uData.documents.length})
+                            </button>
+                          </td>
+                        </tr>
+                      `;
+                    }).join('')}
+                  </tbody>
+                </table>
+              </div>
             `}
           </div>
         </div>
@@ -1641,7 +1731,7 @@
             </div>
           </div>
         </div>
-        <div style="max-height: 60vh; overflow-y: auto;">
+        <div style="max-height: 60vh; overflow-y: auto;" class="table-responsive">
           <table class="table-custom">
             <thead>
               <tr>
@@ -1766,11 +1856,11 @@
               title: doc.title || 'Untitled Specification',
               category: 'Saved Documents',
               description: `${doc.id} • ${doc.validationType || 'Model Validation'} ${doc.team ? '• Team: ' + doc.team : ''} ${doc.owner ? '• Owner: ' + doc.owner : ''}`,
-              filePath: `documents/${doc.id}.dqdoc`,
-              fileType: 'dqdoc',
+              filePath: `documents/${doc.id}.dldoc`,
+              fileType: 'dldoc',
               keywords: [doc.id, doc.validationType || '', doc.team || '', doc.owner || ''],
               viewAction: { type: 'open_doc', target: doc.id, label: 'Open in Editor' },
-              downloadAction: { type: 'download_doc', target: doc.id, filename: `${doc.title || doc.id}.dqdoc`, label: 'Download .dqdoc' },
+              downloadAction: { type: 'download_doc', target: doc.id, filename: `${doc.title || doc.id}.dldoc`, label: 'Download .dldoc' },
               score,
               source: 'documents',
               rawDoc: doc
@@ -2040,8 +2130,8 @@
         } else if (type === 'download_doc') {
           const targetDoc = (this.documents || []).find(d => d.id === actionObj.target);
           if (targetDoc) {
-            this.downloadBlob(new Blob([JSON.stringify(targetDoc, null, 2)], { type: 'application/json' }), actionObj.filename || `${targetDoc.id}.dqdoc`);
-            this.showToast(`Downloaded "${targetDoc.title || targetDoc.id}.dqdoc"`, 'success');
+            this.downloadBlob(new Blob([JSON.stringify(targetDoc, null, 2)], { type: 'application/json' }), actionObj.filename || `${targetDoc.id}.dldoc`);
+            this.showToast(`Downloaded "${targetDoc.title || targetDoc.id}.dldoc"`, 'success');
           }
         } else if (type === 'download_raw_sql') {
           this.downloadBlob(new Blob([actionObj.content || ''], { type: 'text/sql' }), actionObj.filename || 'query.sql');
@@ -2294,8 +2384,7 @@
             <div style="display: flex; gap: 6px; flex-wrap: wrap;">
               <button class="btn btn-outline btn-sm" id="btn-batch-export-pack" title="Export entire workspace package (.dqpack)">📦 Batch Pack</button>
               <button class="btn btn-outline btn-sm" id="btn-batch-import-pack" title="Import complete workspace package (.dqpack)">📥 Import Pack</button>
-              <input type="file" id="input-batch-pack-file" accept=".dqpack,.json" style="display: none;">
-              <button class="btn btn-outline btn-sm" id="btn-import-doc-dqdoc">📥 Import .dqdoc</button>
+              <button class="btn btn-outline btn-sm" id="btn-import-doc-dldoc">📥 Import .dldoc</button>
               <button class="btn btn-primary btn-sm" id="btn-create-doc-from-list">➕ Create Document</button>
             </div>
           </div>
@@ -2328,7 +2417,7 @@
         this.currentDoc = null;
         this.navigateTo('editor');
       });
-      document.getElementById('btn-import-doc-dqdoc')?.addEventListener('click', () => {
+      (document.getElementById('btn-import-doc-dldoc') || document.getElementById('btn-import-doc-dqdoc'))?.addEventListener('click', () => {
         document.getElementById('input-quick-import-file')?.click();
       });
       document.getElementById('btn-batch-export-pack')?.addEventListener('click', () => this.exportBatchWorkspacePack());
@@ -2424,53 +2513,55 @@
       }
 
       container.innerHTML = `
-        <table class="table-custom">
-          <thead>
-            <tr>
-              <th>Document</th>
-              <th>Validation Type & Profile</th>
-              <th>Team & Users</th>
-              <th>Status</th>
-              <th>Version</th>
-              <th>Last Updated</th>
-              <th style="text-align: right;">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${filtered.map(doc => {
-              const pInfo = this.config.teamProfiles && this.config.teamProfiles[doc.teamProfile];
-              const pLabel = pInfo ? (pInfo.label || pInfo.name) : '';
-              return `
+        <div class="table-responsive">
+          <table class="table-custom">
+            <thead>
               <tr>
-                <td>
-                  <strong>${this.escapeHtml(doc.title || 'Untitled')}</strong>
-                  <div style="font-size: 11px; color: var(--text-muted);">${doc.id}</div>
-                </td>
-                <td>
-                  <span class="badge badge-info">${this.escapeHtml(doc.validationType || doc.documentType || 'Specification')}</span>
-                  ${pLabel ? `<div style="font-size: 10.5px; color: var(--primary-color); font-weight: 600; margin-top: 3px;">🏛️ ${this.escapeHtml(pLabel)}</div>` : ''}
-                </td>
-                <td>
-                  <div><strong>${this.escapeHtml(doc.team || 'General')}</strong></div>
-                  <div style="font-size: 11px; color: var(--text-muted);">${(doc.usernames && doc.usernames.length > 0) ? doc.usernames.map(u => this.escapeHtml(u)).join(', ') : (doc.owner || 'Unassigned')}</div>
-                </td>
-                <td>${this.getStatusBadge(doc.status)}</td>
-                <td><span style="font-family: monospace; font-weight: 600;">v${doc.version || '1.0'}</span></td>
-                <td>${doc.updatedAt ? new Date(doc.updatedAt).toLocaleDateString() : 'N/A'}</td>
-                <td style="text-align: right; white-space: nowrap;">
-                  <button class="btn btn-outline btn-sm btn-doc-action-edit" data-id="${doc.id}" title="Edit Document">✏️ Edit</button>
-                  <button class="btn btn-outline btn-sm btn-doc-action-share" data-id="${doc.id}" title="Share to Slack / Teams / Email">💬 Share</button>
-                  <button class="btn btn-outline btn-sm btn-doc-action-clone" data-id="${doc.id}" title="Clone Document">📑 Clone</button>
-                  <button class="btn btn-outline btn-sm btn-doc-action-pdf" data-id="${doc.id}" title="Generate PDF Report">📄 PDF</button>
-                  <button class="btn btn-outline btn-sm btn-doc-action-dqdoc" data-id="${doc.id}" title="Download complete .dqdoc file (with screenshots)">📦 .dqdoc</button>
-                  <button class="btn btn-outline btn-sm btn-doc-action-export" data-id="${doc.id}" title="Export JSON">💾</button>
-                  <button class="btn btn-danger btn-sm btn-doc-action-delete" data-id="${doc.id}" title="Delete Document">🗑️</button>
-                </td>
+                <th>Document</th>
+                <th>Validation Type & Profile</th>
+                <th>Team & Users</th>
+                <th>Status</th>
+                <th>Version</th>
+                <th>Last Updated</th>
+                <th style="text-align: right;">Actions</th>
               </tr>
-              `;
-            }).join('')}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              ${filtered.map(doc => {
+                const pInfo = this.config.teamProfiles && this.config.teamProfiles[doc.teamProfile];
+                const pLabel = pInfo ? (pInfo.label || pInfo.name) : '';
+                return `
+                <tr>
+                  <td>
+                    <strong>${this.escapeHtml(doc.title || 'Untitled')}</strong>
+                    <div style="font-size: 11px; color: var(--text-muted);">${doc.id}</div>
+                  </td>
+                  <td>
+                    <span class="badge badge-info">${this.escapeHtml(doc.validationType || doc.documentType || 'Specification')}</span>
+                    ${pLabel ? `<div style="font-size: 10.5px; color: var(--primary-color); font-weight: 600; margin-top: 3px;">🏛️ ${this.escapeHtml(pLabel)}</div>` : ''}
+                  </td>
+                  <td>
+                    <div><strong>${this.escapeHtml(doc.team || 'General')}</strong></div>
+                    <div style="font-size: 11px; color: var(--text-muted);">${(doc.usernames && doc.usernames.length > 0) ? doc.usernames.map(u => this.escapeHtml(u)).join(', ') : (doc.owner || 'Unassigned')}</div>
+                  </td>
+                  <td>${this.getStatusBadge(doc.status)}</td>
+                  <td><span style="font-family: monospace; font-weight: 600;">v${doc.version || '1.0'}</span></td>
+                  <td>${doc.updatedAt ? new Date(doc.updatedAt).toLocaleDateString() : 'N/A'}</td>
+                  <td style="text-align: right; white-space: nowrap;">
+                    <button class="btn btn-outline btn-sm btn-doc-action-edit" data-id="${doc.id}" title="Edit Document">✏️ Edit</button>
+                    <button class="btn btn-outline btn-sm btn-doc-action-share" data-id="${doc.id}" title="Share to Slack / Teams / Email">💬 Share</button>
+                    <button class="btn btn-outline btn-sm btn-doc-action-clone" data-id="${doc.id}" title="Clone Document">📑 Clone</button>
+                    <button class="btn btn-outline btn-sm btn-doc-action-pdf" data-id="${doc.id}" title="Generate PDF Report">📄 PDF</button>
+                    <button class="btn btn-outline btn-sm btn-doc-action-dldoc" data-id="${doc.id}" title="Download complete .dldoc file (with screenshots)">📦 .dldoc</button>
+                    <button class="btn btn-outline btn-sm btn-doc-action-export" data-id="${doc.id}" title="Export JSON">💾</button>
+                    <button class="btn btn-danger btn-sm btn-doc-action-delete" data-id="${doc.id}" title="Delete Document">🗑️</button>
+                  </td>
+                </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
       `;
 
       // Action Handlers
@@ -2504,7 +2595,7 @@
         });
       });
 
-      container.querySelectorAll('.btn-doc-action-dqdoc').forEach(btn => {
+      container.querySelectorAll('.btn-doc-action-dldoc, .btn-doc-action-dqdoc').forEach(btn => {
         btn.addEventListener('click', () => {
           const doc = this.documents.find(d => d.id === btn.dataset.id);
           if (doc) this.exportDocumentDataFile(doc);
@@ -2672,21 +2763,24 @@
             <button class="btn btn-outline btn-sm" id="editor-btn-share-markdown" title="Export formatted Slack / Microsoft Teams / Email Markdown">💬 Share</button>
             <button class="btn btn-outline btn-sm" id="editor-btn-clone">📑 Clone</button>
             <button class="btn btn-outline btn-sm" id="editor-btn-snapshot">📌 New Version</button>
-            <button class="btn btn-outline btn-sm" id="editor-btn-export-dqdoc" title="Download complete portable .dqdoc file with all embedded screenshots">📦 Export .dqdoc</button>
-            <button class="btn btn-secondary btn-sm" id="editor-btn-pdf-only" ${doc.status === 'Final' && isMissingFields ? 'disabled title="Cannot generate final PDF while required fields are missing"' : ''} title="Generate and download official PDF Report only (without .dqdoc file)">📄 Generate PDF (Only)</button>
-            <button class="btn btn-outline btn-sm" id="editor-btn-pdf" ${doc.status === 'Final' && isMissingFields ? 'disabled title="Cannot generate final PDF while required fields are missing"' : ''} title="Generate both PDF Report and .dqdoc data file">📦 Both (PDF + .dqdoc)</button>
+            <button class="btn btn-outline btn-sm" id="editor-btn-export-dldoc" title="Download complete portable .dldoc file with all embedded screenshots">📦 Export .dldoc</button>
+            <button class="btn btn-secondary btn-sm" id="editor-btn-pdf-only" title="Generate and download official PDF Report only (without .dldoc file)">📄 Generate PDF (Only)</button>
+            <button class="btn btn-outline btn-sm" id="editor-btn-pdf" title="Generate both PDF Report and .dldoc data file">📦 Both (PDF + .dldoc)</button>
             ${(this.documents.some(d => d.id === doc.id) || doc._originalId) ? `<button class="btn btn-danger btn-sm" id="editor-btn-delete" title="Permanently delete this document">🗑️ Delete</button>` : ''}
             <button class="btn btn-primary btn-sm" id="editor-btn-save">💾 Save Document (Ctrl+S)</button>
           </div>
         </div>
 
         ${isMissingFields ? `
-          <div class="alert-banner alert-warning">
-            <span style="font-size: 18px;">⚠️</span>
-            <div>
-              <strong>Missing Required Fields (${missingRequired.length}):</strong> ${missingRequired.join(', ')}.<br>
-              <span style="font-size: 11px;">Draft mode allows saving incomplete records. Final publication requires all mandatory fields.</span>
+          <div class="alert-banner alert-warning" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+            <div style="display: flex; gap: 10px; align-items: center;">
+              <span style="font-size: 18px;">⚠️</span>
+              <div>
+                <strong>Missing Fields (${missingRequired.length}):</strong> ${missingRequired.join(', ')}.<br>
+                <span style="font-size: 11px;">Publication and approval are allowed with incomplete records. You can save, approve, and generate official PDFs at any time.</span>
+              </div>
             </div>
+            <span class="badge badge-passed" style="font-size: 11px; white-space: nowrap;">Publication Allowed</span>
           </div>
         ` : ''}
 
@@ -2777,7 +2871,7 @@
                 </div>
                 <div class="card-body" style="padding: 14px;">
                   <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px;">
-                    Technical attributes specific to <strong>${this.escapeHtml(profile.label)}</strong>. Saved to this document, bundled into .dqdoc file, and printed in Section 2 of PDF reports.
+                    Technical attributes specific to <strong>${this.escapeHtml(profile.label)}</strong>. Saved to this document, bundled into .dldoc file, and printed in Section 2 of PDF reports.
                   </div>
                   <div class="grid-cols-2" style="gap: 12px;">
                     ${profileAttrs.map(attr => {
@@ -3023,7 +3117,7 @@
               <div style="margin-top: 18px; padding-top: 14px; border-top: 1px dashed var(--surface-border-strong);">
                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
                   <span style="font-size: 13px; font-weight: 700; color: var(--primary-color);">👤 Document Author & Contact Info (Optional)</span>
-                  <span style="font-size: 11px; color: var(--text-muted);">Can be blank/null. If populated, displayed at the end of generated PDF documents & saved in .dqdoc files.</span>
+                  <span style="font-size: 11px; color: var(--text-muted);">Can be blank/null. If populated, displayed at the end of generated PDF documents & saved in .dldoc files.</span>
                 </div>
                 <div class="grid-cols-3">
                   <div class="form-group" style="margin-bottom: 0;">
@@ -3113,37 +3207,39 @@
                 </div>
               </div>
               <div class="card-body" style="padding: 0;">
-                <table class="table-custom" id="table-source-mappings">
-                <thead>
-                  <tr>
-                    <th>Source Column</th>
-                    <th>Target Column</th>
-                    <th>Data Type</th>
-                    <th>Transformation Logic</th>
-                    <th>Nullable?</th>
-                    <th>Description</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody id="tbody-source-mappings">
-                  ${(doc.dataSource?.mappings || []).map((m, idx) => `
+                <div class="table-responsive">
+                  <table class="table-custom" id="table-source-mappings">
+                  <thead>
                     <tr>
-                      <td><input type="text" class="form-control form-control-sm map-src-col" value="${this.escapeHtml(m.sourceCol || '')}"></td>
-                      <td><input type="text" class="form-control form-control-sm map-tgt-col" value="${this.escapeHtml(m.targetCol || '')}"></td>
-                      <td><input type="text" class="form-control form-control-sm map-data-type" list="dl-data-types" value="${this.escapeHtml(m.dataType || '')}"></td>
-                      <td><input type="text" class="form-control form-control-sm map-rule" list="dl-transform-rules" value="${this.escapeHtml(m.rule || '')}"></td>
-                      <td>
-                        <select class="form-control form-control-sm map-nullable">
-                          <option value="NO" ${m.nullable === 'NO' ? 'selected' : ''}>NO</option>
-                          <option value="YES" ${m.nullable === 'YES' ? 'selected' : ''}>YES</option>
-                        </select>
-                      </td>
-                      <td><input type="text" class="form-control form-control-sm map-desc" value="${this.escapeHtml(m.description || '')}"></td>
-                      <td><button class="btn btn-outline btn-sm btn-delete-mapping-row" style="color: red;">&times;</button></td>
+                      <th>Source Column</th>
+                      <th>Target Column</th>
+                      <th>Data Type</th>
+                      <th>Transformation Logic</th>
+                      <th>Nullable?</th>
+                      <th>Description</th>
+                      <th></th>
                     </tr>
-                  `).join('')}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody id="tbody-source-mappings">
+                    ${(doc.dataSource?.mappings || []).map((m, idx) => `
+                      <tr>
+                        <td><input type="text" class="form-control form-control-sm map-src-col" value="${this.escapeHtml(m.sourceCol || '')}"></td>
+                        <td><input type="text" class="form-control form-control-sm map-tgt-col" value="${this.escapeHtml(m.targetCol || '')}"></td>
+                        <td><input type="text" class="form-control form-control-sm map-data-type" list="dl-data-types" value="${this.escapeHtml(m.dataType || '')}"></td>
+                        <td><input type="text" class="form-control form-control-sm map-rule" list="dl-transform-rules" value="${this.escapeHtml(m.rule || '')}"></td>
+                        <td>
+                          <select class="form-control form-control-sm map-nullable">
+                            <option value="NO" ${m.nullable === 'NO' ? 'selected' : ''}>NO</option>
+                            <option value="YES" ${m.nullable === 'YES' ? 'selected' : ''}>YES</option>
+                          </select>
+                        </td>
+                        <td><input type="text" class="form-control form-control-sm map-desc" value="${this.escapeHtml(m.description || '')}"></td>
+                        <td><button class="btn btn-outline btn-sm btn-delete-mapping-row" style="color: red;">&times;</button></td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>
@@ -3159,34 +3255,36 @@
               </div>
             </div>
             <div class="card-body" style="padding: 0;">
-              <table class="table-custom" id="table-doc-rules">
-                <thead>
-                  <tr>
-                    <th>Rule ID</th>
-                    <th>Rule Name</th>
-                    <th>Dimension</th>
-                    <th>Severity</th>
-                    <th>Expected Result</th>
-                    <th>Threshold</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody id="tbody-doc-rules">
-                  ${(doc.rules || []).length === 0 ? '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 24px;">No validation rules attached yet.</td></tr>' : (doc.rules || []).map((r, idx) => `
+              <div class="table-responsive">
+                <table class="table-custom" id="table-doc-rules">
+                  <thead>
                     <tr>
-                      <td><strong>${this.escapeHtml(r.id)}</strong></td>
-                      <td>${this.escapeHtml(r.name)}</td>
-                      <td><span class="badge badge-info">${this.escapeHtml(r.dimension)}</span></td>
-                      <td>${this.getSeverityBadge(r.severity)}</td>
-                      <td>${this.escapeHtml(r.expectedResult || '')}</td>
-                      <td>${this.escapeHtml(r.threshold || '0')}</td>
-                      <td>
-                        <button class="btn btn-outline btn-sm btn-doc-delete-rule" data-idx="${idx}">Remove</button>
-                      </td>
+                      <th>Rule ID</th>
+                      <th>Rule Name</th>
+                      <th>Dimension</th>
+                      <th>Severity</th>
+                      <th>Expected Result</th>
+                      <th>Threshold</th>
+                      <th>Actions</th>
                     </tr>
-                  `).join('')}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody id="tbody-doc-rules">
+                    ${(doc.rules || []).length === 0 ? '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 24px;">No validation rules attached yet.</td></tr>' : (doc.rules || []).map((r, idx) => `
+                      <tr>
+                        <td><strong>${this.escapeHtml(r.id)}</strong></td>
+                        <td>${this.escapeHtml(r.name)}</td>
+                        <td><span class="badge badge-info">${this.escapeHtml(r.dimension)}</span></td>
+                        <td>${this.getSeverityBadge(r.severity)}</td>
+                        <td>${this.escapeHtml(r.expectedResult || '')}</td>
+                        <td>${this.escapeHtml(r.threshold || '0')}</td>
+                        <td>
+                          <button class="btn btn-outline btn-sm btn-doc-delete-rule" data-idx="${idx}">Remove</button>
+                        </td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>
@@ -3279,34 +3377,36 @@
               <button class="btn btn-primary btn-sm" id="btn-add-doc-execution">➕ Log Execution Record</button>
             </div>
             <div class="card-body" style="padding: 0;">
-              <table class="table-custom">
-                <thead>
-                  <tr>
-                    <th>Timestamp</th>
-                    <th>Env</th>
-                    <th>Status</th>
-                    <th>Total Records</th>
-                    <th>Passed</th>
-                    <th>Failed</th>
-                    <th>Defect %</th>
-                    <th>Evidence / Query ID</th>
-                  </tr>
-                </thead>
-                <tbody id="tbody-doc-executions">
-                  ${(doc.executions || []).length === 0 ? '<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 24px;">No executions logged yet.</td></tr>' : (doc.executions || []).map(e => `
+              <div class="table-responsive">
+                <table class="table-custom">
+                  <thead>
                     <tr>
-                      <td>${new Date(e.timestamp).toLocaleString()}</td>
-                      <td><span class="badge badge-info">${e.environment || 'PROD'}</span></td>
-                      <td>${this.getStatusBadge(e.status)}</td>
-                      <td>${(e.totalRecords || 0).toLocaleString()}</td>
-                      <td style="color: var(--status-passed); font-weight: 600;">${(e.passedRecords || 0).toLocaleString()}</td>
-                      <td style="color: ${e.failedRecords > 0 ? 'var(--status-failed)' : 'inherit'}; font-weight: 600;">${(e.failedRecords || 0).toLocaleString()}</td>
-                      <td>${e.failurePercentage ? e.failurePercentage + '%' : '0.0%'}</td>
-                      <td><span style="font-family: monospace; font-size: 11px;">${this.escapeHtml(e.evidence || 'N/A')}</span></td>
+                      <th>Timestamp</th>
+                      <th>Env</th>
+                      <th>Status</th>
+                      <th>Total Records</th>
+                      <th>Passed</th>
+                      <th>Failed</th>
+                      <th>Defect %</th>
+                      <th>Evidence / Query ID</th>
                     </tr>
-                  `).join('')}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody id="tbody-doc-executions">
+                    ${(doc.executions || []).length === 0 ? '<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 24px;">No executions logged yet.</td></tr>' : (doc.executions || []).map(e => `
+                      <tr>
+                        <td>${new Date(e.timestamp).toLocaleString()}</td>
+                        <td><span class="badge badge-info">${e.environment || 'PROD'}</span></td>
+                        <td>${this.getStatusBadge(e.status)}</td>
+                        <td>${(e.totalRecords || 0).toLocaleString()}</td>
+                        <td style="color: var(--status-passed); font-weight: 600;">${(e.passedRecords || 0).toLocaleString()}</td>
+                        <td style="color: ${e.failedRecords > 0 ? 'var(--status-failed)' : 'inherit'}; font-weight: 600;">${(e.failedRecords || 0).toLocaleString()}</td>
+                        <td>${e.failurePercentage ? e.failurePercentage + '%' : '0.0%'}</td>
+                        <td><span style="font-family: monospace; font-size: 11px;">${this.escapeHtml(e.evidence || 'N/A')}</span></td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>
@@ -3319,43 +3419,45 @@
               <button class="btn btn-primary btn-sm" id="btn-add-doc-issue">➕ Log Issue / Action</button>
             </div>
             <div class="card-body" style="padding: 0;">
-              <table class="table-custom">
-                <thead>
-                  <tr>
-                    <th>Issue ID</th>
-                    <th>Title</th>
-                    <th>Severity</th>
-                    <th>Status</th>
-                    <th>Owner</th>
-                    <th>Deadline</th>
-                    <th>Root Cause</th>
-                    <th style="text-align: right; width: 140px;">Actions</th>
-                  </tr>
-                </thead>
-                <tbody id="tbody-doc-issues">
-                  ${(doc.issues || []).length === 0 ? '<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 24px;">No linked issues found.</td></tr>' : (doc.issues || []).map(iss => `
+              <div class="table-responsive">
+                <table class="table-custom">
+                  <thead>
                     <tr>
-                      <td><strong>${iss.id}</strong></td>
-                      <td>${this.escapeHtml(iss.title)}</td>
-                      <td>${this.getSeverityBadge(iss.severity)}</td>
-                      <td>${this.getStatusBadge(iss.status)}</td>
-                      <td>${this.escapeHtml(iss.owner || 'Unassigned')}</td>
-                      <td>${iss.deadline || 'N/A'}</td>
-                      <td>${this.escapeHtml(iss.rootCause || 'N/A')}</td>
-                      <td style="text-align: right; white-space: nowrap;">
-                        <div style="display: flex; gap: 6px; justify-content: flex-end;">
-                          <button type="button" class="btn btn-outline btn-sm btn-edit-doc-issue" onclick="window.DQD_App.showEditIssueModalById('${this.escapeHtml(iss.id)}'); event.stopPropagation();" data-id="${this.escapeHtml(iss.id)}" title="Edit Issue">
-                            <span>✏️</span> Edit
-                          </button>
-                          <button type="button" class="btn btn-outline btn-sm btn-delete-doc-issue" onclick="window.DQD_App.deleteIssue('${this.escapeHtml(iss.id)}'); event.stopPropagation();" data-id="${this.escapeHtml(iss.id)}" style="color: #ef4444; border-color: rgba(239, 68, 68, 0.4);" title="Delete Issue">
-                            <span>🗑️</span> Delete
-                          </button>
-                        </div>
-                      </td>
+                      <th>Issue ID</th>
+                      <th>Title</th>
+                      <th>Severity</th>
+                      <th>Status</th>
+                      <th>Owner</th>
+                      <th>Deadline</th>
+                      <th>Root Cause</th>
+                      <th style="text-align: right; width: 140px;">Actions</th>
                     </tr>
-                  `).join('')}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody id="tbody-doc-issues">
+                    ${(doc.issues || []).length === 0 ? '<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 24px;">No linked issues found.</td></tr>' : (doc.issues || []).map(iss => `
+                      <tr>
+                        <td><strong>${iss.id}</strong></td>
+                        <td>${this.escapeHtml(iss.title)}</td>
+                        <td>${this.getSeverityBadge(iss.severity)}</td>
+                        <td>${this.getStatusBadge(iss.status)}</td>
+                        <td>${this.escapeHtml(iss.owner || 'Unassigned')}</td>
+                        <td>${iss.deadline || 'N/A'}</td>
+                        <td>${this.escapeHtml(iss.rootCause || 'N/A')}</td>
+                        <td style="text-align: right; white-space: nowrap;">
+                          <div style="display: flex; gap: 6px; justify-content: flex-end;">
+                            <button type="button" class="btn btn-outline btn-sm btn-edit-doc-issue" onclick="window.DQD_App.showEditIssueModalById('${this.escapeHtml(iss.id)}'); event.stopPropagation();" data-id="${this.escapeHtml(iss.id)}" title="Edit Issue">
+                              <span>✏️</span> Edit
+                            </button>
+                            <button type="button" class="btn btn-outline btn-sm btn-delete-doc-issue" onclick="window.DQD_App.deleteIssue('${this.escapeHtml(iss.id)}'); event.stopPropagation();" data-id="${this.escapeHtml(iss.id)}" style="color: #ef4444; border-color: rgba(239, 68, 68, 0.4);" title="Delete Issue">
+                              <span>🗑️</span> Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>
@@ -3521,7 +3623,7 @@
         if (this.currentDoc.id) this.showCloneModal(this.currentDoc.id);
       });
       document.getElementById('editor-btn-snapshot').addEventListener('click', () => this.promptCreateVersionSnapshot());
-      document.getElementById('editor-btn-export-dqdoc')?.addEventListener('click', () => {
+      (document.getElementById('editor-btn-export-dldoc') || document.getElementById('editor-btn-export-dqdoc'))?.addEventListener('click', () => {
         this.syncDocFromForm();
         this.exportDocumentDataFile(this.currentDoc);
       });
@@ -4179,12 +4281,17 @@
         return;
       }
 
-      // Check required fields if Final
+      // Check required fields if Approved or Final
       if (doc.status === 'Approved' || doc.status === 'Final') {
         const missing = this.getMissingRequiredFields(doc);
         if (missing.length > 0) {
-          this.showToast(`Cannot approve: Missing required fields: ${missing.join(', ')}`, 'error');
-          return;
+          if (this.config.allowPublicationWithMissingFields === false) {
+            this.showToast(`Cannot approve: Missing required fields: ${missing.join(', ')}`, 'error');
+            return;
+          } else {
+            // Publication with missing records is explicitly permitted
+            this.showToast(`Document saved as ${doc.status} (${missing.length} recommended field(s) omitted)`, 'info');
+          }
         }
       }
 
@@ -4396,7 +4503,8 @@
 
           <!-- PANE 1: TABLE HEADERS -->
           <div id="struct-pane-headers" class="tab-pane active" style="display: block;">
-            <table class="table-custom" style="font-size: 12px; margin-bottom: 10px;">
+            <div class="table-responsive">
+              <table class="table-custom" style="font-size: 12px; margin-bottom: 10px;">
               <thead>
                 <tr>
                   <th style="width: 130px;">Field Name</th>
@@ -4451,6 +4559,7 @@
                 </tr>
               </tbody>
             </table>
+            </div>
             <div style="font-size: 11px; color: var(--text-muted); background: var(--surface-alt); padding: 8px 12px; border-radius: var(--border-radius-sm);">
               ⚡ <strong>Smart Normalizer:</strong> Column headers are case-insensitive and ignore spaces, underscores, and question marks (e.g., <code>"Source Column"</code>, <code>"source_column"</code>, and <code>"sourceCol"</code> are all recognized automatically).
             </div>
@@ -4493,7 +4602,8 @@
           <!-- PANE 3: EXCEL / CSV -->
           <div id="struct-pane-excel" class="tab-pane" style="display: none;">
             <p style="margin-bottom: 8px; color: var(--text-muted);">The first row of your worksheet or CSV must contain the column headers:</p>
-            <table class="table-custom" style="font-size: 12px; margin-bottom: 8px;">
+            <div class="table-responsive">
+              <table class="table-custom" style="font-size: 12px; margin-bottom: 8px;">
               <thead>
                 <tr>
                   <th>Source Column</th>
@@ -4531,6 +4641,7 @@
                 </tr>
               </tbody>
             </table>
+            </div>
           </div>
 
           <!-- TEMPLATE DOWNLOAD FOOTER -->
@@ -4649,7 +4760,7 @@
               <span style="font-weight: 700; font-size: 13px;" id="mapping-preview-title">Parsed Mappings Preview</span>
               <span class="badge badge-info" id="mapping-preview-badge">0 valid rows</span>
             </div>
-            <div style="max-height: 200px; overflow-y: auto; border: 1px solid var(--surface-border); border-radius: var(--border-radius-sm);">
+            <div class="table-responsive" style="max-height: 200px; overflow: auto; border: 1px solid var(--surface-border); border-radius: var(--border-radius-sm);">
               <table class="table-custom" style="font-size: 11px; margin: 0;">
                 <thead>
                   <tr>
@@ -5557,27 +5668,68 @@ ${q.query || '-- No SQL specified'}
     // ====================================================================
 
     renderTemplates(container) {
+      container = container || document.getElementById('main-content-view');
+      if (!container) return;
+
       const activeFilter = this.activeTplProfileFilter || 'all';
+      const searchQuery = (this._tplSearchQuery || '').toLowerCase().trim();
+
       const filteredTemplates = this.templates.filter(tpl => {
-        if (activeFilter === 'all') return true;
-        if (tpl.teamProfile) return tpl.teamProfile === activeFilter;
-        // Legacy templates default to data_quality
-        return activeFilter === 'data_quality';
+        // 1. Team discipline filter
+        if (activeFilter !== 'all') {
+          const profileKey = tpl.teamProfile || 'data_quality';
+          if (profileKey !== activeFilter) return false;
+        }
+
+        // 2. Search option: template name, description, SQL dialect, query content
+        if (searchQuery) {
+          const name = (tpl.name || '').toLowerCase();
+          const desc = (tpl.description || '').toLowerCase();
+          const dialect = (tpl.sqlDialect || '').toLowerCase();
+          const category = (tpl.category || '').toLowerCase();
+
+          // Query content can be in tpl.sqlQuery, tpl.sqlQueries, or tpl.rules
+          let queryContent = (tpl.sqlQuery || '').toLowerCase();
+          if (Array.isArray(tpl.sqlQueries)) {
+            queryContent += ' ' + tpl.sqlQueries.map(q => q.query || '').join(' ').toLowerCase();
+          }
+          if (Array.isArray(tpl.rules)) {
+            queryContent += ' ' + tpl.rules.map(r => r.sql || '').join(' ').toLowerCase();
+          }
+
+          const matches = name.includes(searchQuery) ||
+                          desc.includes(searchQuery) ||
+                          dialect.includes(searchQuery) ||
+                          category.includes(searchQuery) ||
+                          queryContent.includes(searchQuery);
+          if (!matches) return false;
+        }
+
+        return true;
       });
 
       container.innerHTML = `
         <div class="card">
-          <div class="card-header">
+          <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
             <div>
               <span class="card-title">Standardized Technical Documentation Templates</span>
-              <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Pre-built enterprise blueprints tailored for each data engineering and analytics discipline</div>
+              <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Technical documentation templates with Trino SQL validation queries and blueprints</div>
             </div>
-            <div style="display: flex; gap: 8px;">
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
               <button class="btn btn-outline btn-sm" id="btn-export-templates">Export Templates JSON</button>
-              <button class="btn btn-primary btn-sm" id="btn-new-custom-template">➕ Create Custom Template</button>
+              <button class="btn btn-primary btn-sm" id="btn-new-custom-template">➕ Create New Template</button>
             </div>
           </div>
           <div class="card-body">
+            <!-- Search Option Bar -->
+            <div style="display: flex; gap: 10px; margin-bottom: 16px; align-items: center; flex-wrap: wrap;">
+              <div style="position: relative; flex: 1; min-width: 280px;">
+                <span style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 14px; opacity: 0.6; pointer-events: none;">🔍</span>
+                <input type="text" id="tpl-search-input" class="form-control" style="padding-left: 36px;" placeholder="Search by template name, description, SQL dialect (e.g. Trino), query content..." value="${this.escapeHtml(this._tplSearchQuery || '')}">
+              </div>
+              ${this._tplSearchQuery ? `<button class="btn btn-outline btn-sm" id="btn-clear-tpl-search">✕ Clear Search</button>` : ''}
+            </div>
+
             <!-- Team Profile Filter Buttons -->
             <div style="display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; border-bottom: 1px solid var(--surface-border); padding-bottom: 14px;">
               <button class="btn btn-sm ${activeFilter === 'all' ? 'btn-primary' : 'btn-outline'} btn-tpl-filter" data-filter="all">All Disciplines (${this.templates.length})</button>
@@ -5587,7 +5739,7 @@ ${q.query || '-- No SQL specified'}
               <button class="btn btn-sm ${activeFilter === 'data_modelling' ? 'btn-primary' : 'btn-outline'} btn-filter-tpl btn-tpl-filter" data-filter="data_modelling">📐 Data Modelling</button>
             </div>
 
-            <div class="grid-cols-3">
+            <div class="grid-cols-3" id="tpl-grid-container">
               ${filteredTemplates.map(tpl => {
                 const profileKey = tpl.teamProfile || 'data_quality';
                 const profileObj = this.config.teamProfiles && this.config.teamProfiles[profileKey];
@@ -5598,37 +5750,102 @@ ${q.query || '-- No SQL specified'}
                 else if (profileKey === 'data_engineering') badgeClass = 'badge-passed';
                 else if (profileKey === 'data_modelling') badgeClass = 'badge-status-draft';
 
+                const querySnippet = tpl.sqlQuery || (tpl.sqlQueries && tpl.sqlQueries[0]?.query) || (tpl.rules && tpl.rules[0]?.sql) || '';
+
                 return `
-                <div class="card" style="margin-bottom: 0; display: flex; flex-direction: column; justify-content: space-between;">
+                <div class="card" style="margin-bottom: 0; display: flex; flex-direction: column; justify-content: space-between; border: 1px solid var(--surface-border-strong);">
                   <div class="card-body">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                       <span class="badge ${badgeClass}">${badgeLabel}</span>
-                      <span style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">${tpl.category || 'Standard'}</span>
+                      <span class="badge badge-outline" style="font-family: monospace; font-size: 11px;">${this.escapeHtml(tpl.sqlDialect || 'Trino')}</span>
                     </div>
-                    <h3 style="font-size: 15px; font-weight: 700; margin-bottom: 8px; color: var(--text-color);">${this.escapeHtml(tpl.name)}</h3>
-                    <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 14px;">${this.escapeHtml(tpl.description || '')}</p>
-                    <div style="font-size: 11px; color: var(--text-muted);">
-                      <strong>Dialect:</strong> ${tpl.sqlDialect || 'ANSI SQL'}<br>
-                      <strong>Rules:</strong> ${(tpl.rules || []).length} preconfigured
+                    <h3 style="font-size: 15px; font-weight: 700; margin-bottom: 6px; color: var(--text-color);">${this.escapeHtml(tpl.name)}</h3>
+                    <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.4;">${this.escapeHtml(tpl.description || 'No description provided.')}</p>
+                    
+                    ${querySnippet ? `
+                      <div style="margin-top: 8px; margin-bottom: 8px;">
+                        <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px;">Template SQL Query:</div>
+                        <pre style="background: #0f172a; color: #38bdf8; padding: 8px 10px; border-radius: var(--border-radius-sm); font-size: 11px; font-family: 'Consolas', monospace; max-height: 80px; overflow: hidden; margin: 0; white-space: pre-wrap; word-break: break-all; border: 1px solid rgba(255,255,255,0.08);">${this.escapeHtml(querySnippet.slice(0, 160))}${querySnippet.length > 160 ? '...' : ''}</pre>
+                      </div>
+                    ` : ''}
+
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">
+                      <strong>Rules:</strong> ${(tpl.rules || []).length} validation assertion(s)
                     </div>
                   </div>
-                  <div class="card-footer" style="justify-content: space-between;">
-                    <button class="btn btn-outline btn-sm btn-tpl-preview" data-id="${tpl.id}">Preview</button>
+                  <div class="card-footer" style="justify-content: space-between; gap: 6px; padding: 10px 14px;">
+                    <div style="display: flex; gap: 6px;">
+                      <button class="btn btn-outline btn-sm btn-tpl-preview" data-id="${tpl.id}" title="Preview Template Details">Preview</button>
+                      <button class="btn btn-outline btn-sm btn-tpl-delete" data-id="${tpl.id}" title="Delete Template" style="color: #ef4444; border-color: rgba(239, 68, 68, 0.4);">&times;</button>
+                    </div>
                     <button class="btn btn-primary btn-sm btn-tpl-use" data-id="${tpl.id}">Use Template</button>
                   </div>
                 </div>
                 `;
               }).join('')}
             </div>
-            ${filteredTemplates.length === 0 ? `
-              <div style="text-align: center; padding: 40px; color: var(--text-muted);">
-                <span style="font-size: 32px;">📋</span>
-                <p style="margin-top: 8px;">No templates found for this discipline filter.</p>
-              </div>
-            ` : ''}
+
+            ${filteredTemplates.length === 0 ? (
+              this.templates.length === 0 ? `
+                <div style="text-align: center; padding: 48px 24px; color: var(--text-muted); background: var(--surface-alt); border-radius: var(--border-radius-md); border: 2px dashed var(--surface-border-strong);">
+                  <span style="font-size: 44px; display: block; margin-bottom: 12px;">📋</span>
+                  <h3 style="font-size: 16px; font-weight: 700; color: var(--text-color); margin-bottom: 6px;">No Templates Found</h3>
+                  <p style="font-size: 13px; max-width: 460px; margin: 0 auto 18px auto;">Default templates have been removed. Click below to create your first standardized template with default Trino SQL validation queries.</p>
+                  <button class="btn btn-primary" id="btn-empty-create-template">➕ Create New Template</button>
+                </div>
+              ` : `
+                <div style="text-align: center; padding: 40px; color: var(--text-muted); background: var(--surface-alt); border-radius: var(--border-radius-md);">
+                  <span style="font-size: 32px;">🔍</span>
+                  <h4 style="font-weight: 600; color: var(--text-color); margin: 8px 0 4px 0;">No matching templates</h4>
+                  <p style="font-size: 12px;">No templates matched your search or discipline filter.</p>
+                  <button class="btn btn-outline btn-sm" id="btn-reset-tpl-search" style="margin-top: 10px;">Reset Filters</button>
+                </div>
+              `
+            ) : ''}
           </div>
         </div>
       `;
+
+      // Search input live filtering
+      const searchInput = container.querySelector('#tpl-search-input');
+      if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+          this._tplSearchQuery = e.target.value;
+          this.renderTemplates(container);
+          const reInput = container.querySelector('#tpl-search-input');
+          if (reInput) {
+            reInput.focus();
+            reInput.setSelectionRange(reInput.value.length, reInput.value.length);
+          }
+        });
+      }
+
+      // Clear search button
+      const btnClearSearch = container.querySelector('#btn-clear-tpl-search');
+      if (btnClearSearch) {
+        btnClearSearch.addEventListener('click', () => {
+          this._tplSearchQuery = '';
+          this.renderTemplates(container);
+        });
+      }
+
+      // Reset filters button in empty search state
+      const btnResetSearch = container.querySelector('#btn-reset-tpl-search');
+      if (btnResetSearch) {
+        btnResetSearch.addEventListener('click', () => {
+          this._tplSearchQuery = '';
+          this.activeTplProfileFilter = 'all';
+          this.renderTemplates(container);
+        });
+      }
+
+      // Empty state create template button
+      const btnEmptyCreate = container.querySelector('#btn-empty-create-template');
+      if (btnEmptyCreate) {
+        btnEmptyCreate.addEventListener('click', () => {
+          this.showNewTemplateModal();
+        });
+      }
 
       // Filter button clicks
       container.querySelectorAll('.btn-tpl-filter').forEach(btn => {
@@ -5638,6 +5855,7 @@ ${q.query || '-- No SQL specified'}
         });
       });
 
+      // Use template button
       container.querySelectorAll('.btn-tpl-use').forEach(btn => {
         btn.addEventListener('click', () => {
           const tpl = this.templates.find(t => t.id === btn.dataset.id);
@@ -5648,17 +5866,26 @@ ${q.query || '-- No SQL specified'}
         });
       });
 
+      // Preview template button
       container.querySelectorAll('.btn-tpl-preview').forEach(btn => {
         btn.addEventListener('click', () => {
           const tpl = this.templates.find(t => t.id === btn.dataset.id);
           if (tpl) {
+            const queryToShow = tpl.sqlQuery || (tpl.sqlQueries && tpl.sqlQueries[0]?.query) || (tpl.rules && tpl.rules[0]?.sql) || '-- No SQL query defined for this template';
             this.openModal(tpl.name, `
-              <p><strong>Category:</strong> ${tpl.category}</p>
-              <p><strong>Description:</strong> ${tpl.description}</p>
-              <p><strong>Executive Summary:</strong> ${tpl.executiveSummary || 'N/A'}</p>
-              <p><strong>Business Objective:</strong> ${tpl.businessObjective || 'N/A'}</p>
-              <div style="margin-top: 12px;"><strong>Sample Query:</strong></div>
-              <div class="sql-highlighted-box" style="margin-top: 6px;">${this.highlightSql(tpl.rules && tpl.rules[0] ? tpl.rules[0].sql : '-- No sample query')}</div>
+              <div style="margin-bottom: 12px;">
+                <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
+                  <span class="badge badge-info">${this.escapeHtml(tpl.category || 'General')}</span>
+                  <span class="badge badge-outline" style="font-family: monospace;">Dialect: ${this.escapeHtml(tpl.sqlDialect || 'Trino')}</span>
+                </div>
+                <p><strong>Description:</strong> ${this.escapeHtml(tpl.description || 'N/A')}</p>
+                ${tpl.executiveSummary ? `<p><strong>Executive Summary:</strong> ${this.escapeHtml(tpl.executiveSummary)}</p>` : ''}
+                ${tpl.businessObjective ? `<p><strong>Business Objective:</strong> ${this.escapeHtml(tpl.businessObjective)}</p>` : ''}
+              </div>
+              <div style="margin-top: 14px;">
+                <strong>Template SQL Validation Query (${this.escapeHtml(tpl.sqlDialect || 'Trino')}):</strong>
+                <div class="sql-highlighted-box" style="margin-top: 6px; max-height: 250px; overflow: auto; background: #0f172a; padding: 12px; border-radius: 6px; font-family: 'Consolas', monospace; font-size: 12px; color: #38bdf8;">${this.highlightSql(queryToShow)}</div>
+              </div>
             `, [
               { label: 'Close', class: 'btn-outline', action: () => this.closeModal() },
               { label: 'Use This Template', class: 'btn-primary', action: () => {
@@ -5671,11 +5898,27 @@ ${q.query || '-- No SQL specified'}
         });
       });
 
-      document.getElementById('btn-export-templates').addEventListener('click', () => {
+      // Delete template button
+      container.querySelectorAll('.btn-tpl-delete').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const tplId = btn.dataset.id;
+          const tpl = this.templates.find(t => t.id === tplId);
+          if (!tpl) return;
+          if (confirm(`Are you sure you want to delete template "${tpl.name}"?`)) {
+            await this.dbDelete('templates', tplId);
+            this.templates = this.templates.filter(t => t.id !== tplId);
+            this.renderTemplates(container);
+            this.showToast(`Template "${tpl.name}" deleted`, 'info');
+          }
+        });
+      });
+
+      document.getElementById('btn-export-templates')?.addEventListener('click', () => {
         this.downloadJson(this.templates, 'dqd-templates-catalog.json');
       });
 
-      document.getElementById('btn-new-custom-template').addEventListener('click', () => {
+      document.getElementById('btn-new-custom-template')?.addEventListener('click', () => {
         this.showNewTemplateModal();
       });
     },
@@ -5748,9 +5991,20 @@ ${q.query || '-- No SQL specified'}
         this.currentDoc.sqlQuery = this.currentDoc.sqlQueries[0].query || "";
         this.currentDoc.sqlDialect = this.currentDoc.sqlQueries[0].dialect || tpl.sqlDialect || "Trino";
         this.currentDoc.sqlNotes = this.currentDoc.sqlQueries[0].notes || "";
-      } else {
-        this.currentDoc.sqlQuery = tpl.sqlQuery || "";
+      } else if (tpl.sqlQuery) {
+        this.currentDoc.sqlQuery = tpl.sqlQuery;
+        this.currentDoc.sqlDialect = tpl.sqlDialect || "Trino";
         this.currentDoc.sqlNotes = tpl.sqlNotes || "";
+        this.currentDoc.sqlQueries = [{
+          id: 'Q-1',
+          title: `${tpl.name} Query`,
+          dialect: tpl.sqlDialect || "Trino",
+          query: tpl.sqlQuery,
+          notes: tpl.description || ""
+        }];
+      } else {
+        this.currentDoc.sqlQuery = "";
+        this.currentDoc.sqlNotes = "";
       }
 
       this.currentDoc.expectedResult = tpl.expectedResult || (tpl.rules && tpl.rules[0]?.expectedResult) || "";
@@ -5762,50 +6016,159 @@ ${q.query || '-- No SQL specified'}
     },
 
     showNewTemplateModal() {
+      const activeProf = this.activeTeamProfile || 'data_quality';
       this.openModal('Create New Template', `
         <div class="form-group">
           <label class="form-label required">Template Name</label>
-          <input type="text" id="tpl-in-name" class="form-control" placeholder="e.g. Real-Time Telemetry Validation">
+          <input type="text" id="tpl-in-name" class="form-control" placeholder="e.g. Bronze to Silver Trino Reconciler">
         </div>
-        <div class="form-group">
-          <label class="form-label">Category</label>
-          <input type="text" id="tpl-in-category" class="form-control" placeholder="e.g. Streaming, Financial, Healthcare">
+        <div class="grid-cols-2">
+          <div class="form-group">
+            <label class="form-label">Category</label>
+            <input type="text" id="tpl-in-category" class="form-control" placeholder="e.g. Validation, Pipeline, Reconciliation">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Team Discipline</label>
+            <select id="tpl-in-team-profile" class="form-control">
+              <option value="data_quality" ${activeProf === 'data_quality' ? 'selected' : ''}>🛡️ Data Quality</option>
+              <option value="data_analysis" ${activeProf === 'data_analysis' ? 'selected' : ''}>📈 Data Analysis</option>
+              <option value="data_engineering" ${activeProf === 'data_engineering' ? 'selected' : ''}>⚙️ Data Engineering</option>
+              <option value="data_modelling" ${activeProf === 'data_modelling' ? 'selected' : ''}>📐 Data Modelling</option>
+            </select>
+          </div>
         </div>
         <div class="form-group">
           <label class="form-label">Description</label>
-          <textarea id="tpl-in-desc" class="form-control" rows="2"></textarea>
+          <textarea id="tpl-in-desc" class="form-control" rows="2" placeholder="Brief summary of what this template documents and validates..."></textarea>
         </div>
         <div class="form-group">
           <label class="form-label">Default SQL Dialect</label>
           <select id="tpl-in-dialect" class="form-control">
+            <option value="Trino" selected>Trino (Default)</option>
             <option value="Snowflake">Snowflake</option>
             <option value="PostgreSQL">PostgreSQL</option>
-            <option value="Trino">Trino</option>
             <option value="MySQL">MySQL</option>
+            <option value="BigQuery">BigQuery</option>
+            <option value="Databricks">Databricks</option>
             <option value="ANSI SQL">ANSI SQL</option>
           </select>
+        </div>
+
+        <!-- SQL Query Editor -->
+        <div class="form-group" style="margin-top: 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label class="form-label" style="margin-bottom: 0;">Template SQL Query</label>
+            <div style="display: flex; gap: 6px; align-items: center;">
+              <span class="badge badge-info" id="tpl-sql-dialect-badge">Trino</span>
+              <button type="button" class="btn btn-outline btn-sm" id="btn-tpl-sample-sql" style="padding: 2px 8px; font-size: 11px;">Sample Query</button>
+              <button type="button" class="btn btn-outline btn-sm" id="btn-tpl-clear-sql" style="padding: 2px 8px; font-size: 11px;">Clear</button>
+            </div>
+          </div>
+          <div style="border: 1px solid var(--surface-border-strong); border-radius: var(--border-radius-sm); overflow: hidden; background: #0f172a;">
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; background: #1e293b; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 11px; color: #94a3b8;">
+              <span>💻 SQL Query Editor</span>
+              <span id="tpl-sql-line-count">Lines: 1</span>
+            </div>
+            <textarea id="tpl-in-sql" class="form-control" style="background: #0f172a; color: #38bdf8; font-family: 'Consolas', 'Courier New', monospace; font-size: 13px; line-height: 1.5; border: none; border-radius: 0; padding: 12px; min-height: 160px; resize: vertical;" placeholder="-- Enter Trino template SQL query here...&#10;SELECT&#10;    customer_id,&#10;    COUNT(*) AS count&#10;FROM lakehouse_raw.customer_orders&#10;GROUP BY customer_id&#10;HAVING COUNT(*) > 1;" spellcheck="false"></textarea>
+          </div>
         </div>
       `, [
         { label: 'Cancel', class: 'btn-outline', action: () => this.closeModal() },
         { label: 'Save Template', class: 'btn-primary', action: async () => {
-          const name = document.getElementById('tpl-in-name').value.trim();
-          if (!name) return alert('Name is required');
+          const name = document.getElementById('tpl-in-name')?.value.trim();
+          if (!name) return alert('Template Name is required');
+          const dialect = document.getElementById('tpl-in-dialect')?.value || 'Trino';
+          const sqlQuery = document.getElementById('tpl-in-sql')?.value.trim() || '';
+          const teamProfile = document.getElementById('tpl-in-team-profile')?.value || 'data_quality';
+          const desc = document.getElementById('tpl-in-desc')?.value.trim() || '';
+          const category = document.getElementById('tpl-in-category')?.value.trim() || 'Custom';
+
           const tpl = {
             id: 'tpl-custom-' + Date.now(),
             name,
-            category: document.getElementById('tpl-in-category').value.trim() || 'Custom',
-            description: document.getElementById('tpl-in-desc').value.trim(),
-            sqlDialect: document.getElementById('tpl-in-dialect').value,
-            rules: [],
-            dataSource: { tables: [], mappings: [] }
+            category,
+            teamProfile,
+            description: desc,
+            sqlDialect: dialect,
+            sqlQuery: sqlQuery,
+            sqlQueries: sqlQuery ? [{
+              id: 'Q-1',
+              title: `${name} Query`,
+              dialect: dialect,
+              query: sqlQuery,
+              notes: desc
+            }] : [],
+            rules: sqlQuery ? [{
+              id: `RULE-TPL-${Date.now().toString().slice(-4)}`,
+              name: `${name} Assertion`,
+              dimension: 'Completeness',
+              severity: 'Critical',
+              description: desc || `${name} Validation Rule`,
+              sql: sqlQuery,
+              expectedResult: '0 rows returned',
+              threshold: '0',
+              dialect: dialect
+            }] : [],
+            dataSource: { tables: [], mappings: [] },
+            isCustom: true,
+            createdAt: new Date().toISOString()
           };
+
           await this.dbPut('templates', tpl);
-          this.templates.push(tpl);
+          this.templates.unshift(tpl);
           this.closeModal();
           this.renderTemplates(document.getElementById('main-content-view'));
-          this.showToast('Template created', 'success');
+          this.showToast(`Template "${name}" created successfully`, 'success');
         }}
       ]);
+
+      // Wire interactive controls inside the modal
+      const dialectSelect = document.getElementById('tpl-in-dialect');
+      const dialectBadge = document.getElementById('tpl-sql-dialect-badge');
+      const sqlTextarea = document.getElementById('tpl-in-sql');
+      const lineCountSpan = document.getElementById('tpl-sql-line-count');
+      const btnSample = document.getElementById('btn-tpl-sample-sql');
+      const btnClear = document.getElementById('btn-tpl-clear-sql');
+
+      if (dialectSelect && dialectBadge) {
+        dialectSelect.addEventListener('change', () => {
+          dialectBadge.textContent = dialectSelect.value;
+        });
+      }
+
+      if (sqlTextarea && lineCountSpan) {
+        const updateLines = () => {
+          const lines = sqlTextarea.value.split('\n').length;
+          lineCountSpan.textContent = `Lines: ${lines}`;
+        };
+        sqlTextarea.addEventListener('input', updateLines);
+        updateLines();
+      }
+
+      if (btnSample && sqlTextarea) {
+        btnSample.addEventListener('click', () => {
+          sqlTextarea.value = `-- Trino SQL Data Quality Validation Query
+SELECT 
+    order_id,
+    customer_id,
+    total_amount,
+    created_at
+FROM hive.production_lakehouse.orders
+WHERE order_id IS NULL 
+   OR total_amount < 0
+   OR created_at > CURRENT_TIMESTAMP;`;
+          if (lineCountSpan) {
+            lineCountSpan.textContent = `Lines: ${sqlTextarea.value.split('\n').length}`;
+          }
+        });
+      }
+
+      if (btnClear && sqlTextarea) {
+        btnClear.addEventListener('click', () => {
+          sqlTextarea.value = '';
+          if (lineCountSpan) lineCountSpan.textContent = 'Lines: 1';
+        });
+      }
     },
 
     // ====================================================================
@@ -5876,40 +6239,42 @@ ${q.query || '-- No SQL specified'}
       }
 
       container.innerHTML = `
-        <table class="table-custom">
-          <thead>
-            <tr>
-              <th>Rule ID</th>
-              <th>Rule Name</th>
-              <th>Dimension</th>
-              <th>Severity</th>
-              <th>Expected Result</th>
-              <th>Threshold</th>
-              <th>Dialect</th>
-              <th style="text-align: right;">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${filtered.map(r => `
+        <div class="table-responsive">
+          <table class="table-custom">
+            <thead>
               <tr>
-                <td><strong>${r.id}</strong></td>
-                <td>
-                  <strong>${this.escapeHtml(r.name)}</strong>
-                  <div style="font-size: 11px; color: var(--text-muted);">${this.escapeHtml(r.description || '')}</div>
-                </td>
-                <td><span class="badge badge-info">${r.dimension || 'General'}</span></td>
-                <td>${this.getSeverityBadge(r.severity)}</td>
-                <td>${this.escapeHtml(r.expectedResult || '')}</td>
-                <td>${r.threshold || '0'}</td>
-                <td><span style="font-family: monospace; font-size: 11px;">${r.dialect || 'ANSI SQL'}</span></td>
-                <td style="text-align: right; white-space: nowrap;">
-                  <button class="btn btn-outline btn-sm btn-rule-edit" data-id="${r.id}">Edit</button>
-                  <button class="btn btn-danger btn-sm btn-rule-delete" data-id="${r.id}">&times;</button>
-                </td>
+                <th>Rule ID</th>
+                <th>Rule Name</th>
+                <th>Dimension</th>
+                <th>Severity</th>
+                <th>Expected Result</th>
+                <th>Threshold</th>
+                <th>Dialect</th>
+                <th style="text-align: right;">Actions</th>
               </tr>
-            `).join('')}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              ${filtered.map(r => `
+                <tr>
+                  <td><strong>${r.id}</strong></td>
+                  <td>
+                    <strong>${this.escapeHtml(r.name)}</strong>
+                    <div style="font-size: 11px; color: var(--text-muted);">${this.escapeHtml(r.description || '')}</div>
+                  </td>
+                  <td><span class="badge badge-info">${r.dimension || 'General'}</span></td>
+                  <td>${this.getSeverityBadge(r.severity)}</td>
+                  <td>${this.escapeHtml(r.expectedResult || '')}</td>
+                  <td>${r.threshold || '0'}</td>
+                  <td><span style="font-family: monospace; font-size: 11px;">${r.dialect || 'ANSI SQL'}</span></td>
+                  <td style="text-align: right; white-space: nowrap;">
+                    <button class="btn btn-outline btn-sm btn-rule-edit" data-id="${r.id}">Edit</button>
+                    <button class="btn btn-danger btn-sm btn-rule-delete" data-id="${r.id}">&times;</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
       `;
 
       container.querySelectorAll('.btn-rule-edit').forEach(b => {
@@ -6055,7 +6420,7 @@ ${q.query || '-- No SQL specified'}
 
     showRulePickerModal() {
       this.openModal('Select Rules from Catalog', `
-        <div style="max-height: 400px; overflow-y: auto;">
+        <div class="table-responsive" style="max-height: 400px; overflow: auto;">
           <table class="table-custom">
             <thead>
               <tr>
@@ -6218,7 +6583,7 @@ ${q.query || '-- No SQL specified'}
         </div>
         <div id="import-rules-preview-area" style="margin-top: 16px; display: none;">
           <div style="font-weight: 700; margin-bottom: 6px;">Parsed Preview (First 5 Rows):</div>
-          <div style="max-height: 200px; overflow: auto; border: 1px solid var(--surface-border);">
+          <div class="table-responsive" style="max-height: 200px; overflow: auto; border: 1px solid var(--surface-border);">
             <table class="table-custom" id="table-import-rules-preview"></table>
           </div>
         </div>
@@ -6741,7 +7106,7 @@ ${q.query || '-- No SQL specified'}
               <button class="btn btn-primary btn-sm" id="btn-log-execution-top">➕ Log Test Execution</button>
             </div>
           </div>
-          <div class="card-body" style="padding: 0;">
+          <div class="card-body table-responsive" style="padding: 0;">
             <table class="table-custom">
               <thead>
                 <tr>
@@ -6936,7 +7301,7 @@ ${q.query || '-- No SQL specified'}
             </div>
             <button class="btn btn-primary btn-sm" id="btn-add-issue-top">➕ Log Issue / CAPA</button>
           </div>
-          <div class="card-body" style="padding: 0;">
+          <div class="card-body table-responsive" style="padding: 0;">
             <table class="table-custom">
               <thead>
                 <tr>
@@ -7580,16 +7945,18 @@ ${q.query || '-- No SQL specified'}
               <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 12px;">Heuristic Field Mapping Review</h3>
               <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 16px;">Review and refine extracted values before creating document:</p>
               
-              <table class="table-custom" style="margin-bottom: 20px;">
-                <thead>
-                  <tr>
-                    <th>Target Field</th>
-                    <th>Extracted Value</th>
-                    <th>Confidence</th>
-                  </tr>
-                </thead>
-                <tbody id="tbody-pdf-mapping-fields"></tbody>
-              </table>
+              <div class="table-responsive">
+                <table class="table-custom" style="margin-bottom: 20px;">
+                  <thead>
+                    <tr>
+                      <th>Target Field</th>
+                      <th>Extracted Value</th>
+                      <th>Confidence</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-pdf-mapping-fields"></tbody>
+                </table>
+              </div>
 
               <div style="display: flex; justify-content: flex-end; gap: 12px;">
                 <button class="btn btn-outline" id="btn-cancel-pdf-import">Cancel</button>
@@ -7811,7 +8178,7 @@ ${q.query || '-- No SQL specified'}
                 <button class="btn btn-primary btn-sm" id="btn-convert-selected-dbt">Convert Selected to DQD Documents & Rules</button>
               </div>
 
-              <div style="max-height: 400px; overflow-y: auto; border: 1px solid var(--surface-border); border-radius: var(--border-radius-sm);">
+              <div class="table-responsive" style="max-height: 400px; overflow: auto; border: 1px solid var(--surface-border); border-radius: var(--border-radius-sm);">
                 <table class="table-custom">
                   <thead>
                     <tr>
@@ -8095,7 +8462,7 @@ ${q.query || '-- No SQL specified'}
       container.innerHTML = `
         <div class="card">
           <div class="card-header"><span class="card-title">Approval Workflow & Sign-Off Management</span></div>
-          <div class="card-body" style="padding: 0;">
+          <div class="card-body table-responsive" style="padding: 0;">
             <table class="table-custom">
               <thead>
                 <tr>
@@ -8209,16 +8576,17 @@ ${q.query || '-- No SQL specified'}
               </div>
             </div>
 
-            <table class="table-custom">
-              <thead>
-                <tr>
-                  <th>Timestamp</th>
-                  <th>Action</th>
-                  <th>Details</th>
-                  <th>Actor</th>
-                  <th>Target ID</th>
-                </tr>
-              </thead>
+            <div class="table-responsive">
+              <table class="table-custom">
+                <thead>
+                  <tr>
+                    <th>Timestamp</th>
+                    <th>Action</th>
+                    <th>Details</th>
+                    <th>Actor</th>
+                    <th>Target ID</th>
+                  </tr>
+                </thead>
               <tbody>
                 ${this.auditLogs.map(a => `
                   <tr>
@@ -8231,6 +8599,7 @@ ${q.query || '-- No SQL specified'}
                 `).join('')}
               </tbody>
             </table>
+            </div>
           </div>
         </div>
       `;
@@ -8301,7 +8670,7 @@ ${q.query || '-- No SQL specified'}
           </div>
           <div class="card-body">
             <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 14px;">
-              Configure default author attribution for this workspace. Values can be null/empty or custom strings. When provided, they are stamped at the end of generated PDF documents and exported with <code>.dqdoc</code> files.
+              Configure default author attribution for this workspace. Values can be null/empty or custom strings. When provided, they are stamped at the end of generated PDF documents and exported with <code>.dldoc</code> files.
             </p>
             <div class="grid-cols-3">
               <div class="form-group">
@@ -8400,7 +8769,10 @@ ${q.query || '-- No SQL specified'}
                 <label><input type="checkbox" id="set-chk-pdf-rev" ${p.includeRevisionHistory !== false ? 'checked' : ''}> Include Document Revision History in PDF</label>
               </div>
               <div class="form-group">
-                <label><input type="checkbox" id="set-chk-pdf-only" ${p.onlyGeneratePdf !== false ? 'checked' : ''}> Default to PDF-only export (skip automatic .dqdoc download)</label>
+                <label><input type="checkbox" id="set-chk-pdf-only" ${p.onlyGeneratePdf !== false ? 'checked' : ''}> Default to PDF-only export (skip automatic .dldoc download)</label>
+              </div>
+              <div class="form-group">
+                <label><input type="checkbox" id="set-chk-allow-incomplete-pub" ${this.config.allowPublicationWithMissingFields !== false ? 'checked' : ''}> Allow publication & approval with missing/incomplete records</label>
               </div>
 
               <button class="btn btn-primary btn-sm" id="btn-save-branding">Apply Branding & PDF Settings</button>
@@ -8543,6 +8915,8 @@ ${q.query || '-- No SQL specified'}
         if (chkPdfRev) this.config.pdf.includeRevisionHistory = chkPdfRev.checked;
         const chkPdfOnly = document.getElementById('set-chk-pdf-only');
         if (chkPdfOnly) this.config.pdf.onlyGeneratePdf = chkPdfOnly.checked;
+        const chkAllowIncPub = document.getElementById('set-chk-allow-incomplete-pub');
+        if (chkAllowIncPub) this.config.allowPublicationWithMissingFields = chkAllowIncPub.checked;
 
         // Also sync Author Info fields if present
         const uName = document.getElementById('set-in-username')?.value.trim() || null;
@@ -9319,7 +9693,7 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
         `- **Expected Result:** \`${doc.expectedResult || '0 defect records'}\`\n` +
         `- **Acceptable Threshold:** \`${doc.threshold || '0'}\`\n` +
         `- **Actual Result:** \`${doc.actualResult || 'Verified'}\`\n` +
-        `- **Evidence Screenshots:** ${doc.screenshots?.length || 0} image(s) embedded in portable .dqdoc & PDF\n\n` +
+        `- **Evidence Screenshots:** ${doc.screenshots?.length || 0} image(s) embedded in portable .dldoc & PDF\n\n` +
         `#### 💾 Verification SQL Queries\n` +
         queries.map((q, i) => `##### ${i+1}. ${q.title || 'Query'} (${q.dialect || 'Trino'})\n\`\`\`sql\n${(q.query || '').trim()}\n\`\`\``).join('\n\n') + '\n\n' +
         `#### 🛠️ Remediation Protocol\n` +
@@ -9624,10 +9998,10 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
       // 1. Generate & Download PDF
       this.generatePdfReport(doc);
 
-      // 2. Generate & Download portable .dqdoc interchange file
+      // 2. Generate & Download portable .dldoc interchange file
       this.exportDocumentDataFile(doc);
 
-      this.showToast(`Generated 2 files: PDF Report & Portable .dqdoc file (with all screenshots)`, 'success');
+      this.showToast(`Generated 2 files: PDF Report & Portable .dldoc file (with all screenshots)`, 'success');
     },
 
     exportDocumentDataFile(doc) {
@@ -9652,7 +10026,7 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       const blob = new Blob([jsonStr], { type: 'application/json' });
-      const filename = `DQD-${cleanDoc.id || 'doc'}-${new Date().toISOString().slice(0, 10)}.dqdoc`;
+      const filename = `DQD-${cleanDoc.id || 'doc'}-${new Date().toISOString().slice(0, 10)}.dldoc`;
       this.downloadBlob(blob, filename);
     },
 
@@ -9851,8 +10225,6 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
       const pdfSettings = this.config.pdf || {};
       const docProfileKey = (doc && doc.teamProfile) || this.getActiveProfileKey() || 'data_quality';
       const profile = (this.config && this.config.teamProfiles && this.config.teamProfiles[docProfileKey]) || this.getActiveProfile();
-      const profileAttrs = this.getProfileAttributes(docProfileKey);
-      const teamAttrs = (doc && doc.teamAttributes) || {};
       const branding = Object.assign({}, (profile && profile.branding) || {}, this.config.branding || {});
 
       const orientation = pdfSettings.orientation === 'landscape' ? 'landscape' : 'portrait';
@@ -9911,7 +10283,13 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
 
       // Helper: Modern Section Header with Vertical Accent Bar & Divider
       const renderSectionHeader = (number, title, subtitle = '') => {
-        if (y > pageHeight - 120) {
+        // Generous breathing space and margin from preceding section
+        if (y > margin + 35) {
+          y += 24;
+        }
+
+        // Prevent orphan section headers at page bottom
+        if (y > pageHeight - 135) {
           pdf.addPage();
           y = margin + 25;
         }
@@ -9942,7 +10320,7 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
         pdf.setDrawColor(borderSlate[0], borderSlate[1], borderSlate[2]);
         pdf.setLineWidth(0.6);
         pdf.line(margin, y, pageWidth - margin, y);
-        y += 12;
+        y += 14;
       };
 
       // Top Primary Header Brand Bar & Accent Stripe
@@ -10382,7 +10760,7 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
 
           const format = ss.dataUrl.includes('image/png') ? 'PNG' : 'JPEG';
           pdf.addImage(ss.dataUrl, format, renderX + 8, y + 22, renderW, renderH);
-          y += cardFrameH + 12;
+          y += cardFrameH + 18;
         } catch (imgErr) {
           console.warn('Could not add image to PDF:', imgErr);
         }
@@ -10409,7 +10787,7 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
         margin: { left: margin, right: margin }
       });
 
-      y = pdf.lastAutoTable.finalY + 12;
+      y = pdf.lastAutoTable.finalY + 18;
 
       // Source Column Mappings Table
       if (src.mappings && src.mappings.length > 0) {
@@ -10428,7 +10806,7 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
           body: mapRows,
           theme: 'striped',
           headStyles: { fillColor: secondaryRgb, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
-          styles: { fontSize: 7.5, cellPadding: 4, textColor: bodySlate },
+          styles: { fontSize: 7.5, cellPadding: 4.5, textColor: bodySlate },
           alternateRowStyles: { fillColor: cardBgSlate },
           columnStyles: {
             3: { cellWidth: 100 },
@@ -10437,34 +10815,7 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
           margin: { left: margin, right: margin }
         });
 
-        y = pdf.lastAutoTable.finalY + 14;
-      }
-
-      // Discipline Technical Specification Attributes Table (profileAttributes)
-      if (profileAttrs && profileAttrs.length > 0) {
-        const attrRows = profileAttrs.map(attr => {
-          const val = (teamAttrs && teamAttrs[attr.key] !== undefined && String(teamAttrs[attr.key]).trim()) 
-            ? String(teamAttrs[attr.key]).trim() 
-            : '— (Standard Default)';
-          return [attr.label, val];
-        });
-
-        if (y > pageHeight - 120) { pdf.addPage(); y = margin + 25; }
-        pdf.autoTable({
-          startY: y,
-          head: [[`${profile.label} Specification Attribute`, 'Configured Technical Parameter']],
-          body: attrRows,
-          theme: 'grid',
-          headStyles: { fillColor: primaryRgb, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
-          styles: { fontSize: 7.5, cellPadding: 3.5, textColor: bodySlate },
-          alternateRowStyles: { fillColor: cardBgSlate },
-          columnStyles: {
-            0: { cellWidth: 190, fontStyle: 'bold', textColor: darkSlate },
-            1: { cellWidth: contentWidth - 190 }
-          },
-          margin: { left: margin, right: margin }
-        });
-        y = pdf.lastAutoTable.finalY + 12;
+        y = pdf.lastAutoTable.finalY + 18;
       }
 
       // Dynamic Validation Parameters Table
@@ -10480,11 +10831,11 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
           body: dynRows,
           theme: 'striped',
           headStyles: { fillColor: primaryRgb, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
-          styles: { fontSize: 7.5, cellPadding: 4, textColor: bodySlate },
+          styles: { fontSize: 7.5, cellPadding: 4.5, textColor: bodySlate },
           alternateRowStyles: { fillColor: cardBgSlate },
           margin: { left: margin, right: margin }
         });
-        y = pdf.lastAutoTable.finalY + 12;
+        y = pdf.lastAutoTable.finalY + 18;
       }
 
       // Validated dbt Models Table
@@ -10502,11 +10853,11 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
           body: modelRows,
           theme: 'striped',
           headStyles: { fillColor: secondaryRgb, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
-          styles: { fontSize: 7.5, cellPadding: 4, textColor: bodySlate },
+          styles: { fontSize: 7.5, cellPadding: 4.5, textColor: bodySlate },
           alternateRowStyles: { fillColor: cardBgSlate },
           margin: { left: margin, right: margin }
         });
-        y = pdf.lastAutoTable.finalY + 12;
+        y = pdf.lastAutoTable.finalY + 18;
       }
 
       // Validated Physical Tables Table
@@ -10525,11 +10876,11 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
           body: tableRows,
           theme: 'striped',
           headStyles: { fillColor: primaryRgb, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
-          styles: { fontSize: 7.5, cellPadding: 4, textColor: bodySlate },
+          styles: { fontSize: 7.5, cellPadding: 4.5, textColor: bodySlate },
           alternateRowStyles: { fillColor: cardBgSlate },
           margin: { left: margin, right: margin }
         });
-        y = pdf.lastAutoTable.finalY + 14;
+        y = pdf.lastAutoTable.finalY + 18;
       }
 
       // Expected vs Actual Result Quality Comparison Callout Boxes
@@ -10577,7 +10928,7 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
           pdf.text(splitAct.slice(0, 2), actX + 9, y + 24);
         }
 
-        y += boxH + 14;
+        y += boxH + 20;
       }
 
       // SECTION 2: Data Quality Validation Rules Catalog
@@ -10639,7 +10990,7 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
         },
         margin: { left: margin, right: margin }
       });
-      y = pdf.lastAutoTable.finalY + 12;
+      y = pdf.lastAutoTable.finalY + 18;
 
       // Detailed Rule Logic & SQL Expressions Table
       const rulesWithDetails = effectiveRules.filter(r => r.description || r.sql);
@@ -10657,7 +11008,7 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
           body: detailRows,
           theme: 'grid',
           headStyles: { fillColor: secondaryRgb, textColor: [255, 255, 255], fontSize: 7.5, fontStyle: 'bold' },
-          styles: { fontSize: 7, cellPadding: 3.5, textColor: bodySlate },
+          styles: { fontSize: 7, cellPadding: 4, textColor: bodySlate },
           alternateRowStyles: { fillColor: cardBgSlate },
           columnStyles: {
             0: { cellWidth: 70, fontStyle: 'bold' },
@@ -10667,7 +11018,7 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
           },
           margin: { left: margin, right: margin }
         });
-        y = pdf.lastAutoTable.finalY + 16;
+        y = pdf.lastAutoTable.finalY + 22;
       }
 
       // SECTION 3: SQL Assertion Code & Workbench
@@ -10685,7 +11036,7 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
           pdf.setFontSize(8);
           pdf.setTextColor(mutedSlate[0], mutedSlate[1], mutedSlate[2]);
           pdf.text(`Purpose / Audit Note: ${qObj.notes}`, margin, y);
-          y += 10;
+          y += 14;
         }
 
         if (qObj.query) {
@@ -10799,7 +11150,7 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
             linePtr += linesToDraw;
           }
 
-          y += 10;
+          y += 20;
         }
 
         // Screenshots linked under this query
@@ -10868,7 +11219,7 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
             const chartH = 75;
             if (y + chartH + 20 > pageHeight - 35) { pdf.addPage(); y = margin + 25; }
             pdf.addImage(chartImg, 'PNG', margin, y, chartW, chartH);
-            y += chartH + 10;
+            y += chartH + 16;
           } catch (chartErr) {
             console.warn('Offscreen Chart.js render skipped:', chartErr);
           }
@@ -10890,7 +11241,7 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
           body: execData,
           theme: 'striped',
           headStyles: { fillColor: primaryRgb, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
-          styles: { fontSize: 7.5, cellPadding: 4, textColor: bodySlate },
+          styles: { fontSize: 7.5, cellPadding: 4.5, textColor: bodySlate },
           alternateRowStyles: { fillColor: cardBgSlate },
           didParseCell: (data) => {
             if (data.section === 'body' && data.column.index === 2) {
@@ -10912,7 +11263,7 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
           },
           margin: { left: margin, right: margin }
         });
-        y = pdf.lastAutoTable.finalY + 16;
+        y = pdf.lastAutoTable.finalY + 22;
       } else {
         const placeholderExecRows = [
           ['TEST-01 (Baseline)', doc.title || 'Target Table', 'READY / PENDING', 'Target Entity Scope', '0 Defect Records (Target)', doc.executionFrequency || 'Daily at 02:00 UTC', 'Automated Scheduled Runner']
@@ -10923,7 +11274,7 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
           body: placeholderExecRows,
           theme: 'striped',
           headStyles: { fillColor: primaryRgb, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
-          styles: { fontSize: 7.5, cellPadding: 4, textColor: bodySlate },
+          styles: { fontSize: 7.5, cellPadding: 4.5, textColor: bodySlate },
           alternateRowStyles: { fillColor: cardBgSlate },
           didParseCell: (data) => {
             if (data.section === 'body' && data.column.index === 2) {
@@ -10934,13 +11285,13 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
           },
           margin: { left: margin, right: margin }
         });
-        y = pdf.lastAutoTable.finalY + 8;
+        y = pdf.lastAutoTable.finalY + 12;
 
         pdf.setFont('helvetica', 'italic');
         pdf.setFontSize(7);
         pdf.setTextColor(mutedSlate[0], mutedSlate[1], mutedSlate[2]);
         pdf.text('Note: No historical execution logs are attached yet. Test runs can be logged via the Test Executions workspace or automated CI/CD runners.', margin, y);
-        y += 14;
+        y += 20;
       }
 
       // SECTION 5: Operational Remediation Runbook & Issues
@@ -10965,7 +11316,7 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
         const splitRem = pdf.splitTextToSize(doc.remediation, contentWidth - 22);
         pdf.text(splitRem.slice(0, 2), margin + 10, y + 24);
 
-        y += remH + 12;
+        y += remH + 18;
       } else {
         const remH = 32;
         pdf.setFillColor(cardBgSlate[0], cardBgSlate[1], cardBgSlate[2]);
@@ -10983,7 +11334,7 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
         pdf.setFontSize(7);
         pdf.setTextColor(bodySlate[0], bodySlate[1], bodySlate[2]);
         pdf.text('Upon assertion breach or threshold defect, on-call data engineers must be paged, quarantine downstream ETL pipelines, and initiate root-cause triage.', margin + 10, y + 22);
-        y += remH + 10;
+        y += remH + 16;
       }
 
       if (docIssues.length > 0) {
@@ -11003,7 +11354,7 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
           body: issueRows,
           theme: 'grid',
           headStyles: { fillColor: primaryRgb, textColor: [255, 255, 255], fontSize: 7.5, fontStyle: 'bold' },
-          styles: { fontSize: 7.5, cellPadding: 3.5, textColor: bodySlate },
+          styles: { fontSize: 7.5, cellPadding: 4, textColor: bodySlate },
           alternateRowStyles: { fillColor: cardBgSlate },
           didParseCell: (data) => {
             if (data.section === 'body') {
@@ -11028,7 +11379,7 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
           },
           margin: { left: margin, right: margin }
         });
-        y = pdf.lastAutoTable.finalY + 16;
+        y = pdf.lastAutoTable.finalY + 22;
       } else {
         const noIssH = 26;
         pdf.setFillColor(240, 253, 244);
@@ -11046,7 +11397,7 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
         pdf.setFontSize(7);
         pdf.setTextColor(20, 83, 45);
         pdf.text('All assertion criteria are within expected parameters. No CAPA corrective action tickets are currently open.', margin + 10, y + 20);
-        y += noIssH + 16;
+        y += noIssH + 22;
       }
 
       // SECTION 6: Governance, Revision History & Sign-Off Approvals
@@ -11075,12 +11426,12 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
           body: revData,
           theme: 'striped',
           headStyles: { fillColor: secondaryRgb, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
-          styles: { fontSize: 7.5, cellPadding: 4, textColor: bodySlate },
+          styles: { fontSize: 7.5, cellPadding: 4.5, textColor: bodySlate },
           alternateRowStyles: { fillColor: cardBgSlate },
           columnStyles: { 0: { cellWidth: 55, fontStyle: 'bold' }, 1: { cellWidth: 75 }, 2: { cellWidth: 100 } },
           margin: { left: margin, right: margin }
         });
-        y = pdf.lastAutoTable.finalY + 12;
+        y = pdf.lastAutoTable.finalY + 18;
       }
 
       // Formal Sign-Off Approvals Table
@@ -11114,7 +11465,7 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
         body: appData,
         theme: 'grid',
         headStyles: { fillColor: primaryRgb, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
-        styles: { fontSize: 8, cellPadding: 4, textColor: bodySlate },
+        styles: { fontSize: 8, cellPadding: 4.5, textColor: bodySlate },
         alternateRowStyles: { fillColor: cardBgSlate },
         didParseCell: (data) => {
           if (data.section === 'body' && data.column.index === 2) {
@@ -11136,7 +11487,7 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
         },
         margin: { left: margin, right: margin }
       });
-      y = pdf.lastAutoTable.finalY + 14;
+      y = pdf.lastAutoTable.finalY + 22;
 
       // SECTION 7: Official Governance & Sign-Off Certification Block
       const certBoxH = 46;
@@ -11162,7 +11513,7 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
       pdf.text(`Certified By: ${this.currentUser || (doc.usernames && doc.usernames[0]) || doc.owner || 'Lead Data Governance Officer'}`, margin + 10, y + 26);
       pdf.text(`Audit Timestamp: ${new Date().toISOString().replace('T', ' ').slice(0, 19)} UTC  •  Status: ${docStatus.toUpperCase()}  •  Version: ${doc.version || '1.0'}`, margin + 10, y + 37);
 
-      y += certBoxH + 16;
+      y += certBoxH + 22;
 
       // APPENDIX: Visual Screenshot Evidence
       const appendixScreenshots = (doc.screenshots || []).filter(s => s.placement === 'appendix' || (!s.placement));
@@ -11217,7 +11568,7 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
         pdf.setTextColor(mutedSlate[0], mutedSlate[1], mutedSlate[2]);
         pdf.text('Direct inquiries regarding this validation specification to the author contact details above.', margin + 10, y + 28);
 
-        y += contactBoxH + 14;
+        y += contactBoxH + 22;
       }
 
       // Clean up any trailing blank pages

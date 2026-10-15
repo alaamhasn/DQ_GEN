@@ -12,6 +12,9 @@ window.DQD_CONFIG = {
   // Active Team Profile: 'data_quality' | 'data_analysis' | 'data_engineering' | 'data_modelling'
   activeTeamProfile: "data_analysis",
 
+  // Publication & Validation Policy
+  allowPublicationWithMissingFields: true,
+
   // User / Author Attribution & Sign-Off Details (can be null or string; if set, displayed at end of documents)
   username: null,
   useremail: null,
@@ -492,7 +495,8 @@ window.DQD_CONFIG = {
     approvals: false,
     auditTrail: true,
     issueTracking: true,
-    qualityScorecards: true
+    qualityScorecards: true,
+    allowPublicationWithMissingFields: true
   },
 
   limits: {

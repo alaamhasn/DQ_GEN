@@ -1,6 +1,6 @@
 # Licenses and Third-Party Notices
 
-Data Quality Documenter bundles standalone client-side JavaScript libraries to run completely offline without an internet connection or external CDN.
+Data Workspace Documenter (Analytics & Quality Edition) bundles standalone client-side JavaScript libraries to run completely offline without an internet connection or external CDN.
 
 ---
 
@@ -44,7 +44,8 @@ Data Quality Documenter bundles standalone client-side JavaScript libraries to r
 
 ---
 
-### 6. Data Quality Documenter Application
+### 6. Application License
+- **Software**: Data Workspace Documenter
 - **License**: MIT License
-- **Copyright**: (c) 2026 Data Quality Documenter Contributors.
-- Distributed as a portable Windows web application.
+- **Copyright**: (c) 2026 Alaa Hassan
+- **Reference**: See [`LICENSE`](LICENSE) for complete legal terms. Distributed as an offline, portable Windows web application.
