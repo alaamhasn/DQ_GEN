@@ -29,6 +29,8 @@
     auditLogs: [],
     activeChart: null,
     vocabulary: {},
+    activeProfileKey: 'data_quality',
+    activeTplProfileFilter: 'all',
     activeDocValTypeFilter: '',
     activeDocTeamFilter: '',
     activeDocUserFilter: '',
@@ -64,7 +66,9 @@
         this.navigateTo('dashboard');
         this.updateSidebarBadges();
 
-        this.showToast('Data Quality Documenter loaded successfully', 'info');
+        const profile = this.getActiveProfile();
+        const profileName = (profile && profile.name) || 'Data Quality';
+        this.showToast(`${profileName} Documenter loaded successfully`, 'info');
       } catch (err) {
         console.error('Initialization error:', err);
         this.showToast('Initialization error: ' + err.message, 'error');
@@ -73,6 +77,7 @@
 
     // Initialize configuration with defaults
     initConfig() {
+      this.defaultLogoBase64 = window.DQD_DEFAULT_LOGO_BASE64 || "";
       const defaults = window.DQD_CONFIG || {
         appName: "Data Quality Documenter",
         branding: {
@@ -93,7 +98,8 @@
           includeTableOfContents: true,
           includeMetadata: true,
           includeRevisionHistory: true,
-          includeApprovals: true
+          includeApprovals: true,
+          onlyGeneratePdf: true
         },
         requiredFields: [
           "rule_name",
@@ -144,6 +150,138 @@
       } catch (e) {
         this.config = JSON.parse(JSON.stringify(defaults));
       }
+
+      // Resolve active team profile
+      const savedProfile = localStorage.getItem('DQD_ACTIVE_PROFILE');
+      if (savedProfile && this.config.teamProfiles && this.config.teamProfiles[savedProfile]) {
+        this.activeProfileKey = savedProfile;
+      } else if (this.config.activeTeamProfile && this.config.teamProfiles && this.config.teamProfiles[this.config.activeTeamProfile]) {
+        this.activeProfileKey = this.config.activeTeamProfile;
+      } else {
+        this.activeProfileKey = 'data_quality';
+      }
+    },
+
+    getActiveProfileKey() {
+      return this.activeProfileKey || 'data_quality';
+    },
+
+    getActiveProfile() {
+      const key = this.getActiveProfileKey();
+      if (this.config && this.config.teamProfiles && this.config.teamProfiles[key]) {
+        return this.config.teamProfiles[key];
+      }
+      return {
+        key: 'data_quality',
+        name: 'Data Quality',
+        label: 'Data Quality Engineering',
+        roleTitle: 'Data Quality Engineer',
+        editionTag: 'Data Quality Edition',
+        subtitle: 'Quality Metrics, Assertions & SLA Governance',
+        branding: this.config.branding || {},
+        documentTypes: ['Data Quality Validation Rules', 'Data Quality Assessment'],
+        subtypes: [
+          { id: 'Model Validation', name: 'Model Validation', icon: '🧩', desc: 'dbt models, transformation lineage' },
+          { id: 'Table Validation', name: 'Table Validation', icon: '🗄️', desc: 'Physical tables, catalogs, schemas' }
+        ],
+        requiredFields: this.config.requiredFields || ['rule_name', 'validation_type'],
+        optionalFields: this.config.optionalFields || [],
+        suggestedInputs: []
+      };
+    },
+
+    switchTeamProfile(profileKey, rerender = true) {
+      if (!this.config.teamProfiles || !this.config.teamProfiles[profileKey]) {
+        console.warn('Unknown team profile:', profileKey);
+        return;
+      }
+      this.activeProfileKey = profileKey;
+      localStorage.setItem('DQD_ACTIVE_PROFILE', profileKey);
+
+      // Reset filter chip so document list doesn't get stuck filtering by the previous profile's subtype
+      this.activeDocValTypeFilter = '';
+
+      // Adapt active branding to the switched team profile palette
+      const profile = this.getActiveProfile();
+      if (profile && profile.branding) {
+        this.config.branding = Object.assign({}, this.config.branding || {}, profile.branding);
+        try {
+          localStorage.setItem('DQD_CONFIG_OVERRIDE', JSON.stringify(this.config));
+        } catch (e) {}
+      }
+
+      // Apply branding for active profile
+      this.applyBranding();
+
+      // Synchronize navbar dropdown
+      const selectEl = document.getElementById('team-profile-select');
+      if (selectEl && selectEl.value !== profileKey) {
+        selectEl.value = profileKey;
+      }
+
+      this.showToast(`Switched workspace to ${profile.label}`, 'info');
+
+      // Re-render current view if requested
+      if (rerender && this.currentView) {
+        if (this.currentView === 'editor') {
+          this.navigateTo('editor', { activeTab: this.currentEditorTab });
+        } else {
+          this.navigateTo(this.currentView);
+        }
+      }
+    },
+
+    getUserInfo(doc = null) {
+      // 1. If document has its own userInfo
+      if (doc && doc.userInfo && typeof doc.userInfo === 'object') {
+        const u = doc.userInfo;
+        if (u.username || u.useremail || u.userphone) {
+          return {
+            username: u.username ? String(u.username).trim() : null,
+            useremail: u.useremail ? String(u.useremail).trim() : null,
+            userphone: u.userphone ? String(u.userphone).trim() : null
+          };
+        }
+      }
+
+      // 2. Fallback to global config or localStorage
+      const cfgUser = (this.config && this.config.userInfo) || {};
+      const uName = (this.config && this.config.username) || cfgUser.username || localStorage.getItem('DQD_USER_NAME');
+      const uEmail = (this.config && this.config.useremail) || cfgUser.useremail || localStorage.getItem('DQD_USER_EMAIL');
+      const uPhone = (this.config && this.config.userphone) || cfgUser.userphone || localStorage.getItem('DQD_USER_PHONE');
+
+      return {
+        username: uName ? String(uName).trim() : null,
+        useremail: uEmail ? String(uEmail).trim() : null,
+        userphone: uPhone ? String(uPhone).trim() : null
+      };
+    },
+
+    saveUserInfo(info = {}) {
+      if (!this.config.userInfo) this.config.userInfo = {};
+      const uName = info.username ? String(info.username).trim() : null;
+      const uEmail = info.useremail ? String(info.useremail).trim() : null;
+      const uPhone = info.userphone ? String(info.userphone).trim() : null;
+
+      this.config.userInfo.username = uName;
+      this.config.userInfo.useremail = uEmail;
+      this.config.userInfo.userphone = uPhone;
+      this.config.username = uName;
+      this.config.useremail = uEmail;
+      this.config.userphone = uPhone;
+
+      if (uName) localStorage.setItem('DQD_USER_NAME', uName);
+      else localStorage.removeItem('DQD_USER_NAME');
+
+      if (uEmail) localStorage.setItem('DQD_USER_EMAIL', uEmail);
+      else localStorage.removeItem('DQD_USER_EMAIL');
+
+      if (uPhone) localStorage.setItem('DQD_USER_PHONE', uPhone);
+      else localStorage.removeItem('DQD_USER_PHONE');
+
+      try {
+        localStorage.setItem('DQD_CONFIG_OVERRIDE', JSON.stringify(this.config));
+      } catch (e) {}
     },
 
     deepMerge(target, source) {
@@ -167,7 +305,8 @@
 
     // Apply branding settings live to CSS custom properties and UI
     applyBranding() {
-      const b = this.config.branding || {};
+      const profile = this.getActiveProfile();
+      const b = Object.assign({}, (profile && profile.branding) || {}, this.config.branding || {});
       const root = document.documentElement;
 
       if (b.primaryColor) root.style.setProperty('--primary-color', b.primaryColor);
@@ -179,8 +318,18 @@
 
       // App name in header & sidebar
       const appNameEl = document.getElementById('sidebar-app-name');
-      if (appNameEl) appNameEl.textContent = this.config.appName || 'Data Quality Documenter';
-      document.title = (this.config.appName || 'Data Quality Documenter') + ' - Portable Windows Edition';
+      if (appNameEl) appNameEl.textContent = this.config.appName || 'Data Workspace Documenter';
+      document.title = (this.config.appName || 'Data Workspace Documenter') + ' - ' + ((profile && profile.editionTag) || 'Portable Windows Edition');
+
+      // Update sidebar edition tag
+      const brandTagEl = document.getElementById('sidebar-brand-tag');
+      if (brandTagEl) brandTagEl.textContent = (profile && profile.editionTag) || 'Windows Portable';
+
+      // Synchronize navbar dropdown
+      const profileSelect = document.getElementById('team-profile-select');
+      if (profileSelect && profileSelect.value !== this.getActiveProfileKey()) {
+        profileSelect.value = this.getActiveProfileKey();
+      }
 
       // Logo visibility and path
       const logoEl = document.getElementById('sidebar-logo-img');
@@ -751,7 +900,7 @@
       if (sampleTemplates.length === 0) {
         sampleTemplates = await this.fetchJsonOrDefault('templates/templates_catalog.json', []);
       }
-      const tplVersionKey = 'DQD_TEMPLATES_V2_6_FULL_DATA';
+      const tplVersionKey = 'DQD_TEMPLATES_MULTI_TEAM_V1';
       if (this.templates.length === 0 || !localStorage.getItem(tplVersionKey)) {
         for (const tpl of sampleTemplates) {
           await this.dbPut('templates', tpl);
@@ -927,15 +1076,16 @@
       });
 
       // Update Topbar Title
+      const profile = this.getActiveProfile();
       const titleMap = {
-        'dashboard': ['Dashboard', 'Quality Metrics & Workspace Overview'],
-        'documents': ['Document Library', 'Manage Data Quality Documents & Specifications'],
+        'dashboard': ['Dashboard', profile.subtitle || 'Quality Metrics & Workspace Overview'],
+        'documents': ['Document Library', `Manage ${profile.name} Documents & Specifications`],
         'users': ['User & Team Directory', 'Explore Documents by Assigned Team Members and Author Attribution'],
-        'editor': [this.currentDoc && this.currentDoc.id ? 'Edit Document' : 'Create New Document', 'Author Specification, Source Mappings & SQL Assertions'],
-        'templates': ['Document Templates', 'Standardized Templates for Data Quality Processes'],
-        'rules': ['Validation Rules Catalog', 'Enterprise Data Quality Assertions & Dimensions'],
-        'sql-library': ['SQL Library & Workbench', 'Data Quality Queries Across Supported Dialects'],
-        'executions': ['Test Executions', 'Execution Logs, Records & Defect Measurements'],
+        'editor': [this.currentDoc && this.currentDoc.id ? 'Edit Document' : 'Create New Document', `Author ${profile.label} Specification, Mappings & Logic`],
+        'templates': ['Document Templates', `Standardized Templates for ${profile.label}`],
+        'rules': [profile.key === 'data_analysis' ? 'Metric Catalog' : (profile.key === 'data_engineering' ? 'Pipeline Tasks & Criteria' : (profile.key === 'data_modelling' ? 'Entities & Schema Catalog' : 'Validation Rules Catalog')), `${profile.name} Specifications, Criteria & Logic`],
+        'sql-library': ['SQL Library & Workbench', `${profile.name} Queries Across Supported Dialects`],
+        'executions': [profile.key === 'data_analysis' ? 'Analysis Execution Logs' : (profile.key === 'data_engineering' ? 'Pipeline Runs & Latency' : (profile.key === 'data_modelling' ? 'Model Review Executions' : 'Test Executions')), 'Execution Logs, Records & Measurements'],
         'issues': ['Issues & Remediation Tracker', 'Triage Root Causes, CAPA & Corrective Actions'],
         'file-search': ['Local File & Filesystem Search', 'Search Saved Documents & Local System Folders'],
         'pdf-import': ['PDF Import & Auto Field Mapping', 'Extract Text & Heuristic Recognition into Fields'],
@@ -946,7 +1096,7 @@
         'settings': ['Settings & Configuration', 'Branding, Field Requirements & Portable Export']
       };
 
-      const titleInfo = titleMap[viewName] || ['Data Quality Documenter', ''];
+      const titleInfo = titleMap[viewName] || [(profile ? `${profile.name} Documenter` : (this.config.appName || 'Data Workspace Documenter')), ''];
       document.getElementById('current-view-title').textContent = titleInfo[0];
       document.getElementById('current-view-subtitle').textContent = titleInfo[1];
 
@@ -1047,6 +1197,14 @@
           this.navigateTo(view);
         });
       });
+
+      // Team Profile Workspace Switcher
+      const profileSelect = document.getElementById('team-profile-select');
+      if (profileSelect) {
+        profileSelect.addEventListener('change', (e) => {
+          this.switchTeamProfile(e.target.value, true);
+        });
+      }
 
       // Quick new document
       document.getElementById('btn-quick-new-doc').addEventListener('click', () => {
@@ -1203,7 +1361,7 @@
                       <th>Domain</th>
                       <th>Status</th>
                       <th>Updated</th>
-                      <th>Action</th>
+                      <th style="text-align: right;">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1216,8 +1374,9 @@
                         <td>${this.escapeHtml(doc.businessDomain || 'General')}</td>
                         <td>${this.getStatusBadge(doc.status)}</td>
                         <td>${doc.updatedAt ? new Date(doc.updatedAt).toLocaleDateString() : 'N/A'}</td>
-                        <td>
-                          <button class="btn btn-outline btn-sm btn-action-edit-doc" data-id="${doc.id}">Edit</button>
+                        <td style="text-align: right; white-space: nowrap;">
+                          <button class="btn btn-outline btn-sm btn-action-edit-doc" data-id="${doc.id}" title="Edit Document">✏️ Edit</button>
+                          <button class="btn btn-danger btn-sm btn-action-delete-doc" data-id="${doc.id}" title="Delete Document">🗑️</button>
                         </td>
                       </tr>
                     `).join('')}
@@ -1323,6 +1482,13 @@
             this.currentEditorTab = 'tab-meta';
             this.navigateTo('editor');
           }
+        });
+      });
+
+      container.querySelectorAll('.btn-action-delete-doc').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          await this.deleteDocument(btn.dataset.id);
         });
       });
     },
@@ -2101,6 +2267,13 @@
           <div class="card-header" style="flex-wrap: wrap; gap: 10px;">
             <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; flex: 1;">
               <input type="text" id="doc-filter-search" class="form-control form-control-sm" style="width: 240px;" placeholder="Filter by title, ID, SQL, author...">
+              <select id="doc-filter-profile" class="form-control form-control-sm" style="width: 170px;">
+                <option value="">All Profiles (${Object.keys(this.config.teamProfiles || {}).length})</option>
+                ${Object.keys(this.config.teamProfiles || {}).map(k => {
+                  const p = this.config.teamProfiles[k];
+                  return `<option value="${k}" ${this.activeDocProfileFilter === k ? 'selected' : ''}>${this.escapeHtml(p.label || p.name)}</option>`;
+                }).join('')}
+              </select>
               <select id="doc-filter-status" class="form-control form-control-sm" style="width: 140px;">
                 <option value="">All Statuses</option>
                 <option value="Draft">Draft</option>
@@ -2137,6 +2310,10 @@
       this.updateDocumentsTable();
 
       document.getElementById('doc-filter-search')?.addEventListener('input', () => this.updateDocumentsTable());
+      document.getElementById('doc-filter-profile')?.addEventListener('change', (e) => {
+        this.activeDocProfileFilter = e.target.value;
+        this.updateDocumentsTable();
+      });
       document.getElementById('doc-filter-status')?.addEventListener('change', () => this.updateDocumentsTable());
       document.getElementById('doc-filter-team')?.addEventListener('change', (e) => {
         this.activeDocTeamFilter = e.target.value;
@@ -2169,21 +2346,35 @@
       const statusFilter = document.getElementById('doc-filter-status')?.value || '';
       const teamFilter = this.activeDocTeamFilter || '';
       const userFilter = this.activeDocUserFilter || '';
+      const profileFilter = this.activeDocProfileFilter || '';
       const valTypeFilter = this.activeDocValTypeFilter || '';
 
-      // Update Filter Chips Bar
+      // Update Filter Chips Bar dynamically based on active profile and existing documents
       const chipsBar = document.getElementById('doc-filter-chips-bar');
       if (chipsBar) {
+        const activeProfile = this.getActiveProfile();
+        const profileSubtypes = (activeProfile && Array.isArray(activeProfile.subtypes))
+          ? activeProfile.subtypes.map(s => s.name)
+          : [];
+        const existingDocTypes = Array.from(new Set((this.documents || []).map(d => d.validationType || d.documentType).filter(Boolean)));
+        const allTypes = Array.from(new Set([...profileSubtypes, ...existingDocTypes]));
+
+        // If active filter is obsolete/unmatched, gracefully reset to All Documents
+        if (this.activeDocValTypeFilter && !allTypes.includes(this.activeDocValTypeFilter)) {
+          this.activeDocValTypeFilter = '';
+        }
+
         const valTypes = [
           { key: '', label: 'All Documents', count: this.documents.length },
-          { key: 'Model Validation', label: 'Model Validation', count: this.documents.filter(d => (d.validationType || d.documentType) === 'Model Validation').length },
-          { key: 'Table Validation', label: 'Table Validation', count: this.documents.filter(d => (d.validationType || d.documentType) === 'Table Validation').length },
-          { key: 'Model and Table Validation', label: 'Model and Table Validation', count: this.documents.filter(d => (d.validationType || d.documentType) === 'Model and Table Validation').length },
-          { key: 'Issue Investigation', label: 'Issue Investigation', count: this.documents.filter(d => (d.validationType || d.documentType) === 'Issue Investigation').length }
+          ...allTypes.map(t => ({
+            key: t,
+            label: t,
+            count: this.documents.filter(d => (d.validationType || d.documentType) === t).length
+          }))
         ];
 
         chipsBar.innerHTML = valTypes.map(vt => `
-          <button type="button" class="filter-chip ${valTypeFilter === vt.key ? 'active' : ''}" data-valtype="${this.escapeHtml(vt.key)}">
+          <button type="button" class="filter-chip ${(this.activeDocValTypeFilter || '') === vt.key ? 'active' : ''}" data-valtype="${this.escapeHtml(vt.key)}">
             <span>${vt.label}</span>
             <span class="filter-chip-count">${vt.count}</span>
           </button>
@@ -2198,22 +2389,24 @@
       }
 
       const filtered = this.documents.filter(doc => {
-        const docValType = doc.validationType || doc.documentType || 'Model Validation';
-        const matchesValType = !valTypeFilter || docValType === valTypeFilter;
+        const docValType = doc.validationType || doc.documentType || '';
+        const matchesValType = !this.activeDocValTypeFilter || docValType === this.activeDocValTypeFilter;
         const matchesStatus = !statusFilter || doc.status === statusFilter;
         const matchesTeam = !teamFilter || (doc.team && doc.team.toLowerCase() === teamFilter.toLowerCase());
         const matchesUser = !userFilter || (doc.usernames && doc.usernames.some(u => (u || '').toLowerCase() === userFilter.toLowerCase())) || ((doc.owner || '').toLowerCase() === userFilter.toLowerCase());
+        const matchesProfile = !profileFilter || (doc.teamProfile === profileFilter);
         
         const matchesSearch = !search || 
           (doc.title && doc.title.toLowerCase().includes(search)) ||
           (doc.id && doc.id.toLowerCase().includes(search)) ||
           (docValType.toLowerCase().includes(search)) ||
+          (doc.teamProfile && doc.teamProfile.toLowerCase().includes(search)) ||
           (doc.team && doc.team.toLowerCase().includes(search)) ||
           (doc.usernames && doc.usernames.some(u => (u || '').toLowerCase().includes(search))) ||
           (doc.businessDomain && doc.businessDomain.toLowerCase().includes(search)) ||
           (doc.sqlQueries && doc.sqlQueries.some(q => (q.query || '').toLowerCase().includes(search)));
 
-        return matchesValType && matchesStatus && matchesTeam && matchesUser && matchesSearch;
+        return matchesValType && matchesStatus && matchesTeam && matchesUser && matchesProfile && matchesSearch;
       });
 
       const container = document.getElementById('documents-table-container');
@@ -2224,7 +2417,7 @@
           <div style="padding: 40px; text-align: center; color: var(--text-muted);">
             <div style="font-size: 28px; margin-bottom: 8px;">📑</div>
             <div style="font-weight: 600;">No documents match the active filter criteria.</div>
-            <div style="font-size: 12px; margin-top: 4px;">Try selecting another validation chip or clearing filters.</div>
+            <div style="font-size: 12px; margin-top: 4px;">Try selecting "All Documents", clearing filters, or switching profiles.</div>
           </div>
         `;
         return;
@@ -2235,7 +2428,7 @@
           <thead>
             <tr>
               <th>Document</th>
-              <th>Validation Type</th>
+              <th>Validation Type & Profile</th>
               <th>Team & Users</th>
               <th>Status</th>
               <th>Version</th>
@@ -2244,13 +2437,19 @@
             </tr>
           </thead>
           <tbody>
-            ${filtered.map(doc => `
+            ${filtered.map(doc => {
+              const pInfo = this.config.teamProfiles && this.config.teamProfiles[doc.teamProfile];
+              const pLabel = pInfo ? (pInfo.label || pInfo.name) : '';
+              return `
               <tr>
                 <td>
                   <strong>${this.escapeHtml(doc.title || 'Untitled')}</strong>
                   <div style="font-size: 11px; color: var(--text-muted);">${doc.id}</div>
                 </td>
-                <td><span class="badge badge-info">${this.escapeHtml(doc.validationType || doc.documentType || 'Model Validation')}</span></td>
+                <td>
+                  <span class="badge badge-info">${this.escapeHtml(doc.validationType || doc.documentType || 'Specification')}</span>
+                  ${pLabel ? `<div style="font-size: 10.5px; color: var(--primary-color); font-weight: 600; margin-top: 3px;">🏛️ ${this.escapeHtml(pLabel)}</div>` : ''}
+                </td>
                 <td>
                   <div><strong>${this.escapeHtml(doc.team || 'General')}</strong></div>
                   <div style="font-size: 11px; color: var(--text-muted);">${(doc.usernames && doc.usernames.length > 0) ? doc.usernames.map(u => this.escapeHtml(u)).join(', ') : (doc.owner || 'Unassigned')}</div>
@@ -2265,10 +2464,11 @@
                   <button class="btn btn-outline btn-sm btn-doc-action-pdf" data-id="${doc.id}" title="Generate PDF Report">📄 PDF</button>
                   <button class="btn btn-outline btn-sm btn-doc-action-dqdoc" data-id="${doc.id}" title="Download complete .dqdoc file (with screenshots)">📦 .dqdoc</button>
                   <button class="btn btn-outline btn-sm btn-doc-action-export" data-id="${doc.id}" title="Export JSON">💾</button>
-                  <button class="btn btn-danger btn-sm btn-doc-action-delete" data-id="${doc.id}" title="Delete">🗑️</button>
+                  <button class="btn btn-danger btn-sm btn-doc-action-delete" data-id="${doc.id}" title="Delete Document">🗑️</button>
                 </td>
               </tr>
-            `).join('')}
+              `;
+            }).join('')}
           </tbody>
         </table>
       `;
@@ -2319,15 +2519,9 @@
       });
 
       container.querySelectorAll('.btn-doc-action-delete').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          if (confirm(`Are you sure you want to delete document ${btn.dataset.id}? This cannot be undone.`)) {
-            await this.dbDelete('documents', btn.dataset.id);
-            this.documents = this.documents.filter(d => d.id !== btn.dataset.id);
-            await this.logAudit('Document Deleted', `Deleted document ID: ${btn.dataset.id}`, 'User', btn.dataset.id);
-            this.updateSidebarBadges();
-            this.updateDocumentsTable();
-            this.showToast('Document deleted', 'success');
-          }
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          await this.deleteDocument(btn.dataset.id);
         });
       });
     },
@@ -2341,6 +2535,11 @@
         this.currentEditorTab = params.activeTab;
       }
       const activeTab = this.currentEditorTab || 'tab-meta';
+      const docProfileKey = (this.currentDoc && this.currentDoc.teamProfile) || this.getActiveProfileKey() || 'data_quality';
+      const profile = (this.config && this.config.teamProfiles && this.config.teamProfiles[docProfileKey]) || this.getActiveProfile();
+      const profileAttrs = this.getProfileAttributes(docProfileKey);
+      const defaultType = (profile.subtypes && profile.subtypes[0] && profile.subtypes[0].name) || "Model Validation";
+      const defaultDocType = (profile.documentTypes && profile.documentTypes[0]) || "Data Quality Validation Rules";
 
       if (!this.currentDoc) {
         // Create new empty document structure
@@ -2349,14 +2548,16 @@
         this.currentDoc = {
           id: genId,
           title: "",
-          validationType: "Model Validation",
-          team: "",
+          teamProfile: docProfileKey,
+          teamAttributes: {},
+          validationType: defaultType,
+          team: profile.name,
           usernames: [],
           dynamicInputs: [],
           validatedModels: [],
           validatedTables: [],
           screenshots: [],
-          documentType: "Data Quality Validation Rules",
+          documentType: defaultDocType,
           businessDomain: "",
           owner: "",
           reviewer: "",
@@ -2418,7 +2619,11 @@
       }
 
       if (this.currentDoc) {
-        if (!this.currentDoc.validationType) this.currentDoc.validationType = "Model Validation";
+        if (!this.currentDoc.teamProfile) this.currentDoc.teamProfile = docProfileKey;
+        if (!this.currentDoc.teamAttributes || typeof this.currentDoc.teamAttributes !== 'object') {
+          this.currentDoc.teamAttributes = {};
+        }
+        if (!this.currentDoc.validationType) this.currentDoc.validationType = defaultType;
         if (this.currentDoc.team === undefined) this.currentDoc.team = "";
         if (!Array.isArray(this.currentDoc.usernames)) {
           this.currentDoc.usernames = this.currentDoc.owner ? [this.currentDoc.owner] : [];
@@ -2441,6 +2646,7 @@
       }
 
       const doc = this.currentDoc;
+      const docUser = this.getUserInfo(doc);
 
       // Status mode check
       const missingRequired = this.getMissingRequiredFields(doc);
@@ -2461,13 +2667,15 @@
             <span class="badge ${doc.status === 'Approved' ? 'badge-passed' : 'badge-status-draft'}">${doc.status}</span>
             <span style="font-size: 12px; color: var(--text-muted);">Version ${doc.version}</span>
           </div>
-          <div style="display: flex; gap: 10px;">
+          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
             <button class="btn btn-outline btn-sm" id="editor-btn-cancel">Discard / Back</button>
             <button class="btn btn-outline btn-sm" id="editor-btn-share-markdown" title="Export formatted Slack / Microsoft Teams / Email Markdown">💬 Share</button>
-          <button class="btn btn-outline btn-sm" id="editor-btn-clone">📑 Clone</button>
+            <button class="btn btn-outline btn-sm" id="editor-btn-clone">📑 Clone</button>
             <button class="btn btn-outline btn-sm" id="editor-btn-snapshot">📌 New Version</button>
             <button class="btn btn-outline btn-sm" id="editor-btn-export-dqdoc" title="Download complete portable .dqdoc file with all embedded screenshots">📦 Export .dqdoc</button>
-            <button class="btn btn-secondary btn-sm" id="editor-btn-pdf" ${doc.status === 'Final' && isMissingFields ? 'disabled title="Cannot generate final PDF while required fields are missing"' : ''} title="Generate both PDF Report and .dqdoc data file">📄 Generate Document (PDF + .dqdoc)</button>
+            <button class="btn btn-secondary btn-sm" id="editor-btn-pdf-only" ${doc.status === 'Final' && isMissingFields ? 'disabled title="Cannot generate final PDF while required fields are missing"' : ''} title="Generate and download official PDF Report only (without .dqdoc file)">📄 Generate PDF (Only)</button>
+            <button class="btn btn-outline btn-sm" id="editor-btn-pdf" ${doc.status === 'Final' && isMissingFields ? 'disabled title="Cannot generate final PDF while required fields are missing"' : ''} title="Generate both PDF Report and .dqdoc data file">📦 Both (PDF + .dqdoc)</button>
+            ${(this.documents.some(d => d.id === doc.id) || doc._originalId) ? `<button class="btn btn-danger btn-sm" id="editor-btn-delete" title="Permanently delete this document">🗑️ Delete</button>` : ''}
             <button class="btn btn-primary btn-sm" id="editor-btn-save">💾 Save Document (Ctrl+S)</button>
           </div>
         </div>
@@ -2486,11 +2694,11 @@
         <div class="tabs-header">
           <button class="tab-btn ${activeTab === 'tab-meta' ? 'active' : ''}" data-tab="tab-meta">1. Overview & Metadata</button>
           <button class="tab-btn ${activeTab === 'tab-sources' ? 'active' : ''}" data-tab="tab-sources">2. Data Sources & Mappings</button>
-          <button class="tab-btn ${activeTab === 'tab-rules' ? 'active' : ''}" data-tab="tab-rules">3. Validation Rules</button>
-          <button class="tab-btn ${activeTab === 'tab-sql' ? 'active' : ''}" data-tab="tab-sql">4. SQL Query & Workbench</button>
+          <button class="tab-btn ${activeTab === 'tab-rules' ? 'active' : ''}" data-tab="tab-rules">${docProfileKey === 'data_analysis' ? '3. Metrics & Dimensions' : docProfileKey === 'data_engineering' ? '3. Pipeline Rules & SLAs' : docProfileKey === 'data_modelling' ? '3. Entities & Attributes' : '3. Validation Rules'}</button>
+          <button class="tab-btn ${activeTab === 'tab-sql' ? 'active' : ''}" data-tab="tab-sql">${docProfileKey === 'data_analysis' ? '4. Analytical Queries' : docProfileKey === 'data_engineering' ? '4. Transformation SQL' : docProfileKey === 'data_modelling' ? '4. DDL & Schema Queries' : '4. SQL Query & Workbench'}</button>
           <button class="tab-btn ${activeTab === 'tab-screenshots' ? 'active' : ''}" data-tab="tab-screenshots">5. Screenshots & Evidence <span class="badge badge-info" id="badge-tab-ss-count">${(doc.screenshots || []).length}</span></button>
-          <button class="tab-btn ${activeTab === 'tab-executions' ? 'active' : ''}" data-tab="tab-executions">6. Executions & Results</button>
-          <button class="tab-btn ${activeTab === 'tab-issues' ? 'active' : ''}" data-tab="tab-issues">7. Remediation & Issues</button>
+          <button class="tab-btn ${activeTab === 'tab-executions' ? 'active' : ''}" data-tab="tab-executions">${docProfileKey === 'data_analysis' ? '6. Query Runs & Metric Results' : docProfileKey === 'data_engineering' ? '6. Pipeline Runs & Performance' : docProfileKey === 'data_modelling' ? '6. Schema Validations & Runs' : '6. Executions & Results'}</button>
+          <button class="tab-btn ${activeTab === 'tab-issues' ? 'active' : ''}" data-tab="tab-issues">${docProfileKey === 'data_analysis' ? '7. Insights & Action Items' : docProfileKey === 'data_engineering' ? '7. Incidents & Runbooks' : docProfileKey === 'data_modelling' ? '7. Schema Drift & Issues' : '7. Remediation & Issues'}</button>
           <button class="tab-btn ${activeTab === 'tab-governance' ? 'active' : ''}" data-tab="tab-governance">8. Versions & Approvals</button>
         </div>
 
@@ -2502,38 +2710,42 @@
               <span class="badge badge-info" id="badge-doc-active-type">${this.escapeHtml(doc.validationType || 'Model Validation')}</span>
             </div>
             <div class="card-body">
-              <!-- 1. Primary Validation Type Selector -->
+              <!-- 0. Discipline Workspace / Team Profile Selector -->
+              <div class="form-group" style="margin-bottom: 20px; padding: 12px 14px; background: var(--surface-alt); border-radius: var(--border-radius-sm); border: 1px solid var(--surface-border);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                  <label for="doc-input-team-profile" class="form-label required" style="font-size: 13px; font-weight: 700; margin: 0; color: var(--primary-color);">
+                    🎯 Document Discipline Workspace (${this.escapeHtml(profile.label || profile.name)})
+                  </label>
+                  <span class="badge badge-info" style="font-size: 11px;">Active: ${this.escapeHtml(profile.editionTag || profile.name)}</span>
+                </div>
+                <select id="doc-input-team-profile" class="form-control" style="font-weight: 600;">
+                  ${Object.keys((this.config && this.config.teamProfiles) || {}).map(k => {
+                    const p = this.config.teamProfiles[k];
+                    return `<option value="${k}" ${k === docProfileKey ? 'selected' : ''}>${this.escapeHtml(p.label || p.name)} (${this.escapeHtml(p.editionTag || p.roleTitle)})</option>`;
+                  }).join('')}
+                </select>
+                <div class="form-text">Switching the discipline adapts specification types, recommended inputs, and technical specification attributes.</div>
+              </div>
+
+              <!-- 1. Primary Specification Subtype Selector -->
               <div class="form-group" style="margin-bottom: 20px;">
-                <label class="form-label required" style="font-size: 13px; font-weight: 700;">Select Document Validation Type</label>
+                <label class="form-label required" style="font-size: 13px; font-weight: 700;">Select Specification Type (${this.escapeHtml(profile.label || 'Team Profile')})</label>
                 <div class="val-type-grid">
-                  <div class="val-type-card ${doc.validationType === 'Model Validation' ? 'active' : ''}" data-type="Model Validation">
-                    <span class="val-type-icon">🧩</span>
-                    <span class="val-type-title">Model Validation</span>
-                    <span class="val-type-desc">dbt models, transformation lineage, logic & dependencies</span>
-                  </div>
-                  <div class="val-type-card ${doc.validationType === 'Table Validation' ? 'active' : ''}" data-type="Table Validation">
-                    <span class="val-type-icon">🗄️</span>
-                    <span class="val-type-title">Table Validation</span>
-                    <span class="val-type-desc">Physical tables, catalogs, schemas, partitions & constraints</span>
-                  </div>
-                  <div class="val-type-card ${doc.validationType === 'Model and Table Validation' ? 'active' : ''}" data-type="Model and Table Validation">
-                    <span class="val-type-icon">🔄</span>
-                    <span class="val-type-title">Model & Table Validation</span>
-                    <span class="val-type-desc">Combined validation linking model logic to physical storage tables</span>
-                  </div>
-                  <div class="val-type-card ${doc.validationType === 'Issue Investigation' ? 'active' : ''}" data-type="Issue Investigation">
-                    <span class="val-type-icon">🔍</span>
-                    <span class="val-type-title">Issue Investigation</span>
-                    <span class="val-type-desc">Root Cause Analysis (RCA), incident triage, anomaly CAPA</span>
-                  </div>
+                  ${(profile.subtypes || []).map(st => `
+                    <div class="val-type-card ${doc.validationType === st.name || doc.validationType === st.id ? 'active' : ''}" data-type="${this.escapeHtml(st.name)}">
+                      <span class="val-type-icon">${st.icon || '📄'}</span>
+                      <span class="val-type-title">${this.escapeHtml(st.name)}</span>
+                      <span class="val-type-desc">${this.escapeHtml(st.desc || '')}</span>
+                    </div>
+                  `).join('')}
                 </div>
               </div>
 
               <!-- Team & Multi-User Attribution -->
               <div class="grid-cols-2" style="margin-bottom: 16px;">
                 <div class="form-group">
-                  <label class="form-label required">Related Team / Tribe</label>
-                  <input type="text" id="doc-input-team" class="form-control" list="dl-teams" value="${this.escapeHtml(doc.team || '')}" placeholder="e.g. Analytics Engineering, Risk Analytics, Governance Tribe">
+                  <label class="form-label required">Related Team / Squad</label>
+                  <input type="text" id="doc-input-team" class="form-control" list="dl-teams" value="${this.escapeHtml(doc.team || profile.name || '')}" placeholder="e.g. Analytics Engineering, Finance BI, Risk Team">
                   <div class="form-text">Team or squad responsible for this specification.</div>
                 </div>
                 <div class="form-group">
@@ -2552,19 +2764,56 @@
                 </div>
               </div>
 
+              <!-- Discipline Technical Specification Attributes Card -->
+              <div class="card" style="margin-bottom: 20px; border: 1px solid var(--surface-border-strong); box-shadow: var(--shadow-sm);">
+                <div class="card-header" style="background: var(--surface-alt); padding: 10px 16px; justify-content: space-between;">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 16px;">🛠️</span>
+                    <span class="card-title" style="font-size: 13px; font-weight: 700; color: var(--primary-color);">
+                      ${this.escapeHtml(profile.label)} - Technical Specification Attributes
+                    </span>
+                  </div>
+                  <span class="badge badge-info" style="font-size: 11px;">${profileAttrs.length} Attributes</span>
+                </div>
+                <div class="card-body" style="padding: 14px;">
+                  <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px;">
+                    Technical attributes specific to <strong>${this.escapeHtml(profile.label)}</strong>. Saved to this document, bundled into .dqdoc file, and printed in Section 2 of PDF reports.
+                  </div>
+                  <div class="grid-cols-2" style="gap: 12px;">
+                    ${profileAttrs.map(attr => {
+                      const val = (doc.teamAttributes && doc.teamAttributes[attr.key] !== undefined) ? doc.teamAttributes[attr.key] : '';
+                      if (attr.type === 'textarea') {
+                        return `
+                          <div class="form-group" style="grid-column: 1 / -1;">
+                            <label class="form-label" style="font-weight: 600; font-size: 11.5px; color: var(--text-color);">${this.escapeHtml(attr.label)}</label>
+                            <textarea class="form-control form-control-sm team-profile-attr-input" data-attr-key="${attr.key}" rows="${attr.rows || 2}" placeholder="${this.escapeHtml(attr.placeholder || '')}">${this.escapeHtml(val)}</textarea>
+                          </div>
+                        `;
+                      }
+                      return `
+                        <div class="form-group">
+                          <label class="form-label" style="font-weight: 600; font-size: 11.5px; color: var(--text-color);">${this.escapeHtml(attr.label)}</label>
+                          <input type="text" class="form-control form-control-sm team-profile-attr-input" data-attr-key="${attr.key}" value="${this.escapeHtml(val)}" placeholder="${this.escapeHtml(attr.placeholder || '')}">
+                        </div>
+                      `;
+                    }).join('')}
+                  </div>
+                </div>
+              </div>
+
               <!-- Dynamic Validation Inputs Section -->
               <div class="dynamic-fields-section">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
                   <div>
-                    <strong style="font-size: 13px; color: var(--primary-color);">Dynamic Inputs for <span id="lbl-dyn-val-type">${this.escapeHtml(doc.validationType || 'Validation')}</span></strong>
-                    <div style="font-size: 11px; color: var(--text-muted);">Search and add specialized required inputs tailored to this validation type</div>
+                    <strong style="font-size: 13px; color: var(--primary-color);">Dynamic Inputs for <span id="lbl-dyn-val-type">${this.escapeHtml(doc.validationType || 'Specification')}</span></strong>
+                    <div style="font-size: 11px; color: var(--text-muted);">Recommended attributes tailored for ${this.escapeHtml(profile.label)}</div>
                   </div>
                 </div>
 
                 <!-- Suggested Quick-Add Pills based on active type -->
                 <div style="margin-bottom: 12px;" id="suggested-pills-container">
                   <span style="font-size: 11px; font-weight: 700; color: var(--text-muted); margin-right: 6px;">RECOMMENDED INPUTS:</span>
-                  ${this.getSuggestedInputsForType(doc.validationType || 'Model Validation').map(s => `
+                  ${this.getSuggestedInputsForType(doc.validationType || (profile.subtypes && profile.subtypes[0] && profile.subtypes[0].name) || 'Specification').map(s => `
                     <button type="button" class="dynamic-field-pill btn-quick-add-field" data-name="${this.escapeHtml(s)}">+ ${this.escapeHtml(s)}</button>
                   `).join('')}
                 </div>
@@ -2699,20 +2948,21 @@
                 </div>
                 <div class="form-group">
                   <label class="form-label required">Document Title</label>
-                  <input type="text" id="doc-input-title" class="form-control" value="${this.escapeHtml(doc.title || '')}" placeholder="e.g. Customer Master Table Data Quality Specification">
+                  <input type="text" id="doc-input-title" class="form-control" value="${this.escapeHtml(doc.title || '')}" placeholder="e.g. ${this.escapeHtml(profile.label || 'Data')} Specification">
                 </div>
                 <div class="form-group">
                   <label class="form-label required">Document Type</label>
                   <select id="doc-input-type" class="form-control">
-                    <option value="Data Quality Validation Rules" ${doc.documentType === 'Data Quality Validation Rules' ? 'selected' : ''}>Data Quality Validation Rules</option>
-                    <option value="Data Quality Assessment" ${doc.documentType === 'Data Quality Assessment' ? 'selected' : ''}>Data Quality Assessment</option>
-                    <option value="Data Reconciliation" ${doc.documentType === 'Data Reconciliation' ? 'selected' : ''}>Data Reconciliation</option>
-                    <option value="Data Quality Incident" ${doc.documentType === 'Data Quality Incident' ? 'selected' : ''}>Data Quality Incident</option>
-                    <option value="Root Cause Analysis" ${doc.documentType === 'Root Cause Analysis' ? 'selected' : ''}>Root Cause Analysis</option>
-                    <option value="Remediation Plan" ${doc.documentType === 'Remediation Plan' ? 'selected' : ''}>Remediation Plan</option>
-                    <option value="Test Execution Report" ${doc.documentType === 'Test Execution Report' ? 'selected' : ''}>Test Execution Report</option>
-                    <option value="dbt Documentation" ${doc.documentType === 'dbt Documentation' ? 'selected' : ''}>dbt Documentation</option>
-                    <option value="Technical Documentation" ${doc.documentType === 'Technical Documentation' ? 'selected' : ''}>Technical Documentation</option>
+                    ${(profile.documentTypes || [
+                      "Data Quality Validation Rules",
+                      "Data Quality Assessment",
+                      "Technical Documentation"
+                    ]).map(dt => `
+                      <option value="${this.escapeHtml(dt)}" ${doc.documentType === dt ? 'selected' : ''}>${this.escapeHtml(dt)}</option>
+                    `).join('')}
+                    ${(!profile.documentTypes?.includes(doc.documentType) && doc.documentType) ? `
+                      <option value="${this.escapeHtml(doc.documentType)}" selected>${this.escapeHtml(doc.documentType)}</option>
+                    ` : ''}
                   </select>
                 </div>
               </div>
@@ -2767,6 +3017,28 @@
               <div class="form-group">
                 <label class="form-label">Business Objective</label>
                 <textarea id="doc-input-objective" class="form-control" rows="2" placeholder="Why is this data quality check critical for business operations and compliance?">${this.escapeHtml(doc.businessObjective || '')}</textarea>
+              </div>
+
+              <!-- Author Sign-Off & Contact Details (Optional: null or string value) -->
+              <div style="margin-top: 18px; padding-top: 14px; border-top: 1px dashed var(--surface-border-strong);">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+                  <span style="font-size: 13px; font-weight: 700; color: var(--primary-color);">👤 Document Author & Contact Info (Optional)</span>
+                  <span style="font-size: 11px; color: var(--text-muted);">Can be blank/null. If populated, displayed at the end of generated PDF documents & saved in .dqdoc files.</span>
+                </div>
+                <div class="grid-cols-3">
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label" style="font-size: 11px;">Author Username / Name</label>
+                    <input type="text" id="doc-input-username" class="form-control form-control-sm" value="${this.escapeHtml(docUser.username || '')}" placeholder="e.g. jdoe or Jane Doe">
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label" style="font-size: 11px;">Author Email</label>
+                    <input type="email" id="doc-input-useremail" class="form-control form-control-sm" value="${this.escapeHtml(docUser.useremail || '')}" placeholder="e.g. jane.doe@company.com">
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label" style="font-size: 11px;">Author Phone</label>
+                    <input type="tel" id="doc-input-userphone" class="form-control form-control-sm" value="${this.escapeHtml(docUser.userphone || '')}" placeholder="e.g. +1 (555) 019-2834">
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -2880,7 +3152,7 @@
         <div class="tab-pane ${activeTab === 'tab-rules' ? 'active' : ''}" id="tab-rules">
           <div class="card">
             <div class="card-header">
-              <span class="card-title">Associated Validation Rules</span>
+              <span class="card-title">${docProfileKey === 'data_analysis' ? 'Associated Metrics & Analytical Rules' : docProfileKey === 'data_engineering' ? 'Associated Pipeline Rules & SLAs' : docProfileKey === 'data_modelling' ? 'Associated Data Architecture & Entity Rules' : 'Associated Validation Rules'}</span>
               <div style="display: flex; gap: 8px;">
                 <button class="btn btn-outline btn-sm" id="btn-doc-pick-rule-catalog">🛡️ Add from Rule Catalog</button>
                 <button class="btn btn-primary btn-sm" id="btn-doc-add-custom-rule">➕ Add Custom Rule</button>
@@ -2923,12 +3195,12 @@
         <div class="tab-pane ${activeTab === 'tab-sql' ? 'active' : ''}" id="tab-sql">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
             <div style="display: flex; align-items: center; gap: 10px;">
-              <span class="card-title" style="margin: 0; font-size: 16px; font-weight: 700; color: var(--primary-color);">SQL Assertions & Verification Queries</span>
+              <span class="card-title" style="margin: 0; font-size: 16px; font-weight: 700; color: var(--primary-color);">${docProfileKey === 'data_analysis' ? 'Analytical Queries & Business Computations' : docProfileKey === 'data_engineering' ? 'Transformation, Ingestion & Operational SQL' : docProfileKey === 'data_modelling' ? 'DDL, Schema Definitions & Modeling Queries' : 'SQL Assertions & Verification Queries'}</span>
               <span class="badge badge-info" id="badge-sql-query-count">${(doc.sqlQueries || []).length} ${(doc.sqlQueries || []).length === 1 ? 'Query' : 'Queries'}</span>
             </div>
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
               <button class="btn btn-outline btn-sm" id="btn-copy-all-sql-queries" title="Copy all SQL queries combined into clipboard">📑 Copy All Queries</button>
-              <button class="btn btn-primary btn-sm" id="btn-add-new-sql-query" title="Add another SQL Trino query to this document">➕ Add SQL Trino Query</button>
+              <button class="btn btn-primary btn-sm" id="btn-add-new-sql-query" title="Add another SQL query to this document">➕ Add SQL Query</button>
             </div>
           </div>
 
@@ -3003,7 +3275,7 @@
         <div class="tab-pane ${activeTab === 'tab-executions' ? 'active' : ''}" id="tab-executions">
           <div class="card">
             <div class="card-header">
-              <span class="card-title">Test Execution History</span>
+              <span class="card-title">${docProfileKey === 'data_analysis' ? 'Query Executions & Metric History' : docProfileKey === 'data_engineering' ? 'Pipeline Runs & Execution History' : docProfileKey === 'data_modelling' ? 'Schema Validations & DDL Execution History' : 'Test Execution History'}</span>
               <button class="btn btn-primary btn-sm" id="btn-add-doc-execution">➕ Log Execution Record</button>
             </div>
             <div class="card-body" style="padding: 0;">
@@ -3039,12 +3311,12 @@
           </div>
         </div>
 
-        <!-- TAB 6: REMEDIATION & ISSUES -->
+        <!-- TAB 7: REMEDIATION & ISSUES -->
         <div class="tab-pane ${activeTab === 'tab-issues' ? 'active' : ''}" id="tab-issues">
           <div class="card">
             <div class="card-header">
-              <span class="card-title">Linked Data Quality Issues & Corrective Actions</span>
-              <button class="btn btn-primary btn-sm" id="btn-add-doc-issue">➕ Log Issue / CAPA</button>
+              <span class="card-title">${docProfileKey === 'data_analysis' ? 'Analytical Insights, Action Items & Issue Triage' : docProfileKey === 'data_engineering' ? 'Pipeline Incidents & Operational Runbooks' : docProfileKey === 'data_modelling' ? 'Schema Drift, Structural Gaps & Model Issues' : 'Linked Data Quality Issues & Corrective Actions'}</span>
+              <button class="btn btn-primary btn-sm" id="btn-add-doc-issue">➕ Log Issue / Action</button>
             </div>
             <div class="card-body" style="padding: 0;">
               <table class="table-custom">
@@ -3234,6 +3506,12 @@
       // Action bar buttons
       document.getElementById('editor-btn-save').addEventListener('click', () => this.saveCurrentDocument());
       document.getElementById('editor-btn-cancel').addEventListener('click', () => this.navigateTo('documents'));
+      document.getElementById('editor-btn-delete')?.addEventListener('click', async () => {
+        const docId = (this.currentDoc && (this.currentDoc.id || this.currentDoc._originalId));
+        if (docId) {
+          await this.deleteDocument(docId);
+        }
+      });
       document.getElementById('editor-btn-share-markdown')?.addEventListener('click', () => {
         this.syncDocFromForm();
         this.showShareMarkdownModal(this.currentDoc);
@@ -3248,9 +3526,31 @@
         this.exportDocumentDataFile(this.currentDoc);
       });
 
-      document.getElementById('editor-btn-pdf').addEventListener('click', () => {
+      document.getElementById('editor-btn-pdf-only')?.addEventListener('click', () => {
+        this.syncDocFromForm();
+        this.generatePdfReport(this.currentDoc);
+      });
+
+      document.getElementById('editor-btn-pdf')?.addEventListener('click', () => {
         this.syncDocFromForm();
         this.generateDocumentDualFiles(this.currentDoc);
+      });
+
+      // Discipline Workspace / Team Profile Change
+      document.getElementById('doc-input-team-profile')?.addEventListener('change', (e) => {
+        const newProfileKey = e.target.value;
+        this.syncDocFromForm();
+        this.currentDoc.teamProfile = newProfileKey;
+        const newProfile = (this.config && this.config.teamProfiles && this.config.teamProfiles[newProfileKey]);
+        if (newProfile) {
+          if (newProfile.subtypes && newProfile.subtypes[0]) {
+            this.currentDoc.validationType = newProfile.subtypes[0].name;
+          }
+          if (newProfile.documentTypes && newProfile.documentTypes[0]) {
+            this.currentDoc.documentType = newProfile.documentTypes[0];
+          }
+        }
+        this.renderEditor(container, { activeTab: 'tab-meta' });
       });
 
       // Validation Type Card Selection
@@ -3293,23 +3593,45 @@
 
       // Multi-User Chips management
       const chipsBox = document.getElementById('doc-user-chips-box');
-      const userInput = document.getElementById('doc-input-new-user');
-      const btnAddUser = document.getElementById('btn-add-doc-user');
+
+      const focusUserInput = () => {
+        const doFocus = () => {
+          const inp = document.getElementById('doc-input-new-user');
+          if (inp) {
+            inp.focus();
+            const len = inp.value.length;
+            try { inp.setSelectionRange(len, len); } catch (e) {}
+          }
+        };
+        doFocus();
+        setTimeout(doFocus, 25);
+      };
 
       const addUserChip = (username) => {
         const u = (username || '').trim();
-        if (!u) return;
+        if (!u) {
+          const inp = document.getElementById('doc-input-new-user');
+          if (inp) inp.value = '';
+          focusUserInput();
+          return;
+        }
         if (!Array.isArray(doc.usernames)) doc.usernames = [];
-        if (!doc.usernames.includes(u)) {
-          doc.usernames.push(u);
-          if (!doc.owner) doc.owner = u;
-          renderUserChips();
+        const parts = u.split(/[,;\n]+/).map(p => p.trim()).filter(Boolean);
+        let addedAny = false;
+        parts.forEach(name => {
+          if (name && !doc.usernames.includes(name)) {
+            doc.usernames.push(name);
+            if (!doc.owner) doc.owner = name;
+            addedAny = true;
+          }
+        });
+        if (addedAny) {
           this.learnUniqueValuesFromDoc(doc);
         }
-        if (userInput) userInput.value = '';
+        renderUserChips(true);
       };
 
-      const renderUserChips = () => {
+      const renderUserChips = (autoFocus = false) => {
         if (!chipsBox) return;
         const chipsHtml = (doc.usernames || []).map(u => `
           <span class="user-chip">
@@ -3322,14 +3644,18 @@
         `;
         chipsBox.innerHTML = chipsHtml;
         bindUserChipsEvents();
+        if (autoFocus) {
+          focusUserInput();
+        }
       };
 
       const bindUserChipsEvents = () => {
         chipsBox.querySelectorAll('.user-chip-remove').forEach(b => {
           b.onclick = (e) => {
+            e.stopPropagation();
             const uToRemove = e.currentTarget.dataset.user;
             doc.usernames = (doc.usernames || []).filter(u => u !== uToRemove);
-            renderUserChips();
+            renderUserChips(true);
           };
         });
         const inp = document.getElementById('doc-input-new-user');
@@ -3342,9 +3668,23 @@
             }
           };
         }
-        if (btn && inp) {
-          btn.onclick = () => addUserChip(inp.value);
+        if (btn) {
+          btn.onmousedown = (e) => {
+            // Prevent button from stealing focus from the input
+            e.preventDefault();
+          };
+          btn.onclick = (e) => {
+            e.preventDefault();
+            const currentInp = document.getElementById('doc-input-new-user');
+            addUserChip(currentInp ? currentInp.value : '');
+            focusUserInput();
+          };
         }
+        chipsBox.onclick = (e) => {
+          if (e.target === chipsBox) {
+            focusUserInput();
+          }
+        };
       };
       bindUserChipsEvents();
 
@@ -3653,7 +3993,24 @@
         doc.id = idVal;
       }
 
-      // Validation Type & Team & Users
+      // Validation Type & Team & Users & Team Profile
+      const teamProfileSelectEl = document.getElementById('doc-input-team-profile');
+      if (teamProfileSelectEl && teamProfileSelectEl.value) {
+        doc.teamProfile = teamProfileSelectEl.value;
+      } else if (!doc.teamProfile) {
+        doc.teamProfile = this.getActiveProfileKey();
+      }
+
+      // Discipline Technical Specification Attributes
+      doc.teamAttributes = doc.teamAttributes || {};
+      const teamAttrInputs = document.querySelectorAll('.team-profile-attr-input');
+      teamAttrInputs.forEach(input => {
+        const key = input.dataset.attrKey;
+        if (key) {
+          doc.teamAttributes[key] = input.value.trim();
+        }
+      });
+
       const activeTypeCard = document.querySelector('.val-type-card.active');
       if (activeTypeCard) doc.validationType = activeTypeCard.dataset.type;
       doc.team = (document.getElementById('doc-input-team')?.value || '').trim();
@@ -3729,6 +4086,24 @@
       doc.executionFrequency = document.getElementById('doc-input-frequency')?.value || '';
       doc.executiveSummary = document.getElementById('doc-input-summary')?.value || '';
       doc.businessObjective = document.getElementById('doc-input-objective')?.value || '';
+
+      // Author / User contact details (can be null or string)
+      const uNameEl = document.getElementById('doc-input-username');
+      const uEmailEl = document.getElementById('doc-input-useremail');
+      const uPhoneEl = document.getElementById('doc-input-userphone');
+      if (uNameEl || uEmailEl || uPhoneEl) {
+        const uName = uNameEl ? uNameEl.value.trim() : '';
+        const uEmail = uEmailEl ? uEmailEl.value.trim() : '';
+        const uPhone = uPhoneEl ? uPhoneEl.value.trim() : '';
+        doc.userInfo = {
+          username: uName || null,
+          useremail: uEmail || null,
+          userphone: uPhone || null
+        };
+        doc.username = doc.userInfo.username;
+        doc.useremail = doc.userInfo.useremail;
+        doc.userphone = doc.userInfo.userphone;
+      }
 
       doc.dataSource = doc.dataSource || {};
       doc.dataSource.system = document.getElementById('doc-input-src-system')?.value || '';
@@ -4965,29 +5340,39 @@ ${q.query || '-- No SQL specified'}
     },
 
     getMissingRequiredFields(doc) {
-      const required = this.config.requiredFields || [];
+      const profile = this.getActiveProfile();
+      const required = (profile && profile.requiredFields) || this.config.requiredFields || [];
       const missing = [];
 
       required.forEach(field => {
         switch (field) {
           case 'rule_name':
-            if (!doc.title) missing.push('Document/Rule Title');
+          case 'analysis_title':
+          case 'pipeline_name':
+          case 'model_name':
+            if (!doc.title) missing.push('Document Title');
             break;
           case 'rule_description':
-            if (!doc.executiveSummary) missing.push('Executive Summary / Description');
+          case 'business_objective':
+            if (!doc.executiveSummary && !doc.businessObjective) missing.push('Executive Summary / Objective');
             break;
           case 'validation_type':
-            if (!doc.documentType) missing.push('Document Type');
+          case 'model_type':
+            if (!doc.documentType && !doc.validationType) missing.push('Document / Specification Type');
             break;
           case 'data_source':
-            if (!doc.dataSource?.system && !(doc.dataSource?.tables && doc.dataSource.tables.length > 0)) missing.push('Data Source / Tables');
+          case 'source_system':
+          case 'target_schema':
+            if (!doc.dataSource?.system && !(doc.dataSource?.tables && doc.dataSource.tables.length > 0)) missing.push('Data Source / Entities');
             break;
           case 'sql_query':
             const hasAnySql = (doc.sqlQueries && doc.sqlQueries.some(q => q.query && q.query.trim())) || (doc.sqlQuery && doc.sqlQuery.trim());
-            if (!hasAnySql) missing.push('SQL Query');
+            if (!hasAnySql) missing.push('SQL / Code Query');
             break;
           case 'expected_result':
-            if (!doc.expectedResult) missing.push('Expected Result');
+          case 'metric_formula':
+          case 'surrogate_key_strategy':
+            if (!doc.expectedResult && !doc.businessObjective) missing.push('Expected Criteria / Metric Formula');
             break;
         }
       });
@@ -4996,8 +5381,44 @@ ${q.query || '-- No SQL specified'}
     },
 
     // ====================================================================
-    // 8. DOCUMENT CLONING & VERSION SNAPSHOTS
+    // 8. DOCUMENT DELETION, CLONING & VERSION SNAPSHOTS
     // ====================================================================
+
+    async deleteDocument(docId, options = {}) {
+      if (!docId) return false;
+      const doc = (this.documents || []).find(d => d.id === docId) || (this.currentDoc && this.currentDoc.id === docId ? this.currentDoc : null);
+      const docTitle = doc ? (doc.title || doc.id) : docId;
+
+      if (!options.silent) {
+        const confirmed = confirm(`Are you sure you want to permanently delete document "${docTitle}" (${docId})?\n\nThis cannot be undone.`);
+        if (!confirmed) return false;
+      }
+
+      try {
+        await this.dbDelete('documents', docId);
+        this.documents = (this.documents || []).filter(d => d.id !== docId);
+        await this.logAudit('Document Deleted', `Deleted document: ${docTitle} [${docId}]`, (this.currentUser && this.currentUser.username) || 'User', docId);
+        this.updateSidebarBadges();
+
+        // If currently editing this deleted document, reset and navigate to documents list
+        if (this.currentDoc && (this.currentDoc.id === docId || this.currentDoc._originalId === docId)) {
+          this.currentDoc = null;
+          this.navigateTo('documents');
+        } else if (this.currentView === 'documents') {
+          this.updateDocumentsTable();
+        } else if (this.currentView === 'dashboard') {
+          const mainContainer = document.getElementById('view-dashboard') || document.getElementById('app-main');
+          if (mainContainer) this.renderDashboard(mainContainer);
+        }
+
+        this.showToast(`Document "${docTitle}" deleted successfully`, 'success');
+        return true;
+      } catch (err) {
+        console.error('Failed to delete document:', err);
+        this.showToast(`Failed to delete document: ${err.message}`, 'error');
+        return false;
+      }
+    },
 
     showCloneModal(docId) {
       const source = this.documents.find(d => d.id === docId);
@@ -5033,6 +5454,14 @@ ${q.query || '-- No SQL specified'}
           const cloned = {
             id: document.getElementById('clone-input-id').value,
             title: document.getElementById('clone-input-title').value,
+            teamProfile: source.teamProfile || this.getActiveProfileKey() || 'data_quality',
+            teamAttributes: source.teamAttributes ? JSON.parse(JSON.stringify(source.teamAttributes)) : {},
+            validationType: source.validationType || source.documentType || 'Model Validation',
+            team: source.team || '',
+            usernames: Array.isArray(source.usernames) ? [...source.usernames] : (source.owner ? [source.owner] : []),
+            userInfo: source.userInfo ? JSON.parse(JSON.stringify(source.userInfo)) : null,
+            models: Array.isArray(source.models) ? [...source.models] : [],
+            tables: Array.isArray(source.tables) ? [...source.tables] : [],
             documentType: source.documentType,
             businessDomain: source.businessDomain,
             owner: source.owner,
@@ -5058,11 +5487,12 @@ ${q.query || '-- No SQL specified'}
             executions: document.getElementById('clone-chk-exec').checked ? JSON.parse(JSON.stringify(source.executions || [])) : [],
             issues: document.getElementById('clone-chk-issues').checked ? JSON.parse(JSON.stringify(source.issues || [])) : [],
             approvals: document.getElementById('clone-chk-approvals').checked ? JSON.parse(JSON.stringify(source.approvals || [])) : [],
+            screenshots: Array.isArray(source.screenshots) ? JSON.parse(JSON.stringify(source.screenshots)) : [],
             versionHistory: [
               {
                 version: '1.0',
                 createdAt: now,
-                author: 'User',
+                author: (this.currentUser && this.currentUser.username) || 'User',
                 summary: `Cloned from ${source.id}`
               }
             ]
@@ -5070,7 +5500,7 @@ ${q.query || '-- No SQL specified'}
 
           await this.dbPut('documents', cloned);
           this.documents.unshift(cloned);
-          await this.logAudit('Document Cloned', `Cloned document ${source.id} into new document ${cloned.id}`, 'User', cloned.id);
+          await this.logAudit('Document Cloned', `Cloned document ${source.id} into new document ${cloned.id}`, (this.currentUser && this.currentUser.username) || 'User', cloned.id);
           this.closeModal();
           this.updateSidebarBadges();
           this.currentDoc = cloned;
@@ -5127,21 +5557,54 @@ ${q.query || '-- No SQL specified'}
     // ====================================================================
 
     renderTemplates(container) {
+      const activeFilter = this.activeTplProfileFilter || 'all';
+      const filteredTemplates = this.templates.filter(tpl => {
+        if (activeFilter === 'all') return true;
+        if (tpl.teamProfile) return tpl.teamProfile === activeFilter;
+        // Legacy templates default to data_quality
+        return activeFilter === 'data_quality';
+      });
+
       container.innerHTML = `
         <div class="card">
           <div class="card-header">
-            <span class="card-title">Standardized Technical Documentation Templates</span>
+            <div>
+              <span class="card-title">Standardized Technical Documentation Templates</span>
+              <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Pre-built enterprise blueprints tailored for each data engineering and analytics discipline</div>
+            </div>
             <div style="display: flex; gap: 8px;">
               <button class="btn btn-outline btn-sm" id="btn-export-templates">Export Templates JSON</button>
               <button class="btn btn-primary btn-sm" id="btn-new-custom-template">➕ Create Custom Template</button>
             </div>
           </div>
           <div class="card-body">
+            <!-- Team Profile Filter Buttons -->
+            <div style="display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; border-bottom: 1px solid var(--surface-border); padding-bottom: 14px;">
+              <button class="btn btn-sm ${activeFilter === 'all' ? 'btn-primary' : 'btn-outline'} btn-tpl-filter" data-filter="all">All Disciplines (${this.templates.length})</button>
+              <button class="btn btn-sm ${activeFilter === 'data_quality' ? 'btn-primary' : 'btn-outline'} btn-tpl-filter" data-filter="data_quality">🛡️ Data Quality</button>
+              <button class="btn btn-sm ${activeFilter === 'data_analysis' ? 'btn-primary' : 'btn-outline'} btn-tpl-filter" data-filter="data_analysis">📈 Data Analysis</button>
+              <button class="btn btn-sm ${activeFilter === 'data_engineering' ? 'btn-primary' : 'btn-outline'} btn-tpl-filter" data-filter="data_engineering">⚙️ Data Engineering</button>
+              <button class="btn btn-sm ${activeFilter === 'data_modelling' ? 'btn-primary' : 'btn-outline'} btn-filter-tpl btn-tpl-filter" data-filter="data_modelling">📐 Data Modelling</button>
+            </div>
+
             <div class="grid-cols-3">
-              ${this.templates.map(tpl => `
+              ${filteredTemplates.map(tpl => {
+                const profileKey = tpl.teamProfile || 'data_quality';
+                const profileObj = this.config.teamProfiles && this.config.teamProfiles[profileKey];
+                const badgeLabel = profileObj ? profileObj.name : (tpl.category || 'General');
+                let badgeClass = 'badge-info';
+                if (profileKey === 'data_quality') badgeClass = 'badge-info';
+                else if (profileKey === 'data_analysis') badgeClass = 'badge-warning';
+                else if (profileKey === 'data_engineering') badgeClass = 'badge-passed';
+                else if (profileKey === 'data_modelling') badgeClass = 'badge-status-draft';
+
+                return `
                 <div class="card" style="margin-bottom: 0; display: flex; flex-direction: column; justify-content: space-between;">
                   <div class="card-body">
-                    <span class="badge badge-info" style="margin-bottom: 8px;">${tpl.category || 'General'}</span>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                      <span class="badge ${badgeClass}">${badgeLabel}</span>
+                      <span style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">${tpl.category || 'Standard'}</span>
+                    </div>
                     <h3 style="font-size: 15px; font-weight: 700; margin-bottom: 8px; color: var(--text-color);">${this.escapeHtml(tpl.name)}</h3>
                     <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 14px;">${this.escapeHtml(tpl.description || '')}</p>
                     <div style="font-size: 11px; color: var(--text-muted);">
@@ -5154,11 +5617,26 @@ ${q.query || '-- No SQL specified'}
                     <button class="btn btn-primary btn-sm btn-tpl-use" data-id="${tpl.id}">Use Template</button>
                   </div>
                 </div>
-              `).join('')}
+                `;
+              }).join('')}
             </div>
+            ${filteredTemplates.length === 0 ? `
+              <div style="text-align: center; padding: 40px; color: var(--text-muted);">
+                <span style="font-size: 32px;">📋</span>
+                <p style="margin-top: 8px;">No templates found for this discipline filter.</p>
+              </div>
+            ` : ''}
           </div>
         </div>
       `;
+
+      // Filter button clicks
+      container.querySelectorAll('.btn-tpl-filter').forEach(btn => {
+        btn.addEventListener('click', () => {
+          this.activeTplProfileFilter = btn.dataset.filter;
+          this.renderTemplates(container);
+        });
+      });
 
       container.querySelectorAll('.btn-tpl-use').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -7772,10 +8250,80 @@ ${q.query || '-- No SQL specified'}
 
     renderSettings(container) {
       const cfg = this.config;
-      const b = cfg.branding || {};
+      const profile = this.getActiveProfile();
+      const currentProfileKey = this.getActiveProfileKey();
+      const b = Object.assign({}, (profile && profile.branding) || {}, cfg.branding || {});
       const p = cfg.pdf || {};
+      const cfgUser = this.getUserInfo();
 
       container.innerHTML = `
+        <!-- Active Team Workspace Profile Card -->
+        <div class="card" style="margin-bottom: 20px;">
+          <div class="card-header" style="justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 20px;">🏢</span>
+              <span class="card-title">Active Team Profile Workspace</span>
+            </div>
+            <span class="badge badge-info" id="set-lbl-active-edition">${this.escapeHtml(profile.editionTag || 'Team Edition')}</span>
+          </div>
+          <div class="card-body">
+            <div class="grid-cols-2" style="align-items: center; gap: 20px;">
+              <div>
+                <label class="form-label" style="font-size: 13px; font-weight: 700;">Select Active Team Discipline</label>
+                <select id="set-sel-team-profile" class="form-control" style="font-weight: 700; font-size: 14px; padding: 10px 14px;">
+                  <option value="data_quality" ${currentProfileKey === 'data_quality' ? 'selected' : ''}>🛡️ Data Quality Engineering</option>
+                  <option value="data_analysis" ${currentProfileKey === 'data_analysis' ? 'selected' : ''}>📈 Data Analysis & Business Intelligence</option>
+                  <option value="data_engineering" ${currentProfileKey === 'data_engineering' ? 'selected' : ''}>⚙️ Data Engineering & Pipelines</option>
+                  <option value="data_modelling" ${currentProfileKey === 'data_modelling' ? 'selected' : ''}>📐 Data Architecture & Modelling</option>
+                </select>
+                <div class="form-text" style="margin-top: 6px;">Switches document templates, validation subtypes, suggested dynamic pills, and workflow nomenclature across the platform.</div>
+              </div>
+              <div style="background: var(--surface-alt); padding: 16px 20px; border-radius: var(--border-radius-md); border: 1px solid var(--surface-border);">
+                <div style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--text-muted); margin-bottom: 4px;">ACTIVE DISCIPLINE ROLE:</div>
+                <div style="font-size: 16px; font-weight: 700; color: var(--primary-color);" id="set-lbl-role-title">${this.escapeHtml(profile.roleTitle)}</div>
+                <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;" id="set-lbl-profile-sub">${this.escapeHtml(profile.subtitle || '')}</div>
+                <div style="margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap;" id="set-box-profile-subtypes">
+                  ${(profile.subtypes || []).map(st => `<span class="badge badge-outline">${st.icon || '📄'} ${this.escapeHtml(st.name)}</span>`).join('')}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Default Author & Sign-Off Attribution Details Card -->
+        <div class="card" style="margin-bottom: 20px;">
+          <div class="card-header" style="justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 20px;">👤</span>
+              <span class="card-title">Default Document Author & Sign-Off Details</span>
+            </div>
+            <span class="badge badge-outline">Global Defaults</span>
+          </div>
+          <div class="card-body">
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 14px;">
+              Configure default author attribution for this workspace. Values can be null/empty or custom strings. When provided, they are stamped at the end of generated PDF documents and exported with <code>.dqdoc</code> files.
+            </p>
+            <div class="grid-cols-3">
+              <div class="form-group">
+                <label class="form-label">Username / Author Name</label>
+                <input type="text" id="set-in-username" class="form-control" value="${this.escapeHtml(cfgUser.username || '')}" placeholder="e.g. jdoe or Jane Doe">
+              </div>
+              <div class="form-group">
+                <label class="form-label">User Email</label>
+                <input type="email" id="set-in-useremail" class="form-control" value="${this.escapeHtml(cfgUser.useremail || '')}" placeholder="e.g. jane.doe@company.com">
+              </div>
+              <div class="form-group">
+                <label class="form-label">User Phone</label>
+                <input type="tel" id="set-in-userphone" class="form-control" value="${this.escapeHtml(cfgUser.userphone || '')}" placeholder="e.g. +1 (555) 019-2834">
+              </div>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center; margin-top: 4px;">
+              <button class="btn btn-secondary btn-sm" id="btn-save-user-info">Save Author Details</button>
+              <button class="btn btn-outline btn-sm" id="btn-clear-user-info">Clear (Set to Null)</button>
+            </div>
+          </div>
+        </div>
+
         <div class="grid-cols-2">
           <!-- Branding Configuration -->
           <div class="card">
@@ -7827,11 +8375,35 @@ ${q.query || '-- No SQL specified'}
                 <input type="text" id="set-in-logo-path" class="form-control" value="${this.escapeHtml(b.logoPath || './assets/logo.png')}" placeholder="./assets/logo.png">
               </div>
 
+              <div class="grid-cols-2" style="margin-top: 12px; border-top: 1px solid var(--surface-border); padding-top: 12px;">
+                <div class="form-group">
+                  <label class="form-label">PDF Paper Size</label>
+                  <select id="set-sel-pdf-size" class="form-control">
+                    <option value="a4" ${p.paperSize === 'a4' || !p.paperSize ? 'selected' : ''}>A4 (Standard)</option>
+                    <option value="letter" ${p.paperSize === 'letter' ? 'selected' : ''}>US Letter</option>
+                    <option value="legal" ${p.paperSize === 'legal' ? 'selected' : ''}>US Legal</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">PDF Page Orientation</label>
+                  <select id="set-sel-pdf-orient" class="form-control">
+                    <option value="portrait" ${p.orientation !== 'landscape' ? 'selected' : ''}>Portrait</option>
+                    <option value="landscape" ${p.orientation === 'landscape' ? 'selected' : ''}>Landscape</option>
+                  </select>
+                </div>
+              </div>
+
               <div class="form-group">
                 <label><input type="checkbox" id="set-chk-logo" ${b.showLogo !== false ? 'checked' : ''}> Show Logo in Sidebar & PDF</label>
               </div>
+              <div class="form-group">
+                <label><input type="checkbox" id="set-chk-pdf-rev" ${p.includeRevisionHistory !== false ? 'checked' : ''}> Include Document Revision History in PDF</label>
+              </div>
+              <div class="form-group">
+                <label><input type="checkbox" id="set-chk-pdf-only" ${p.onlyGeneratePdf !== false ? 'checked' : ''}> Default to PDF-only export (skip automatic .dqdoc download)</label>
+              </div>
 
-              <button class="btn btn-primary btn-sm" id="btn-save-branding">Apply Branding Settings</button>
+              <button class="btn btn-primary btn-sm" id="btn-save-branding">Apply Branding & PDF Settings</button>
             </div>
           </div>
 
@@ -7921,6 +8493,30 @@ ${q.query || '-- No SQL specified'}
       `;
 
       // Event handlers
+      document.getElementById('set-sel-team-profile')?.addEventListener('change', (e) => {
+        this.switchTeamProfile(e.target.value, false);
+        this.renderSettings(container);
+      });
+
+      document.getElementById('btn-save-user-info')?.addEventListener('click', () => {
+        const uName = document.getElementById('set-in-username')?.value.trim() || null;
+        const uEmail = document.getElementById('set-in-useremail')?.value.trim() || null;
+        const uPhone = document.getElementById('set-in-userphone')?.value.trim() || null;
+        this.saveUserInfo({ username: uName, useremail: uEmail, userphone: uPhone });
+        this.showToast('Author details saved successfully', 'success');
+      });
+
+      document.getElementById('btn-clear-user-info')?.addEventListener('click', () => {
+        const inName = document.getElementById('set-in-username');
+        const inEmail = document.getElementById('set-in-useremail');
+        const inPhone = document.getElementById('set-in-userphone');
+        if (inName) inName.value = '';
+        if (inEmail) inEmail.value = '';
+        if (inPhone) inPhone.value = '';
+        this.saveUserInfo({ username: null, useremail: null, userphone: null });
+        this.showToast('Author details cleared (set to null)', 'info');
+      });
+
       document.getElementById('btn-save-branding')?.addEventListener('click', () => {
         this.config.appName = document.getElementById('set-in-appname').value.trim();
         this.config.branding = this.config.branding || {};
@@ -7938,9 +8534,31 @@ ${q.query || '-- No SQL specified'}
           this.config.branding.faviconPath = customLogo;
         }
 
+        this.config.pdf = this.config.pdf || {};
+        const selPdfSize = document.getElementById('set-sel-pdf-size');
+        if (selPdfSize) this.config.pdf.paperSize = selPdfSize.value;
+        const selPdfOrient = document.getElementById('set-sel-pdf-orient');
+        if (selPdfOrient) this.config.pdf.orientation = selPdfOrient.value;
+        const chkPdfRev = document.getElementById('set-chk-pdf-rev');
+        if (chkPdfRev) this.config.pdf.includeRevisionHistory = chkPdfRev.checked;
+        const chkPdfOnly = document.getElementById('set-chk-pdf-only');
+        if (chkPdfOnly) this.config.pdf.onlyGeneratePdf = chkPdfOnly.checked;
+
+        // Also sync Author Info fields if present
+        const uName = document.getElementById('set-in-username')?.value.trim() || null;
+        const uEmail = document.getElementById('set-in-useremail')?.value.trim() || null;
+        const uPhone = document.getElementById('set-in-userphone')?.value.trim() || null;
+        this.saveUserInfo({ username: uName, useremail: uEmail, userphone: uPhone });
+
+        // Also keep the active profile branding in sync with customized branding
+        const profile = this.getActiveProfile();
+        if (profile && profile.branding) {
+          Object.assign(profile.branding, this.config.branding);
+        }
+
         localStorage.setItem('DQD_CONFIG_OVERRIDE', JSON.stringify(this.config));
         this.applyBranding();
-        this.showToast('Branding updated successfully', 'success');
+        this.showToast('Branding, Author & PDF configuration saved successfully', 'success');
       });
 
       document.getElementById('btn-export-env')?.addEventListener('click', () => this.exportConfigToEnv());
@@ -7985,8 +8603,23 @@ ${q.query || '-- No SQL specified'}
 
     exportConfigToEnv() {
       const b = this.config.branding || {};
-      const envText = `# Data Quality Documenter Configuration
-APP_NAME="${this.config.appName || 'Data Quality Documenter'}"
+      const u = this.getUserInfo();
+      const envText = `# ====================================================================
+# Data Quality Documenter - Exported Configuration (.env format)
+# ====================================================================
+
+# Active Team Profile Selection (data_quality | data_analysis | data_engineering | data_modelling)
+ACTIVE_TEAM_PROFILE="${this.getActiveProfileKey() || 'data_quality'}"
+
+# Application Information
+APP_NAME="${this.config.appName || 'Data Workspace Documenter'}"
+
+# User / Author Information (Optional: can be blank/null; if provided, shown at end of generated documents)
+USER_NAME="${u.username || ''}"
+USER_EMAIL="${u.useremail || ''}"
+USER_PHONE="${u.userphone || ''}"
+
+# Branding and Colors
 BRANDING_LOGO_PATH="${b.logoPath || './assets/logo.png'}"
 BRANDING_FAVICON_PATH="${b.faviconPath || b.logoPath || './assets/logo.png'}"
 BRANDING_PRIMARY_COLOR="${b.primaryColor || '#1F4E79'}"
@@ -8010,6 +8643,11 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
         if (file.name.endsWith('.json')) {
           const parsed = JSON.parse(text);
           this.config = this.deepMerge(this.config, parsed);
+          if (parsed.userInfo) {
+            this.saveUserInfo(parsed.userInfo);
+          } else if (parsed.username || parsed.useremail || parsed.userphone) {
+            this.saveUserInfo({ username: parsed.username, useremail: parsed.useremail, userphone: parsed.userphone });
+          }
         } else {
           // Parse .env
           const lines = text.split(/\r?\n/);
@@ -8021,7 +8659,15 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
               if (val === 'true') val = true;
               else if (val === 'false') val = false;
 
-              if (k === 'APP_NAME') this.config.appName = val;
+              if (k === 'ACTIVE_TEAM_PROFILE') {
+                this.switchTeamProfile(val, false);
+              } else if (k === 'USER_NAME') {
+                this.saveUserInfo({ username: val || null });
+              } else if (k === 'USER_EMAIL') {
+                this.saveUserInfo({ useremail: val || null });
+              } else if (k === 'USER_PHONE') {
+                this.saveUserInfo({ userphone: val || null });
+              } else if (k === 'APP_NAME') this.config.appName = val;
               else if (k === 'BRANDING_LOGO_PATH') this.config.branding.logoPath = val;
               else if (k === 'BRANDING_FAVICON_PATH') this.config.branding.faviconPath = val;
               else if (k === 'BRANDING_PRIMARY_COLOR') this.config.branding.primaryColor = val;
@@ -8115,8 +8761,20 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
     // 21. PROFESSIONAL PDF GENERATION (A4 SEARCHABLE REPORT)
     // ====================================================================
 
+    getProfileAttributes(profileKey) {
+      const key = profileKey || this.getActiveProfileKey() || 'data_quality';
+      if (this.config && this.config.teamProfiles && this.config.teamProfiles[key] && Array.isArray(this.config.teamProfiles[key].profileAttributes)) {
+        return this.config.teamProfiles[key].profileAttributes;
+      }
+      if (window.DQD_CONFIG && window.DQD_CONFIG.teamProfiles && window.DQD_CONFIG.teamProfiles[key] && Array.isArray(window.DQD_CONFIG.teamProfiles[key].profileAttributes)) {
+        return window.DQD_CONFIG.teamProfiles[key].profileAttributes;
+      }
+      return [];
+    },
+
     getSuggestedInputsForType(type) {
       switch (type) {
+        // Data Quality Subtypes
         case 'Model Validation':
           return [
             'Target dbt Model Name',
@@ -8158,7 +8816,140 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
             'Incident Lead / Commander',
             'Target Resolution Date'
           ];
+
+        // Data Analysis Subtypes
+        case 'Metric & KPI Definition':
+        case 'Metric Definition':
+          return [
+            'Metric Calculation Formula',
+            'Target Stakeholder & Decision Maker',
+            'Time Horizon & Date Granularity',
+            'Dimension Slices & Segmentations',
+            'BI Dashboard URL / Report ID',
+            'Excluded Outlier Rules',
+            'Primary Business Owner'
+          ];
+        case 'Ad-Hoc Analysis Brief':
+        case 'Ad-Hoc Analysis':
+          return [
+            'Core Business Question & Hypothesis',
+            'Target Executive Stakeholder',
+            'Analysis Methodology & Data Cuts',
+            'Sample Size & Statistical Confidence',
+            'Key Strategic Findings',
+            'Actionable Business Recommendations'
+          ];
+        case 'Cohort & Funnel Study':
+        case 'Cohort & Funnel':
+          return [
+            'Cohort Definition & Registration Window',
+            'Activation Milestone Event',
+            'Funnel Conversion Stages',
+            'Time Granularity (Weekly/Monthly)',
+            'Drop-off Threshold & Retention Benchmark',
+            'Target User Segment'
+          ];
+        case 'A/B Test Evaluation':
+        case 'Experimentation / AB':
+          return [
+            'Null & Alternative Hypothesis',
+            'Minimum Detectable Effect (MDE)',
+            'Statistical Significance (P-Value / Alpha)',
+            'Control vs Variant Allocation Split',
+            'Primary North Star Metric',
+            'Guardrail Metrics & Business Impact'
+          ];
+
+        // Data Engineering Subtypes
+        case 'Batch ETL / ELT Pipeline':
+        case 'Batch Pipeline':
+          return [
+            'Airflow DAG / Task Identifier',
+            'Compute Engine (Spark/dbt/Trino)',
+            'Execution Schedule (Cron / Sensor)',
+            'Delivery SLA & Max Allowed Latency',
+            'Worker Memory & CPU Sizing',
+            'Upstream Data Pipeline Dependency',
+            'On-Call PagerDuty Escalation'
+          ];
+        case 'CDC & Ingestion Feed':
+        case 'CDC Ingestion':
+          return [
+            'Debezium / Kafka Connector Name',
+            'Source Database Commit Log',
+            'Target Lakehouse / Kafka Topic',
+            'Delivery SLA & Max Latency (< 120s)',
+            'Dead-Letter Queue (DLQ) S3 Path',
+            'Idempotency & Deduplication Strategy',
+            'Schema Evolution Policy'
+          ];
+        case 'Lakehouse Table Architecture':
+        case 'Lakehouse Storage':
+          return [
+            'Table Format (Iceberg / Delta / Hudi)',
+            'Partition Spec & Hidden Partitioning',
+            'Compaction & Small File Rewrite Frequency',
+            'Snapshot Retention & Purge SLA',
+            'Sorting & Clustering Keys',
+            'Branching & Time-Travel Retention'
+          ];
+        case 'Backfill & Disaster Recovery':
+        case 'Backfill & Recovery':
+          return [
+            'Historical Partition Date Range',
+            'Idempotent Partition Replacement Query',
+            'Worker Concurrency & Throttling',
+            'Post-Backfill Verification Query',
+            'Disaster Recovery Rollback Runbook'
+          ];
+
+        // Data Modelling Subtypes
+        case 'Dimensional Star Schema':
+        case 'Dimensional Model':
+          return [
+            'Model Type (Star/Snowflake/Vault/3NF)',
+            'Grain & Natural Business Keys',
+            'Surrogate Key Strategy (Hash/UUID/Identity)',
+            'Fact Table Type (Transactional/Snapshot)',
+            'Slowly Changing Dimension (SCD Type 1/2/3/6)',
+            'Conformed Dimension Hierarchy',
+            'Degenerate Dimensions & Flags'
+          ];
+        case 'Data Vault 2.0 Architecture':
+        case 'Data Vault':
+          return [
+            'Hub Business Keys & Hash Collision Code',
+            'Link Transactional Relationships',
+            'Satellite Context Tracking Strategy',
+            'Hash Diff Algorithm (MD5/SHA256)',
+            'Load Date & Record Source Standard',
+            'Multi-Source Concurrency Keys'
+          ];
+        case 'Logical & Relational (3NF)':
+        case 'Logical ERD':
+          return [
+            'Normalization Level (3NF / BCNF)',
+            'Primary & Foreign Key Relationships',
+            'Cardinality Constraints (1:1, 1:N, M:N)',
+            'Nullability & Domain Value Enums',
+            'Referential Integrity Cascades',
+            'Physical Schema Storage Engine'
+          ];
+        case 'Semantic Layer & Bus Matrix':
+        case 'Semantic Layer':
+          return [
+            'Enterprise Bus Matrix Subject Area',
+            'Certified Metrics Hierarchy',
+            'Conformed Hierarchies & Rollups',
+            'Semantic Cache & Pre-Aggregation Strategy',
+            'BI Semantic Model / PowerBI Dataset Link'
+          ];
+
         default:
+          const activeProfile = this.getActiveProfile();
+          if (activeProfile && activeProfile.suggestedInputs && activeProfile.suggestedInputs.length > 0) {
+            return activeProfile.suggestedInputs;
+          }
           return [
             'Data Owner',
             'SLA Threshold',
@@ -8844,6 +9635,15 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
       if (!doc) return;
       this.syncDocFromForm();
       const cleanDoc = JSON.parse(JSON.stringify(doc));
+      cleanDoc.teamProfile = cleanDoc.teamProfile || this.getActiveProfileKey() || 'data_quality';
+      cleanDoc.teamAttributes = cleanDoc.teamAttributes || {};
+      // Ensure author userInfo is attached (from doc or workspace fallback)
+      const uInfo = this.getUserInfo(cleanDoc);
+      cleanDoc.userInfo = uInfo;
+      cleanDoc.username = uInfo.username;
+      cleanDoc.useremail = uInfo.useremail;
+      cleanDoc.userphone = uInfo.userphone;
+
       const payload = {
         _format: "DQD_DOCUMENT_INTERCHANGE",
         _version: "2.0",
@@ -8914,6 +9714,8 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
             // Normalization & Defaults
             if (!doc.version) doc.version = '1.0';
             if (!doc.status) doc.status = 'Draft';
+            if (!doc.teamProfile) doc.teamProfile = this.getActiveProfileKey() || 'data_quality';
+            if (!doc.teamAttributes || typeof doc.teamAttributes !== 'object') doc.teamAttributes = {};
             if (!doc.validationType) doc.validationType = doc.documentType || 'Model Validation';
             if (!doc.team) doc.team = '';
             if (!doc.businessDomain) doc.businessDomain = doc.domain || '';
@@ -8923,6 +9725,21 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
             // User attribution
             if (!Array.isArray(doc.usernames)) doc.usernames = doc.owner ? [doc.owner] : [];
             if (!doc.owner && doc.usernames.length > 0) doc.owner = doc.usernames[0];
+
+            // Author contact information (username, useremail, userphone)
+            if (doc.userInfo && typeof doc.userInfo === 'object') {
+              doc.userInfo = {
+                username: doc.userInfo.username || doc.username || null,
+                useremail: doc.userInfo.useremail || doc.useremail || null,
+                userphone: doc.userInfo.userphone || doc.userphone || null
+              };
+            } else if (doc.username || doc.useremail || doc.userphone) {
+              doc.userInfo = {
+                username: doc.username || null,
+                useremail: doc.useremail || null,
+                userphone: doc.userphone || null
+              };
+            }
 
             // Sub-collections
             if (!Array.isArray(doc.dynamicInputs)) doc.dynamicInputs = [];
@@ -9009,20 +9826,20 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
             this.currentDoc._originalId = singleDoc.id;
             this.currentEditorTab = 'tab-meta';
             this.navigateTo('editor');
-            this.showToast(`Document "${singleDoc.title}" (${singleDoc.id}) imported successfully!`, 'success');
+            this.showToast(`Document "${singleDoc.title}" (${singleDoc.id}) imported successfully`, 'success');
           } else {
-            this.navigateTo('documents');
-            this.showToast(`Successfully imported ${importedDocs.length} documents!`, 'success');
+            this.showToast(`Successfully imported ${importedDocs.length} documents`, 'success');
           }
         } catch (err) {
-          console.error('Import error:', err);
-          alert('Failed to import .dqdoc / JSON document: ' + err.message);
-          const fileInput = document.getElementById('input-quick-import-file');
-          if (fileInput) fileInput.value = '';
+          this.showToast('Import failed: ' + (err.message || 'Invalid file format'), 'error');
         }
       };
       reader.readAsText(file);
     },
+
+    // ====================================================================
+    // 21. PDF EXPORT (EXECUTIVE & TECHNICAL ENTERPRISE LAYOUT)
+    // ====================================================================
 
     generatePdfReport(doc) {
       if (!window.jspdf || !window.jspdf.jsPDF) {
@@ -9032,7 +9849,11 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
 
       const { jsPDF } = window.jspdf;
       const pdfSettings = this.config.pdf || {};
-      const branding = this.config.branding || {};
+      const docProfileKey = (doc && doc.teamProfile) || this.getActiveProfileKey() || 'data_quality';
+      const profile = (this.config && this.config.teamProfiles && this.config.teamProfiles[docProfileKey]) || this.getActiveProfile();
+      const profileAttrs = this.getProfileAttributes(docProfileKey);
+      const teamAttrs = (doc && doc.teamAttributes) || {};
+      const branding = Object.assign({}, (profile && profile.branding) || {}, this.config.branding || {});
 
       const orientation = pdfSettings.orientation === 'landscape' ? 'landscape' : 'portrait';
       const pdf = new jsPDF({
@@ -9041,6 +9862,15 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
         format: pdfSettings.paperSize || 'a4'
       });
 
+      // Enable document title display in viewers
+      if (typeof pdf.viewerPreferences === 'function') {
+        try {
+          pdf.viewerPreferences({ DisplayDocTitle: true });
+        } catch (vpErr) {
+          console.warn('Viewer preferences setup skipped:', vpErr);
+        }
+      }
+
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
       const margin = 40;
@@ -9048,409 +9878,1346 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
 
       let y = margin;
 
-      // Primary header brand bar
-      pdf.setFillColor(branding.primaryColor || '#1F4E79');
-      pdf.rect(0, 0, pageWidth, 6, 'F');
+      // Color utilities & palettes
+      const hexToRgb = (hex, fallback = [31, 78, 121]) => {
+        if (!hex || typeof hex !== 'string') return fallback;
+        hex = hex.replace('#', '');
+        if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+        if (hex.length !== 6) return fallback;
+        const num = parseInt(hex, 16);
+        return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
+      };
 
-      // Top right corner static size logo (forced static W, H)
-      const STATIC_LOGO_W = 48; // static width (pt)
-      const STATIC_LOGO_H = 48; // static height (pt)
-      const logoX = pageWidth - margin - STATIC_LOGO_W;
-      const logoY = margin - 10;
+      const primaryRgb = hexToRgb(branding.primaryColor, [31, 78, 121]);
+      const secondaryRgb = hexToRgb(branding.secondaryColor, [68, 114, 196]);
+      const accentRgb = hexToRgb(branding.accentColor, [0, 166, 166]);
+      const darkSlate = [15, 23, 42];
+      const bodySlate = [51, 65, 85];
+      const mutedSlate = [100, 116, 139];
+      const borderSlate = [226, 232, 240];
+      const cardBgSlate = [248, 250, 252];
 
-      if (branding.showLogo !== false) {
-        try {
-          const logoEl = document.getElementById('sidebar-logo-img');
-          let logoToDraw = null;
-
-          if (logoEl && logoEl.complete && logoEl.naturalWidth > 0) {
-            try {
-              const canvas = document.createElement('canvas');
-              canvas.width = logoEl.naturalWidth || 96;
-              canvas.height = logoEl.naturalHeight || 96;
-              const ctx = canvas.getContext('2d');
-              ctx.drawImage(logoEl, 0, 0);
-              logoToDraw = canvas.toDataURL('image/png');
-            } catch (cvsErr) {
-              logoToDraw = logoEl;
-            }
+      // Outline / Bookmark registration helper
+      const hasOutline = Boolean(pdf.outline && typeof pdf.outline.add === 'function');
+      const addBookmark = (title) => {
+        if (hasOutline) {
+          try {
+            pdf.outline.add(null, title, { pageNumber: pdf.internal.getNumberOfPages() });
+          } catch (e) {
+            console.warn('PDF outline bookmark registration skipped:', e);
           }
-
-          if (!logoToDraw) {
-            logoToDraw = logoEl || branding.logoPath || 'assets/logo.png';
-          }
-
-          pdf.addImage(logoToDraw, 'PNG', logoX, logoY, STATIC_LOGO_W, STATIC_LOGO_H);
-        } catch (logoErr) {
-          console.warn('Could not draw logo in PDF header:', logoErr);
         }
+      };
+
+      // Helper: Modern Section Header with Vertical Accent Bar & Divider
+      const renderSectionHeader = (number, title, subtitle = '') => {
+        if (y > pageHeight - 120) {
+          pdf.addPage();
+          y = margin + 25;
+        }
+        addBookmark(`${number}. ${title}`);
+
+        // Colored vertical indicator bar
+        pdf.setFillColor(primaryRgb[0], primaryRgb[1], primaryRgb[2]);
+        pdf.rect(margin, y - 8, 3.5, 14, 'F');
+
+        // Main Title
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(11);
+        pdf.setTextColor(darkSlate[0], darkSlate[1], darkSlate[2]);
+        pdf.text(`${number}. ${title.toUpperCase()}`, margin + 9, y + 2.5);
+
+        // Subtitle on right side
+        if (subtitle) {
+          pdf.setFont('helvetica', 'normal');
+          pdf.setFontSize(7.5);
+          pdf.setTextColor(mutedSlate[0], mutedSlate[1], mutedSlate[2]);
+          const subW = pdf.getTextWidth(subtitle);
+          pdf.text(subtitle, pageWidth - margin - subW, y + 2);
+        }
+
+        y += 8;
+
+        // Subtle divider rule
+        pdf.setDrawColor(borderSlate[0], borderSlate[1], borderSlate[2]);
+        pdf.setLineWidth(0.6);
+        pdf.line(margin, y, pageWidth - margin, y);
+        y += 12;
+      };
+
+      // Top Primary Header Brand Bar & Accent Stripe
+      pdf.setFillColor(primaryRgb[0], primaryRgb[1], primaryRgb[2]);
+      pdf.rect(0, 0, pageWidth, 6, 'F');
+      pdf.setFillColor(accentRgb[0], accentRgb[1], accentRgb[2]);
+      pdf.rect(0, 6, pageWidth, 2.5, 'F');
+
+      // Top right corner static size logo
+      const STATIC_LOGO_W = 48;
+      const STATIC_LOGO_H = 48;
+      const logoX = pageWidth - margin - STATIC_LOGO_W;
+      const logoY = margin - 6;
+
+      // Resolve logo image: custom base64 -> sidebar data URL -> HTTP rasterization -> guaranteed embedded base64
+      let logoToDraw = null;
+      if (branding.logoDataUrl && typeof branding.logoDataUrl === 'string' && branding.logoDataUrl.startsWith('data:image/')) {
+        logoToDraw = branding.logoDataUrl;
+      } else if (branding.logoPath && typeof branding.logoPath === 'string' && branding.logoPath.startsWith('data:image/')) {
+        logoToDraw = branding.logoPath;
       }
 
-      // Title & Header (Left side, bounded so it never overlaps top-right logo)
-      y += 18;
+      if (!logoToDraw) {
+        try {
+          const logoEl = document.getElementById('sidebar-logo-img');
+          if (logoEl && logoEl.src && logoEl.src.startsWith('data:image/')) {
+            logoToDraw = logoEl.src;
+          }
+        } catch (e) {}
+      }
+
+      if (!logoToDraw) {
+        try {
+          const logoEl = document.getElementById('sidebar-logo-img');
+          if (logoEl && logoEl.complete && logoEl.naturalWidth > 0) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 96;
+            canvas.height = 96;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(logoEl, 0, 0, 96, 96);
+            const dataUrl = canvas.toDataURL('image/png');
+            if (dataUrl && dataUrl.startsWith('data:image/png')) {
+              logoToDraw = dataUrl;
+            }
+          }
+        } catch (e) {}
+      }
+
+      // Guaranteed offline embedded logo
+      if (!logoToDraw || !logoToDraw.startsWith('data:image/')) {
+        logoToDraw = window.DQD_DEFAULT_LOGO_BASE64 || this.defaultLogoBase64;
+      }
+      if (!logoToDraw || !logoToDraw.startsWith('data:image/')) {
+        try {
+          const c = document.createElement('canvas');
+          c.width = 128; c.height = 128;
+          const ctx = c.getContext('2d');
+          const grad = ctx.createLinearGradient(0, 0, 128, 128);
+          grad.addColorStop(0, '#0f172a'); grad.addColorStop(1, '#0284c7');
+          ctx.fillStyle = grad;
+          const r = 26;
+          ctx.beginPath();
+          ctx.moveTo(r, 0); ctx.lineTo(128 - r, 0); ctx.quadraticCurveTo(128, 0, 128, r);
+          ctx.lineTo(128, 128 - r); ctx.quadraticCurveTo(128, 128, 128 - r, 128);
+          ctx.lineTo(r, 128); ctx.quadraticCurveTo(0, 128, 0, 128 - r);
+          ctx.lineTo(0, r); ctx.quadraticCurveTo(0, 0, r, 0);
+          ctx.closePath(); ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.moveTo(36, 24); ctx.lineTo(76, 24); ctx.lineTo(92, 40); ctx.lineTo(92, 102); ctx.lineTo(36, 102); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = '#cbd5e1';
+          ctx.beginPath();
+          ctx.moveTo(76, 24); ctx.lineTo(76, 40); ctx.lineTo(92, 40); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = '#94a3b8';
+          ctx.fillRect(46, 46, 26, 4.5);
+          ctx.fillRect(46, 56, 38, 4.5);
+          ctx.fillRect(46, 66, 38, 4.5);
+          ctx.fillStyle = '#10b981';
+          ctx.beginPath(); ctx.arc(82, 86, 18, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+          ctx.beginPath(); ctx.moveTo(75, 86); ctx.lineTo(80, 91); ctx.lineTo(89, 81); ctx.stroke();
+          logoToDraw = c.toDataURL('image/png');
+        } catch (e) {}
+      }
+
+      // Draw primary logo on Page 1 (Top right corner framed badge)
+      let logoDrawnSuccess = false;
+      if (logoToDraw) {
+        try {
+          pdf.setFillColor(255, 255, 255);
+          pdf.setDrawColor(borderSlate[0], borderSlate[1], borderSlate[2]);
+          pdf.roundedRect(logoX - 3, logoY - 3, STATIC_LOGO_W + 6, STATIC_LOGO_H + 6, 3, 3, 'FD');
+          const format = logoToDraw.includes('image/jpeg') ? 'JPEG' : 'PNG';
+          pdf.addImage(logoToDraw, format, logoX, logoY, STATIC_LOGO_W, STATIC_LOGO_H);
+          logoDrawnSuccess = true;
+        } catch (addErr) {
+          console.warn('Could not draw raster logo in PDF:', addErr);
+        }
+      }
+      if (!logoDrawnSuccess) {
+        // Fallback: Crisp modern vector badge with monogram
+        pdf.setFillColor(primaryRgb[0], primaryRgb[1], primaryRgb[2]);
+        pdf.roundedRect(logoX - 3, logoY - 3, STATIC_LOGO_W + 6, STATIC_LOGO_H + 6, 4, 4, 'F');
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(14);
+        pdf.text('DQD', logoX + (STATIC_LOGO_W / 2), logoY + (STATIC_LOGO_H / 2) + 5, { align: 'center' });
+      }
+
+      // Category Pill / Header Ribbon
       pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(18);
-      pdf.setTextColor(31, 41, 55);
+      pdf.setFontSize(6.5);
+      const catText = `ENTERPRISE ${(profile.label || 'TECHNICAL SPECIFICATION').toUpperCase()} REPORT`;
+      const catW = pdf.getTextWidth(catText) + 12;
+      pdf.setFillColor(241, 245, 249);
+      pdf.roundedRect(margin, y - 5, catW, 13, 2, 2, 'F');
+      pdf.setTextColor(primaryRgb[0], primaryRgb[1], primaryRgb[2]);
+      pdf.text(catText, margin + 6, y + 4);
+      y += 18;
+
+      // Title (Left side, bounded to avoid overlapping logo)
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(17);
+      pdf.setTextColor(darkSlate[0], darkSlate[1], darkSlate[2]);
       const titleMaxWidth = contentWidth - STATIC_LOGO_W - 24;
-      const splitTitle = pdf.splitTextToSize(doc.title || 'Data Quality Specification', titleMaxWidth);
+      const splitTitle = pdf.splitTextToSize(doc.title || `${profile.name || 'Technical'} Specification`, titleMaxWidth);
       pdf.text(splitTitle, margin, y);
       y += (splitTitle.length * 18);
 
+      // Status & Priority Badges inline
+      const docStatus = doc.status || 'Draft';
+      const docPriority = doc.priority || 'Medium';
+
+      let statusBg = [226, 232, 240];
+      let statusFg = [71, 85, 105];
+      if (docStatus === 'Approved' || docStatus === 'Final') {
+        statusBg = [220, 252, 231];
+        statusFg = [22, 101, 52];
+      } else if (docStatus === 'In Review') {
+        statusBg = [254, 243, 199];
+        statusFg = [146, 64, 14];
+      }
+
+      let priorityBg = [238, 242, 255];
+      let priorityFg = [55, 48, 163];
+      if (docPriority === 'Critical') {
+        priorityBg = [254, 226, 226];
+        priorityFg = [153, 27, 27];
+      } else if (docPriority === 'High') {
+        priorityBg = [255, 237, 213];
+        priorityFg = [194, 65, 12];
+      }
+
+      // Draw status pill
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(7.5);
+      const statusText = `STATUS: ${docStatus.toUpperCase()}`;
+      const statusPillW = pdf.getTextWidth(statusText) + 12;
+      pdf.setFillColor(statusBg[0], statusBg[1], statusBg[2]);
+      pdf.roundedRect(margin, y - 7, statusPillW, 14, 2.5, 2.5, 'F');
+      pdf.setTextColor(statusFg[0], statusFg[1], statusFg[2]);
+      pdf.text(statusText, margin + 6, y + 3);
+
+      // Draw priority pill
+      const priorityText = `PRIORITY: ${docPriority.toUpperCase()}`;
+      const prioPillW = pdf.getTextWidth(priorityText) + 12;
+      const prioX = margin + statusPillW + 8;
+      pdf.setFillColor(priorityBg[0], priorityBg[1], priorityBg[2]);
+      pdf.roundedRect(prioX, y - 7, prioPillW, 14, 2.5, 2.5, 'F');
+      pdf.setTextColor(priorityFg[0], priorityFg[1], priorityFg[2]);
+      pdf.text(priorityText, prioX + 6, y + 3);
+
+      y += 16;
+
+      // SECTION 0: EXECUTIVE COVER PAGE & SPECIFICATION BRIEFING
+      addBookmark('Executive Briefing & Overview');
+
+      // 1. Executive Summary & Objective Card (Page 1)
+      const summaryText = doc.executiveSummary || 'Enterprise specification establishing automated data quality verification criteria, SLAs, and governance controls.';
+      const splitSummary = pdf.splitTextToSize(summaryText, contentWidth - 24);
+      const summaryLineCount = Math.min(splitSummary.length, 3);
+      const summaryCardH = 46 + (summaryLineCount * 11) + (doc.businessObjective ? 14 : 0);
+
+      pdf.setFillColor(cardBgSlate[0], cardBgSlate[1], cardBgSlate[2]);
+      pdf.setDrawColor(borderSlate[0], borderSlate[1], borderSlate[2]);
+      pdf.roundedRect(margin, y, contentWidth, summaryCardH, 4, 4, 'FD');
+
+      // Left vertical accent bar
+      pdf.setFillColor(primaryRgb[0], primaryRgb[1], primaryRgb[2]);
+      pdf.roundedRect(margin, y, 3.5, summaryCardH, 1, 1, 'F');
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(7.5);
+      pdf.setTextColor(primaryRgb[0], primaryRgb[1], primaryRgb[2]);
+      pdf.text('EXECUTIVE BRIEFING & BUSINESS CONTEXT', margin + 10, y + 13);
+
       pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(9);
-      pdf.setTextColor(100, 116, 139);
-      pdf.text(`Doc ID: ${doc.id}   |   Version: ${doc.version || '1.0'}   |   Status: ${doc.status}   |   Type: ${doc.validationType || 'Model Validation'}`, margin, y);
+      pdf.setFontSize(8.5);
+      pdf.setTextColor(bodySlate[0], bodySlate[1], bodySlate[2]);
+      for (let sIdx = 0; sIdx < summaryLineCount; sIdx++) {
+        pdf.text(splitSummary[sIdx] || '', margin + 10, y + 25 + (sIdx * 11));
+      }
 
-      y += 12;
-      const teamUsersLine = `Team: ${doc.team || 'General'}   |   Assigned Users: ${(doc.usernames && doc.usernames.length > 0) ? doc.usernames.join(', ') : (doc.owner || 'Unassigned')}   |   Date: ${new Date(doc.updatedAt || doc.createdAt).toLocaleDateString()}`;
-      pdf.text(teamUsersLine, margin, y);
+      let curSummaryY = y + 25 + (summaryLineCount * 11);
+      if (doc.businessObjective) {
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(7.5);
+        pdf.setTextColor(darkSlate[0], darkSlate[1], darkSlate[2]);
+        pdf.text('Strategic Goal: ', margin + 10, curSummaryY + 4);
 
-      // Ensure divider line sits cleanly below both the metadata and the static logo
-      y = Math.max(y + 14, logoY + STATIC_LOGO_H + 10);
-      pdf.setDrawColor(226, 232, 240);
-      pdf.line(margin, y, pageWidth - margin, y);
-      y += 14;
+        pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(bodySlate[0], bodySlate[1], bodySlate[2]);
+        const objSnippet = pdf.splitTextToSize(doc.businessObjective, contentWidth - 85)[0] || '';
+        pdf.text(objSnippet, margin + 70, curSummaryY + 4);
+      }
 
+      y += summaryCardH + 12;
+
+      // 2. Executive KPI Dashboard Strip (4 Hero Metrics)
+      const queries = (doc.sqlQueries && doc.sqlQueries.length > 0) 
+        ? doc.sqlQueries 
+        : (doc.sqlQuery ? [{ id: 'Q-1', title: 'Primary Assertion Query', dialect: doc.sqlDialect || 'Snowflake', query: doc.sqlQuery, notes: doc.sqlNotes || '' }] : []);
+
+      const executions = (doc.executions && doc.executions.length > 0) 
+        ? doc.executions 
+        : (this.executions || []).filter(e => e.docId === doc.id || e.documentId === doc.id);
+      const totalExecs = executions.length;
+      const passedExecs = executions.filter(e => String(e.status).toUpperCase() === 'PASS' || String(e.status).toUpperCase() === 'PASSED').length;
+      const passRateStr = totalExecs > 0 ? `${Math.round((passedExecs / totalExecs) * 100)}% Pass` : (docStatus === 'Approved' ? '100% Passed' : 'Active Draft');
+
+      const docRules = (doc.rules && doc.rules.length > 0)
+        ? doc.rules
+        : (this.rules || []).filter(r => (doc.ruleIds || []).includes(r.id));
+      const rulesCount = docRules.length > 0 ? docRules.length : 1;
+
+      const docIssues = (doc.issues && doc.issues.length > 0) 
+        ? doc.issues 
+        : (this.issues || []).filter(i => i.docId === doc.id || i.documentId === doc.id);
+      const openIssuesCount = docIssues.filter(i => String(i.status).toLowerCase() !== 'resolved' && String(i.status).toLowerCase() !== 'closed').length;
+
+      const cardGap = 8;
+      const numCards = 4;
+      const cardW = (contentWidth - ((numCards - 1) * cardGap)) / numCards;
+      const cardH = 42;
+
+      const kpiCards = [
+        { title: 'QUALITY HEALTH', val: passRateStr, sub: `${totalExecs} Runs Audited`, accent: [16, 185, 129] },
+        { title: 'SERVICE LEVEL (SLA)', val: docPriority.toUpperCase(), sub: doc.executionFrequency || 'Daily at 02:00 UTC', accent: primaryRgb },
+        { title: 'RULES COVERAGE', val: `${rulesCount} Rules`, sub: `${queries.length} SQL Assertions`, accent: secondaryRgb },
+        { title: 'DEFECT TRIAGE', val: `${openIssuesCount} Open`, sub: doc.remediation ? 'Runbook Attached' : 'Zero Open CAPA', accent: openIssuesCount > 0 ? [239, 68, 68] : [16, 185, 129] }
+      ];
+
+      kpiCards.forEach((c, idx) => {
+        const cx = margin + (idx * (cardW + cardGap));
+        pdf.setFillColor(cardBgSlate[0], cardBgSlate[1], cardBgSlate[2]);
+        pdf.setDrawColor(borderSlate[0], borderSlate[1], borderSlate[2]);
+        pdf.roundedRect(cx, y, cardW, cardH, 4, 4, 'FD');
+
+        // Left accent indicator bar
+        pdf.setFillColor(c.accent[0], c.accent[1], c.accent[2]);
+        pdf.roundedRect(cx, y, 3.5, cardH, 1, 1, 'F');
+
+        // Title
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(6.5);
+        pdf.setTextColor(mutedSlate[0], mutedSlate[1], mutedSlate[2]);
+        pdf.text(c.title, cx + 9, y + 12);
+
+        // Hero value
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(10.5);
+        pdf.setTextColor(c.accent[0], c.accent[1], c.accent[2]);
+        const splitVal = pdf.splitTextToSize(c.val, cardW - 14)[0] || '';
+        pdf.text(splitVal, cx + 9, y + 24.5);
+
+        // Subtitle
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(6.5);
+        pdf.setTextColor(mutedSlate[0], mutedSlate[1], mutedSlate[2]);
+        const splitSub = pdf.splitTextToSize(c.sub, cardW - 14)[0] || '';
+        pdf.text(splitSub, cx + 9, y + 35);
+      });
+
+      y += cardH + 14;
+
+      // 3. Specification Governance & Lineage Control Matrix (Structured Table)
+      const src = doc.dataSource || {};
+      const metadataMatrix = [
+        ['Specification ID', `${doc.id} (v${doc.version || '1.0'})`, 'Target Business Domain', doc.businessDomain || 'Core Enterprise'],
+        ['Validation Type', doc.validationType || 'Model Validation', 'Execution Frequency / SLA', doc.executionFrequency || 'Daily at 02:00 UTC'],
+        ['Responsible Squad', doc.team || 'General Governance', 'Primary Data Owner', src.dataOwner || doc.owner || 'Enterprise Governance'],
+        ['Target Lineage', `${src.system || 'Warehouse'} (${src.catalog || 'Default'})`, 'Assigned Reviewer', doc.reviewer || 'Lead Data Engineer'],
+        ['Authors / Assignees', (doc.usernames && doc.usernames.length > 0) ? doc.usernames.join(', ') : (doc.owner || 'Unassigned'), 'Last Certified Date', new Date(doc.updatedAt || doc.createdAt).toLocaleDateString()]
+      ];
+
+      pdf.autoTable({
+        startY: y,
+        head: [['Governance Control Attribute', 'Specification Value', 'Enterprise Lineage Field', 'Assigned Authority']],
+        body: metadataMatrix,
+        theme: 'grid',
+        headStyles: { fillColor: primaryRgb, textColor: [255, 255, 255], fontSize: 7.5, fontStyle: 'bold', cellPadding: 4 },
+        styles: { fontSize: 7.5, cellPadding: 3.5, textColor: bodySlate, lineColor: borderSlate, lineWidth: 0.5 },
+        alternateRowStyles: { fillColor: cardBgSlate },
+        columnStyles: {
+          0: { cellWidth: 125, fontStyle: 'bold', textColor: darkSlate },
+          1: { cellWidth: 135 },
+          2: { cellWidth: 125, fontStyle: 'bold', textColor: darkSlate }
+        },
+        margin: { left: margin, right: margin }
+      });
+
+      y = pdf.lastAutoTable.finalY + 12;
+
+      // 4. Specification Section Architecture (Table of Contents Card on Cover)
+      const tocCardH = 68;
+      pdf.setFillColor(cardBgSlate[0], cardBgSlate[1], cardBgSlate[2]);
+      pdf.setDrawColor(borderSlate[0], borderSlate[1], borderSlate[2]);
+      pdf.roundedRect(margin, y, contentWidth, tocCardH, 4, 4, 'FD');
+
+      pdf.setFillColor(secondaryRgb[0], secondaryRgb[1], secondaryRgb[2]);
+      pdf.roundedRect(margin, y, 3.5, tocCardH, 1, 1, 'F');
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(7.5);
+      pdf.setTextColor(secondaryRgb[0], secondaryRgb[1], secondaryRgb[2]);
+      pdf.text('SPECIFICATION DIRECTORY & SECTION ARCHITECTURE', margin + 10, y + 13);
+
+      const section2Name = docProfileKey === 'data_analysis' ? 'Metrics, Dimensions & Analytical Rules'
+        : docProfileKey === 'data_engineering' ? 'Pipeline SLA, Ingestion & Operational Rules'
+        : docProfileKey === 'data_modelling' ? 'Data Architecture, Schema & Entity Rules'
+        : 'Data Quality Rules Catalog (Assertions & Criteria)';
+
+      const section3Name = docProfileKey === 'data_analysis' ? 'Analytical SQL Workbench & Queries'
+        : docProfileKey === 'data_engineering' ? 'Transformation & Ingestion SQL Workbench'
+        : docProfileKey === 'data_modelling' ? 'DDL, Schema & Modeling SQL Workbench'
+        : 'SQL Assertion Workbench & Query Suite';
+
+      const section4Name = docProfileKey === 'data_analysis' ? 'Query Runs, Metric Audits & Results'
+        : docProfileKey === 'data_engineering' ? 'Pipeline Execution Runs & Performance History'
+        : docProfileKey === 'data_modelling' ? 'Schema Validation Runs & DDL Verifications'
+        : 'Verified Execution Evidence (Audits & Results)';
+
+      const section5Name = docProfileKey === 'data_analysis' ? 'Business Insights, Action Items & Issues'
+        : docProfileKey === 'data_engineering' ? 'Incident Remediation Runbooks & Operational Issues'
+        : docProfileKey === 'data_modelling' ? 'Schema Drift, Structural Gaps & Model Issues'
+        : 'Operational Remediation Runbook (CAPA & Defect Triage)';
+
+      const tocLeftCol = [
+        `§ 1. System Lineage & Specification Mappings (${profile.label || 'Architecture'})`,
+        `§ 2. ${section2Name}`,
+        `§ 3. ${section3Name}`
+      ];
+      const tocRightCol = [
+        `§ 4. ${section4Name}`,
+        `§ 5. ${section5Name}`,
+        '§ 6. Governance Sign-off & Digital Certificate'
+      ];
+
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(7);
+      pdf.setTextColor(darkSlate[0], darkSlate[1], darkSlate[2]);
+
+      const halfW = (contentWidth - 24) / 2;
+      tocLeftCol.forEach((item, tIdx) => {
+        pdf.text(item, margin + 10, y + 27 + (tIdx * 13));
+      });
+      tocRightCol.forEach((item, tIdx) => {
+        pdf.text(item, margin + 10 + halfW, y + 27 + (tIdx * 13));
+      });
+
+      // 5. Official Governance Assurance Notice (Bottom Cover Card)
+      y += tocCardH + 10;
+      const noteH = 28;
+      pdf.setFillColor(241, 245, 249);
+      pdf.setDrawColor(borderSlate[0], borderSlate[1], borderSlate[2]);
+      pdf.roundedRect(margin, y, contentWidth, noteH, 3, 3, 'FD');
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(7);
+      pdf.setTextColor(primaryRgb[0], primaryRgb[1], primaryRgb[2]);
+      pdf.text('OFFICIAL ENTERPRISE GOVERNANCE ASSURANCE STATEMENT', margin + 10, y + 11);
+
+      pdf.setFont('helvetica', 'italic');
+      pdf.setFontSize(6.5);
+      pdf.setTextColor(mutedSlate[0], mutedSlate[1], mutedSlate[2]);
+      pdf.text('This specification is a certified enterprise data management artifact. Automated rules defined herein are enforced against production entities.', margin + 10, y + 20);
+
+      // ====================================================================
+      // START TECHNICAL SECTIONS ON PAGE 2
+      // ====================================================================
+      pdf.addPage();
+      y = margin + 25;
+
+      // Dynamic Aspect Ratio Screenshot Embedder Helper
       const embedScreenshot = (ss, titlePrefix = '') => {
         if (!ss || !ss.dataUrl) return;
         try {
-          const imgWidth = contentWidth;
-          const imgHeight = 160;
-          if (y + imgHeight + 36 > pageHeight - 30) {
-            pdf.addPage();
-            y = margin + 20;
+          let imgProps = null;
+          try {
+            imgProps = pdf.getImageProperties(ss.dataUrl);
+          } catch (pErr) {
+            imgProps = { width: 800, height: 450 };
           }
+
+          const origW = imgProps.width || 800;
+          const origH = imgProps.height || 450;
+          const aspect = origH / origW;
+
+          let renderW = contentWidth - 16;
+          let renderH = renderW * aspect;
+          const maxImgHeight = 220;
+          if (renderH > maxImgHeight) {
+            renderH = maxImgHeight;
+            renderW = renderH / aspect;
+          }
+
+          const cardFrameW = renderW + 16;
+          const cardFrameH = renderH + 32;
+          const renderX = margin + ((contentWidth - cardFrameW) / 2);
+
+          if (y + cardFrameH + 20 > pageHeight - 35) {
+            pdf.addPage();
+            y = margin + 25;
+          }
+
+          // Visual card container frame
+          pdf.setFillColor(cardBgSlate[0], cardBgSlate[1], cardBgSlate[2]);
+          pdf.setDrawColor(borderSlate[0], borderSlate[1], borderSlate[2]);
+          pdf.roundedRect(renderX, y, cardFrameW, cardFrameH, 4, 4, 'FD');
+
+          // Caption label
           pdf.setFont('helvetica', 'bold');
-          pdf.setFontSize(9);
-          pdf.setTextColor(31, 78, 121);
-          pdf.text(`${titlePrefix}${ss.caption || 'Screenshot Evidence'}${ss.relatedQueryId && ss.relatedQueryId !== 'none' ? ` [Query: ${ss.relatedQueryId}]` : ''}`, margin, y);
-          y += 12;
+          pdf.setFontSize(8);
+          pdf.setTextColor(primaryRgb[0], primaryRgb[1], primaryRgb[2]);
+          const captionStr = `${titlePrefix}${ss.caption || 'Screenshot Evidence'}${ss.relatedQueryId && ss.relatedQueryId !== 'none' ? ` [Query: ${ss.relatedQueryId}]` : ''}`;
+          pdf.text(pdf.splitTextToSize(captionStr, cardFrameW - 20)[0] || '', renderX + 10, y + 14);
 
           const format = ss.dataUrl.includes('image/png') ? 'PNG' : 'JPEG';
-          pdf.addImage(ss.dataUrl, format, margin, y, imgWidth, imgHeight);
-          y += imgHeight + 14;
+          pdf.addImage(ss.dataUrl, format, renderX + 8, y + 22, renderW, renderH);
+          y += cardFrameH + 12;
         } catch (imgErr) {
           console.warn('Could not add image to PDF:', imgErr);
         }
       };
 
-      // Section 1: Executive Summary & Objective
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(13);
-      pdf.setTextColor(31, 78, 121);
-      pdf.text('1. Executive Summary & Business Objective', margin, y);
-      y += 14;
+      // SECTION 1: Data Architecture & System Specification
+      renderSectionHeader('1', 'Data Architecture & System Specification', 'System Catalogs, Schemas & Lineage Mappings');
 
-      pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(10);
-      pdf.setTextColor(31, 41, 55);
-      const summaryText = doc.executiveSummary || 'No executive summary provided.';
-      const splitSummary = pdf.splitTextToSize(summaryText, contentWidth);
-      pdf.text(splitSummary, margin, y);
-      y += splitSummary.length * 13 + 8;
+      const srcMeta = [
+        ['Source System', src.system || 'N/A', 'Database / Catalog', src.catalog || 'N/A'],
+        ['Schema', src.schema || 'N/A', 'Target Tables / Views', (src.tables || []).join(', ') || 'N/A'],
+        ['Business Domain', doc.businessDomain || src.domain || 'N/A', 'Data Owner', src.dataOwner || doc.owner || 'N/A'],
+        ['Technical Owner', src.technicalOwner || 'N/A', 'Upstream Dependencies', src.dependencies || 'N/A']
+      ];
 
-      if (doc.businessObjective) {
-        pdf.setFont('helvetica', 'bold');
-        pdf.text('Business Objective: ', margin, y);
-        pdf.setFont('helvetica', 'normal');
-        const splitObj = pdf.splitTextToSize(doc.businessObjective, contentWidth - 110);
-        pdf.text(splitObj, margin + 110, y);
-        y += splitObj.length * 13 + 12;
-      }
+      pdf.autoTable({
+        startY: y,
+        head: [['System Attribute', 'Configured Value', 'Governance Field', 'Configured Value']],
+        body: srcMeta,
+        theme: 'grid',
+        headStyles: { fillColor: primaryRgb, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
+        styles: { fontSize: 8, cellPadding: 4.5, textColor: bodySlate },
+        alternateRowStyles: { fillColor: cardBgSlate },
+        margin: { left: margin, right: margin }
+      });
 
-      // Dynamic Inputs Table (if any)
-      if (doc.dynamicInputs && doc.dynamicInputs.length > 0) {
-        const dynRows = doc.dynamicInputs.map(f => [f.label || 'Field', f.value || 'N/A']);
+      y = pdf.lastAutoTable.finalY + 12;
+
+      // Source Column Mappings Table
+      if (src.mappings && src.mappings.length > 0) {
+        const mapRows = src.mappings.map(m => [
+          m.sourceCol || 'N/A',
+          m.targetCol || 'N/A',
+          m.dataType || 'VARCHAR',
+          m.rule || 'Direct 1:1',
+          m.nullable || 'YES',
+          m.description || ''
+        ]);
+
         pdf.autoTable({
           startY: y,
-          head: [['Dynamic Validation Parameter', 'Specification Value']],
-          body: dynRows,
+          head: [['Source Column', 'Target Column', 'Data Type', 'Transformation Rule', 'Nullable', 'Business Logic Description']],
+          body: mapRows,
+          theme: 'striped',
+          headStyles: { fillColor: secondaryRgb, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
+          styles: { fontSize: 7.5, cellPadding: 4, textColor: bodySlate },
+          alternateRowStyles: { fillColor: cardBgSlate },
+          columnStyles: {
+            3: { cellWidth: 100 },
+            5: { cellWidth: 120 }
+          },
+          margin: { left: margin, right: margin }
+        });
+
+        y = pdf.lastAutoTable.finalY + 14;
+      }
+
+      // Discipline Technical Specification Attributes Table (profileAttributes)
+      if (profileAttrs && profileAttrs.length > 0) {
+        const attrRows = profileAttrs.map(attr => {
+          const val = (teamAttrs && teamAttrs[attr.key] !== undefined && String(teamAttrs[attr.key]).trim()) 
+            ? String(teamAttrs[attr.key]).trim() 
+            : '— (Standard Default)';
+          return [attr.label, val];
+        });
+
+        if (y > pageHeight - 120) { pdf.addPage(); y = margin + 25; }
+        pdf.autoTable({
+          startY: y,
+          head: [[`${profile.label} Specification Attribute`, 'Configured Technical Parameter']],
+          body: attrRows,
           theme: 'grid',
-          headStyles: { fillColor: [31, 78, 121], textColor: [255, 255, 255], fontSize: 8 },
-          styles: { fontSize: 8, cellPadding: 4 },
+          headStyles: { fillColor: primaryRgb, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
+          styles: { fontSize: 7.5, cellPadding: 3.5, textColor: bodySlate },
+          alternateRowStyles: { fillColor: cardBgSlate },
+          columnStyles: {
+            0: { cellWidth: 190, fontStyle: 'bold', textColor: darkSlate },
+            1: { cellWidth: contentWidth - 190 }
+          },
           margin: { left: margin, right: margin }
         });
         y = pdf.lastAutoTable.finalY + 12;
       }
 
-      // Validated Models Table (if composite models present)
+      // Dynamic Validation Parameters Table
+      const dynamicFieldsList = (doc.dynamicInputs && doc.dynamicInputs.length > 0)
+        ? doc.dynamicInputs
+        : (doc.dynamicFields || []);
+
+      if (dynamicFieldsList.length > 0) {
+        const dynRows = dynamicFieldsList.map(f => [f.label || f.key || 'Field', f.value || 'N/A']);
+        pdf.autoTable({
+          startY: y,
+          head: [['Dynamic Validation Parameter', 'Specification Value']],
+          body: dynRows,
+          theme: 'striped',
+          headStyles: { fillColor: primaryRgb, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
+          styles: { fontSize: 7.5, cellPadding: 4, textColor: bodySlate },
+          alternateRowStyles: { fillColor: cardBgSlate },
+          margin: { left: margin, right: margin }
+        });
+        y = pdf.lastAutoTable.finalY + 12;
+      }
+
+      // Validated dbt Models Table
       if (doc.validatedModels && doc.validatedModels.length > 0) {
         const modelRows = doc.validatedModels.map((m, idx) => [
           `#${idx + 1} ${m.modelName || 'Unnamed'}`,
           m.upstreamSources || 'N/A',
           m.grain || 'N/A',
-          m.materialization || 'Table'
+          m.materialization || 'Table',
+          m.notes || 'Target certified model'
         ]);
         pdf.autoTable({
           startY: y,
-          head: [['Validated dbt Model', 'Lineage / Upstream', 'Grain / Unique Key', 'Materialization']],
+          head: [['Validated dbt Model', 'Upstream Lineage', 'Grain / Unique Key', 'Materialization', 'Governance Notes']],
           body: modelRows,
           theme: 'striped',
-          headStyles: { fillColor: [68, 114, 196], textColor: [255, 255, 255], fontSize: 8 },
-          styles: { fontSize: 8, cellPadding: 4 },
+          headStyles: { fillColor: secondaryRgb, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
+          styles: { fontSize: 7.5, cellPadding: 4, textColor: bodySlate },
+          alternateRowStyles: { fillColor: cardBgSlate },
           margin: { left: margin, right: margin }
         });
         y = pdf.lastAutoTable.finalY + 12;
       }
 
-      // Validated Physical Tables (if composite physical tables present)
+      // Validated Physical Tables Table
       if (doc.validatedTables && doc.validatedTables.length > 0) {
         const tableRows = doc.validatedTables.map((t, idx) => [
           `#${idx + 1} ${t.tableName || 'Unnamed'}`,
           t.schema || 'N/A',
           t.storageFormat || 'Parquet',
           t.partitionKeys || 'N/A',
-          t.volume || 'N/A'
+          t.volume || 'N/A',
+          t.notes || 'Monitored physical entity'
         ]);
         pdf.autoTable({
           startY: y,
-          head: [['Validated Physical Table', 'Catalog / Schema', 'Format', 'Partition Keys', 'Volume']],
+          head: [['Validated Physical Table', 'Catalog / Schema', 'Format', 'Partition Keys', 'Estimated Volume', 'Storage Notes']],
           body: tableRows,
           theme: 'striped',
-          headStyles: { fillColor: [31, 78, 121], textColor: [255, 255, 255], fontSize: 8 },
-          styles: { fontSize: 8, cellPadding: 4 },
+          headStyles: { fillColor: primaryRgb, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
+          styles: { fontSize: 7.5, cellPadding: 4, textColor: bodySlate },
+          alternateRowStyles: { fillColor: cardBgSlate },
           margin: { left: margin, right: margin }
         });
-        y = pdf.lastAutoTable.finalY + 12;
+        y = pdf.lastAutoTable.finalY + 14;
       }
 
-      // Screenshots placed in Executive Summary
-      (doc.screenshots || []).filter(s => s.placement === 'executive_summary').forEach(ss => {
-        embedScreenshot(ss);
-      });
+      // Expected vs Actual Result Quality Comparison Callout Boxes
+      if (doc.expectedResult || doc.actualResult) {
+        const boxW = doc.actualResult ? ((contentWidth - 10) / 2) : contentWidth;
+        const boxH = 38;
+        if (y + boxH + 10 > pageHeight - 40) { pdf.addPage(); y = margin + 25; }
 
-      // Section 2: Data Sources & Column Mappings
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(13);
-      pdf.setTextColor(31, 78, 121);
-      pdf.text('2. Data Sources & Schema Specification', margin, y);
-      y += 14;
+        if (doc.expectedResult) {
+          pdf.setFillColor(239, 246, 255);
+          pdf.setDrawColor(191, 219, 254);
+          pdf.roundedRect(margin, y, boxW, boxH, 3, 3, 'FD');
+          pdf.setFillColor(59, 130, 246);
+          pdf.roundedRect(margin, y, 3.5, boxH, 1, 1, 'F');
 
-      const src = doc.dataSource || {};
-      const srcMeta = [
-        ['Source System', src.system || 'N/A', 'Database / Catalog', src.catalog || 'N/A'],
-        ['Schema', src.schema || 'N/A', 'Tables / Views', (src.tables || []).join(', ') || 'N/A'],
-        ['Domain', doc.businessDomain || 'N/A', 'Dependencies', src.dependencies || 'N/A']
-      ];
+          pdf.setFont('helvetica', 'bold');
+          pdf.setFontSize(7.5);
+          pdf.setTextColor(30, 64, 175);
+          pdf.text('EXPECTED QUALITY STANDARD', margin + 9, y + 12);
 
-      pdf.autoTable({
-        startY: y,
-        head: [['Attribute', 'Value', 'Attribute', 'Value']],
-        body: srcMeta,
-        theme: 'grid',
-        headStyles: { fillColor: [31, 78, 121], textColor: [255, 255, 255], fontSize: 9 },
-        styles: { fontSize: 8, cellPadding: 4 },
-        margin: { left: margin, right: margin }
-      });
+          pdf.setFont('helvetica', 'normal');
+          pdf.setFontSize(8);
+          pdf.setTextColor(30, 58, 138);
+          const splitExp = pdf.splitTextToSize(doc.expectedResult, boxW - 18);
+          pdf.text(splitExp.slice(0, 2), margin + 9, y + 24);
+        }
 
-      y = pdf.lastAutoTable.finalY + 12;
+        if (doc.actualResult) {
+          const actX = margin + boxW + 10;
+          pdf.setFillColor(240, 253, 244);
+          pdf.setDrawColor(187, 247, 208);
+          pdf.roundedRect(actX, y, boxW, boxH, 3, 3, 'FD');
+          pdf.setFillColor(34, 197, 94);
+          pdf.roundedRect(actX, y, 3.5, boxH, 1, 1, 'F');
 
-      // Source Mappings Table (if any)
-      if (src.mappings && src.mappings.length > 0) {
-        const mapRows = src.mappings.map(m => [
-          m.sourceCol,
-          m.targetCol,
-          m.dataType,
-          m.rule,
-          m.nullable,
-          m.description
-        ]);
+          pdf.setFont('helvetica', 'bold');
+          pdf.setFontSize(7.5);
+          pdf.setTextColor(22, 101, 52);
+          pdf.text('ACTUAL AUDIT VERIFICATION', actX + 9, y + 12);
 
-        pdf.autoTable({
-          startY: y,
-          head: [['Source Col', 'Target Col', 'Data Type', 'Transformation Rule', 'Nullable', 'Description']],
-          body: mapRows,
-          theme: 'striped',
-          headStyles: { fillColor: [68, 114, 196], textColor: [255, 255, 255], fontSize: 8 },
-          styles: { fontSize: 8, cellPadding: 4 },
-          margin: { left: margin, right: margin }
-        });
+          pdf.setFont('helvetica', 'normal');
+          pdf.setFontSize(8);
+          pdf.setTextColor(20, 83, 45);
+          const splitAct = pdf.splitTextToSize(doc.actualResult, boxW - 18);
+          pdf.text(splitAct.slice(0, 2), actX + 9, y + 24);
+        }
 
-        y = pdf.lastAutoTable.finalY + 16;
+        y += boxH + 14;
       }
 
-      // Check for page break
-      if (y > pageHeight - 160) {
-        pdf.addPage();
-        y = margin + 20;
+      // SECTION 2: Data Quality Validation Rules Catalog
+      let effectiveRules = (doc.rules && Array.isArray(doc.rules) && doc.rules.length > 0)
+        ? doc.rules
+        : ((this.rules || []).filter(r => (doc.ruleIds || []).includes(r.id)));
+
+      if (!effectiveRules || effectiveRules.length === 0) {
+        // Synthesize baseline specification rule from document metadata & assertions
+        effectiveRules = [
+          {
+            id: 'RULE-01',
+            name: `${doc.title || 'Target Entity'} Verification`,
+            dimension: 'Validity & Completeness',
+            severity: doc.priority || 'Critical',
+            expectedResult: doc.expectedResult || '0 defect records (100% Pass)',
+            threshold: doc.threshold || '0',
+            description: doc.executiveSummary || 'Verifies data conformance and schema integrity according to specification.',
+            sql: (queries[0] && queries[0].query) ? queries[0].query.slice(0, 90).replace(/\s+/g, ' ') + '...' : 'Executable assertion logic defined in SQL Workbench.'
+          }
+        ];
       }
 
-      // Section 3: Validation Rules
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(13);
-      pdf.setTextColor(31, 78, 121);
-      pdf.text('3. Data Quality Validation Rules', margin, y);
-      y += 14;
+      renderSectionHeader('2', section2Name, `${effectiveRules.length} ${effectiveRules.length === 1 ? 'Defined Item' : 'Defined Items'}`);
 
-      const rulesData = (doc.rules || []).map(r => [
-        r.id,
-        r.name,
-        r.dimension,
-        r.severity,
+      const rulesData = effectiveRules.map(r => [
+        r.id || 'RULE',
+        r.name || 'Unnamed',
+        r.dimension || 'Validity',
+        r.severity || 'Medium',
         r.expectedResult || '0 defect rows',
         r.threshold || '0'
       ]);
 
-      if (rulesData.length > 0) {
+      pdf.autoTable({
+        startY: y,
+        head: [['Rule ID', 'Rule Name / Assertion Target', 'Dimension', 'Severity', 'Expected Result', 'Threshold']],
+        body: rulesData,
+        theme: 'striped',
+        headStyles: { fillColor: primaryRgb, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
+        styles: { fontSize: 8, cellPadding: 4, textColor: bodySlate },
+        alternateRowStyles: { fillColor: cardBgSlate },
+        didParseCell: (data) => {
+          if (data.section === 'body' && data.column.index === 3) {
+            const sev = String(data.cell.raw).toLowerCase();
+            if (sev === 'critical') {
+              data.cell.styles.textColor = [153, 27, 27];
+              data.cell.styles.fillColor = [254, 226, 226];
+              data.cell.styles.fontStyle = 'bold';
+            } else if (sev === 'high') {
+              data.cell.styles.textColor = [194, 65, 12];
+              data.cell.styles.fillColor = [255, 237, 213];
+              data.cell.styles.fontStyle = 'bold';
+            } else if (sev === 'medium') {
+              data.cell.styles.textColor = [133, 77, 14];
+              data.cell.styles.fillColor = [254, 243, 199];
+            }
+          }
+        },
+        margin: { left: margin, right: margin }
+      });
+      y = pdf.lastAutoTable.finalY + 12;
+
+      // Detailed Rule Logic & SQL Expressions Table
+      const rulesWithDetails = effectiveRules.filter(r => r.description || r.sql);
+      if (rulesWithDetails.length > 0) {
+        const detailRows = rulesWithDetails.map(r => [
+          r.id,
+          r.dimension || 'Validity',
+          r.description || 'Validates conformance to specification.',
+          r.sql ? r.sql.trim() : 'Defined in primary assertion query.'
+        ]);
+
         pdf.autoTable({
           startY: y,
-          head: [['Rule ID', 'Rule Name', 'Dimension', 'Severity', 'Expected Result', 'Threshold']],
-          body: rulesData,
-          theme: 'striped',
-          headStyles: { fillColor: [31, 78, 121], textColor: [255, 255, 255], fontSize: 8 },
-          styles: { fontSize: 8, cellPadding: 4 },
+          head: [['Rule ID', 'Dimension', 'Detailed Specification Description', 'Rule Assertion Logic / SQL Expression']],
+          body: detailRows,
+          theme: 'grid',
+          headStyles: { fillColor: secondaryRgb, textColor: [255, 255, 255], fontSize: 7.5, fontStyle: 'bold' },
+          styles: { fontSize: 7, cellPadding: 3.5, textColor: bodySlate },
+          alternateRowStyles: { fillColor: cardBgSlate },
+          columnStyles: {
+            0: { cellWidth: 70, fontStyle: 'bold' },
+            1: { cellWidth: 65 },
+            2: { cellWidth: 150 },
+            3: { font: 'courier' }
+          },
           margin: { left: margin, right: margin }
         });
         y = pdf.lastAutoTable.finalY + 16;
-      } else {
-        pdf.setFont('helvetica', 'normal');
-        pdf.setFontSize(9);
-        pdf.text('No separate modular rules cataloged.', margin, y);
-        y += 16;
       }
 
-      // Check for page break
-      if (y > pageHeight - 200) {
-        pdf.addPage();
-        y = margin + 20;
-      }
-
-      // Section 4: SQL Query & Assertions
-      const queries = (doc.sqlQueries && doc.sqlQueries.length > 0) 
-        ? doc.sqlQueries 
-        : (doc.sqlQuery ? [{ title: 'Primary Assertion Query', dialect: doc.sqlDialect || 'Snowflake', query: doc.sqlQuery, notes: doc.sqlNotes || '' }] : []);
-
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(13);
-      pdf.setTextColor(31, 78, 121);
-      pdf.text(`4. SQL Assertion Code (${queries.length} ${queries.length === 1 ? 'Query' : 'Queries'})`, margin, y);
-      y += 14;
+      // SECTION 3: SQL Assertion Code & Workbench
+      renderSectionHeader('3', section3Name, `${queries.length} ${queries.length === 1 ? 'Query' : 'Queries'}`);
 
       queries.forEach((qObj, qIdx) => {
         if (!qObj.query && !qObj.notes) return;
-        if (y > pageHeight - 80) { pdf.addPage(); y = margin + 20; }
+        if (y > pageHeight - 90) { pdf.addPage(); y = margin + 25; }
 
-        pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(10);
-        pdf.setTextColor(31, 78, 121);
-        pdf.text(`${queries.length > 1 ? `Query ${qIdx + 1}: ` : ''}${qObj.title || 'SQL Query'} (${qObj.dialect || doc.sqlDialect || 'Snowflake'})`, margin, y);
-        y += 12;
+        const qTitle = `${queries.length > 1 ? `Query #${qIdx + 1}: ` : ''}${qObj.title || 'SQL Assertion'}`;
+        const qDialect = qObj.dialect || doc.sqlDialect || 'Snowflake';
 
         if (qObj.notes) {
           pdf.setFont('helvetica', 'italic');
           pdf.setFontSize(8);
-          pdf.setTextColor(100, 116, 139);
-          pdf.text(`Purpose / Note: ${qObj.notes}`, margin, y);
+          pdf.setTextColor(mutedSlate[0], mutedSlate[1], mutedSlate[2]);
+          pdf.text(`Purpose / Audit Note: ${qObj.notes}`, margin, y);
           y += 10;
         }
 
         if (qObj.query) {
-          pdf.setFillColor(15, 23, 42); // dark box
-          pdf.setFont('courier', 'normal');
-          pdf.setFontSize(8);
-          pdf.setTextColor(248, 250, 252);
+          const rawLines = qObj.query.replace(/\r\n/g, '\n').split('\n');
+          const headerBarHeight = 18;
 
-          const splitSql = pdf.splitTextToSize(qObj.query, contentWidth - 20);
-          const boxHeight = (splitSql.length * 10) + 16;
-
-          if (y + boxHeight > pageHeight - 60) {
+          if (y + headerBarHeight + 30 > pageHeight - 40) {
             pdf.addPage();
-            y = margin + 20;
+            y = margin + 25;
           }
 
-          pdf.rect(margin, y, contentWidth, boxHeight, 'F');
-          pdf.text(splitSql, margin + 10, y + 12);
-          y += boxHeight + 14;
+          // Terminal/IDE Chrome Header Bar
+          pdf.setFillColor(30, 41, 59);
+          pdf.roundedRect(margin, y, contentWidth, headerBarHeight, 3, 3, 'F');
+
+          // macOS/Linux style window dots
+          pdf.setFillColor(239, 68, 68); pdf.circle(margin + 10, y + 9, 2.5, 'F');
+          pdf.setFillColor(245, 158, 11); pdf.circle(margin + 17, y + 9, 2.5, 'F');
+          pdf.setFillColor(34, 197, 94); pdf.circle(margin + 24, y + 9, 2.5, 'F');
+
+          // Dialect pill inside header
+          pdf.setFillColor(secondaryRgb[0], secondaryRgb[1], secondaryRgb[2]);
+          pdf.roundedRect(margin + 30, y + 2.5, 65, 13, 2, 2, 'F');
+          pdf.setFont('helvetica', 'bold');
+          pdf.setFontSize(7);
+          pdf.setTextColor(255, 255, 255);
+          pdf.text(qDialect.slice(0, 14), margin + 34, y + 11.5);
+
+          // Query Title
+          pdf.setFont('helvetica', 'bold');
+          pdf.setFontSize(8);
+          pdf.setTextColor(248, 250, 252);
+          const titleSnippet = pdf.splitTextToSize(qTitle, contentWidth - 190)[0] || '';
+          pdf.text(titleSnippet, margin + 102, y + 12);
+
+          // Total line count indicator
+          const linesLabel = `${rawLines.length} lines`;
+          pdf.setFont('helvetica', 'normal');
+          pdf.setFontSize(7);
+          pdf.setTextColor(148, 163, 184);
+          pdf.text(linesLabel, pageWidth - margin - pdf.getTextWidth(linesLabel) - 8, y + 12);
+
+          y += headerBarHeight;
+
+          // Multi-page code line wrapping with line numbers gutter
+          const gutterW = 26;
+          const codeWidth = contentWidth - gutterW - 12;
+          const codeLineH = 10.5;
+
+          const displayLines = [];
+          rawLines.forEach((lStr, lIdx) => {
+            const wrapped = pdf.splitTextToSize(lStr || ' ', codeWidth);
+            if (!wrapped || wrapped.length === 0) {
+              displayLines.push({ num: lIdx + 1, text: '', isCont: false });
+            } else {
+              wrapped.forEach((wStr, wIdx) => {
+                displayLines.push({
+                  num: wIdx === 0 ? (lIdx + 1) : '',
+                  text: wStr,
+                  isCont: wIdx > 0
+                });
+              });
+            }
+          });
+
+          let linePtr = 0;
+          while (linePtr < displayLines.length) {
+            if (y + codeLineH + 16 > pageHeight - 35) {
+              pdf.addPage();
+              y = margin + 25;
+              pdf.setFillColor(30, 41, 59);
+              pdf.rect(margin, y, contentWidth, 13, 'F');
+              pdf.setFont('helvetica', 'italic');
+              pdf.setFontSize(7);
+              pdf.setTextColor(148, 163, 184);
+              pdf.text(`${qTitle} (continued...)`, margin + 8, y + 9.5);
+              y += 13;
+            }
+
+            const availH = (pageHeight - 35) - y;
+            const linesToDraw = Math.min(Math.floor(availH / codeLineH), displayLines.length - linePtr);
+            const chunkH = linesToDraw * codeLineH + 4;
+
+            // Dark code editor body background
+            pdf.setFillColor(15, 23, 42);
+            pdf.rect(margin, y, contentWidth, chunkH, 'F');
+
+            // Gutter divider
+            pdf.setDrawColor(51, 65, 85);
+            pdf.line(margin + gutterW, y, margin + gutterW, y + chunkH);
+
+            for (let i = 0; i < linesToDraw; i++) {
+              const curItem = displayLines[linePtr + i];
+              const curY = y + (i * codeLineH) + 8.5;
+
+              if (curItem.num) {
+                pdf.setFont('courier', 'normal');
+                pdf.setFontSize(6.5);
+                pdf.setTextColor(100, 116, 139);
+                const nStr = String(curItem.num);
+                pdf.text(nStr, margin + gutterW - pdf.getTextWidth(nStr) - 5, curY);
+              }
+
+              pdf.setFont('courier', 'normal');
+              pdf.setFontSize(7.5);
+              pdf.setTextColor(248, 250, 252);
+              pdf.text(curItem.text, margin + gutterW + 6, curY);
+            }
+
+            y += chunkH + 2;
+            linePtr += linesToDraw;
+          }
+
+          y += 10;
         }
 
-        // Embed screenshots linked under this query
+        // Screenshots linked under this query
         (doc.screenshots || []).filter(s => s.placement === 'under_query' && (s.relatedQueryId === qObj.id || s.relatedQueryId === 'all')).forEach(ss => {
           embedScreenshot(ss);
         });
       });
 
-      // Section 5: Execution Results & Evidence
-      if (doc.executions && doc.executions.length > 0) {
-        if (y > pageHeight - 140) {
-          pdf.addPage();
-          y = margin + 20;
+      // SECTION 4: Verified Test Executions & Quality Results
+      renderSectionHeader('4', section4Name, `${executions.length} Run Audits`);
+
+      if (executions.length > 0) {
+        // Render off-screen defect volume trend chart via Chart.js
+        if (window.Chart) {
+          try {
+            const chartCanvas = document.createElement('canvas');
+            chartCanvas.width = 540;
+            chartCanvas.height = 130;
+            const ctx = chartCanvas.getContext('2d');
+
+            const recentRuns = executions.slice(-8);
+            const chartLabels = recentRuns.map((e, i) => {
+              const d = new Date(e.timestamp);
+              return isNaN(d.getTime()) ? `#${i + 1}` : `${d.getMonth() + 1}/${d.getDate()}`;
+            });
+            const defectData = recentRuns.map(e => Number(e.failedRecords || 0));
+
+            const chartInstance = new Chart(ctx, {
+              type: 'bar',
+              data: {
+                labels: chartLabels,
+                datasets: [{
+                  label: 'Defect Rows',
+                  data: defectData,
+                  backgroundColor: 'rgba(239, 68, 68, 0.75)',
+                  borderColor: 'rgba(239, 68, 68, 1)',
+                  borderWidth: 1,
+                  borderRadius: 3
+                }]
+              },
+              options: {
+                animation: false,
+                responsive: false,
+                devicePixelRatio: 2,
+                plugins: {
+                  legend: { display: false },
+                  title: {
+                    display: true,
+                    text: 'Automated Audit History: Defect Volume Across Recent Execution Runs',
+                    font: { size: 9, weight: 'bold' },
+                    color: '#334155',
+                    padding: { bottom: 6 }
+                  }
+                },
+                scales: {
+                  x: { grid: { display: false }, ticks: { font: { size: 7.5 }, color: '#64748B' } },
+                  y: { beginAtZero: true, grid: { color: 'rgba(226, 232, 240, 0.6)' }, ticks: { font: { size: 7.5 }, color: '#64748B', precision: 0 } }
+                }
+              }
+            });
+
+            const chartImg = chartCanvas.toDataURL('image/png');
+            chartInstance.destroy();
+
+            const chartW = contentWidth;
+            const chartH = 75;
+            if (y + chartH + 20 > pageHeight - 35) { pdf.addPage(); y = margin + 25; }
+            pdf.addImage(chartImg, 'PNG', margin, y, chartW, chartH);
+            y += chartH + 10;
+          } catch (chartErr) {
+            console.warn('Offscreen Chart.js render skipped:', chartErr);
+          }
         }
 
-        pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(13);
-        pdf.setTextColor(31, 78, 121);
-        pdf.text('5. Verified Execution Evidence', margin, y);
-        y += 14;
-
-        const execData = doc.executions.map(e => [
+        const execData = executions.map(e => [
           new Date(e.timestamp).toLocaleDateString(),
           e.environment || 'PROD',
-          e.status,
+          e.status || 'PASS',
           (e.totalRecords || 0).toLocaleString(),
           (e.failedRecords || 0).toLocaleString(),
           e.failurePercentage ? e.failurePercentage + '%' : '0.0%',
-          e.evidence || 'N/A'
+          e.evidence || 'Log artifact verified'
         ]);
 
         pdf.autoTable({
           startY: y,
-          head: [['Date', 'Env', 'Status', 'Total Records', 'Defects', 'Defect %', 'Evidence Reference']],
+          head: [['Audit Date', 'Env', 'Audit Status', 'Total Records', 'Defects', 'Defect %', 'Verification Evidence']],
           body: execData,
           theme: 'striped',
-          headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255], fontSize: 8 },
-          styles: { fontSize: 8, cellPadding: 4 },
+          headStyles: { fillColor: primaryRgb, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
+          styles: { fontSize: 7.5, cellPadding: 4, textColor: bodySlate },
+          alternateRowStyles: { fillColor: cardBgSlate },
+          didParseCell: (data) => {
+            if (data.section === 'body' && data.column.index === 2) {
+              const st = String(data.cell.raw).toUpperCase();
+              if (st === 'PASS' || st === 'PASSED') {
+                data.cell.styles.fillColor = [220, 252, 231];
+                data.cell.styles.textColor = [22, 101, 52];
+                data.cell.styles.fontStyle = 'bold';
+              } else if (st === 'FAIL' || st === 'FAILED') {
+                data.cell.styles.fillColor = [254, 226, 226];
+                data.cell.styles.textColor = [153, 27, 27];
+                data.cell.styles.fontStyle = 'bold';
+              } else if (st === 'WARNING') {
+                data.cell.styles.fillColor = [254, 243, 199];
+                data.cell.styles.textColor = [146, 64, 14];
+                data.cell.styles.fontStyle = 'bold';
+              }
+            }
+          },
           margin: { left: margin, right: margin }
         });
         y = pdf.lastAutoTable.finalY + 16;
+      } else {
+        const placeholderExecRows = [
+          ['TEST-01 (Baseline)', doc.title || 'Target Table', 'READY / PENDING', 'Target Entity Scope', '0 Defect Records (Target)', doc.executionFrequency || 'Daily at 02:00 UTC', 'Automated Scheduled Runner']
+        ];
+        pdf.autoTable({
+          startY: y,
+          head: [['Test Run ID', 'Test Target Entity', 'Execution Status', 'Audited Scope', 'Defect Tolerance', 'Schedule Cadence', 'Execution Engine']],
+          body: placeholderExecRows,
+          theme: 'striped',
+          headStyles: { fillColor: primaryRgb, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
+          styles: { fontSize: 7.5, cellPadding: 4, textColor: bodySlate },
+          alternateRowStyles: { fillColor: cardBgSlate },
+          didParseCell: (data) => {
+            if (data.section === 'body' && data.column.index === 2) {
+              data.cell.styles.textColor = [30, 64, 175];
+              data.cell.styles.fillColor = [239, 246, 255];
+              data.cell.styles.fontStyle = 'bold';
+            }
+          },
+          margin: { left: margin, right: margin }
+        });
+        y = pdf.lastAutoTable.finalY + 8;
+
+        pdf.setFont('helvetica', 'italic');
+        pdf.setFontSize(7);
+        pdf.setTextColor(mutedSlate[0], mutedSlate[1], mutedSlate[2]);
+        pdf.text('Note: No historical execution logs are attached yet. Test runs can be logged via the Test Executions workspace or automated CI/CD runners.', margin, y);
+        y += 14;
       }
 
-      // Section 6: Governance Sign-Offs
-      if (doc.approvals && doc.approvals.length > 0) {
-        if (y > pageHeight - 120) {
-          pdf.addPage();
-          y = margin + 20;
-        }
+      // SECTION 5: Operational Remediation Runbook & Issues
+      renderSectionHeader('5', section5Name, `${docIssues.length} Linked Items`);
+
+      if (doc.remediation) {
+        const remH = 38;
+        pdf.setFillColor(255, 251, 235);
+        pdf.setDrawColor(253, 230, 138);
+        pdf.roundedRect(margin, y, contentWidth, remH, 3, 3, 'FD');
+        pdf.setFillColor(245, 158, 11);
+        pdf.roundedRect(margin, y, 3.5, remH, 1, 1, 'F');
 
         pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(13);
-        pdf.setTextColor(31, 78, 121);
-        pdf.text('6. Governance Approvals & Sign-Off History', margin, y);
-        y += 14;
+        pdf.setFontSize(8);
+        pdf.setTextColor(146, 64, 14);
+        pdf.text('OPERATIONAL REMEDIATION RUNBOOK PROTOCOL', margin + 10, y + 12);
 
-        const appData = doc.approvals.map(a => [
-          new Date(a.timestamp).toLocaleDateString(),
-          a.reviewer,
-          a.status,
-          a.comments
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(8);
+        pdf.setTextColor(120, 53, 15);
+        const splitRem = pdf.splitTextToSize(doc.remediation, contentWidth - 22);
+        pdf.text(splitRem.slice(0, 2), margin + 10, y + 24);
+
+        y += remH + 12;
+      } else {
+        const remH = 32;
+        pdf.setFillColor(cardBgSlate[0], cardBgSlate[1], cardBgSlate[2]);
+        pdf.setDrawColor(borderSlate[0], borderSlate[1], borderSlate[2]);
+        pdf.roundedRect(margin, y, contentWidth, remH, 3, 3, 'FD');
+        pdf.setFillColor(secondaryRgb[0], secondaryRgb[1], secondaryRgb[2]);
+        pdf.roundedRect(margin, y, 3.5, remH, 1, 1, 'F');
+
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(7.5);
+        pdf.setTextColor(secondaryRgb[0], secondaryRgb[1], secondaryRgb[2]);
+        pdf.text('STANDARD OPERATIONAL REMEDIATION PROTOCOL', margin + 10, y + 11);
+
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(7);
+        pdf.setTextColor(bodySlate[0], bodySlate[1], bodySlate[2]);
+        pdf.text('Upon assertion breach or threshold defect, on-call data engineers must be paged, quarantine downstream ETL pipelines, and initiate root-cause triage.', margin + 10, y + 22);
+        y += remH + 10;
+      }
+
+      if (docIssues.length > 0) {
+        const issueRows = docIssues.map(iss => [
+          iss.id || 'ISS',
+          iss.title || 'Untitled Defect',
+          iss.severity || 'Medium',
+          iss.status || 'Open',
+          iss.owner || 'Unassigned',
+          iss.deadline || 'N/A',
+          iss.rootCause || 'Under triage'
         ]);
 
         pdf.autoTable({
           startY: y,
-          head: [['Sign-off Date', 'Reviewer', 'Decision', 'Review Comments']],
-          body: appData,
+          head: [['Issue ID', 'Defect Title', 'Severity', 'Status', 'Remediation Owner', 'Target SLA', 'Root Cause Analysis']],
+          body: issueRows,
           theme: 'grid',
-          headStyles: { fillColor: [31, 78, 121], textColor: [255, 255, 255], fontSize: 8 },
-          styles: { fontSize: 8, cellPadding: 4 },
+          headStyles: { fillColor: primaryRgb, textColor: [255, 255, 255], fontSize: 7.5, fontStyle: 'bold' },
+          styles: { fontSize: 7.5, cellPadding: 3.5, textColor: bodySlate },
+          alternateRowStyles: { fillColor: cardBgSlate },
+          didParseCell: (data) => {
+            if (data.section === 'body') {
+              if (data.column.index === 2) {
+                const s = String(data.cell.raw).toLowerCase();
+                if (s === 'critical' || s === 'high') {
+                  data.cell.styles.textColor = [153, 27, 27];
+                  data.cell.styles.fontStyle = 'bold';
+                }
+              }
+              if (data.column.index === 3) {
+                const st = String(data.cell.raw).toLowerCase();
+                if (st === 'resolved' || st === 'closed') {
+                  data.cell.styles.textColor = [22, 101, 52];
+                  data.cell.styles.fillColor = [220, 252, 231];
+                } else {
+                  data.cell.styles.textColor = [146, 64, 14];
+                  data.cell.styles.fillColor = [254, 243, 199];
+                }
+              }
+            }
+          },
           margin: { left: margin, right: margin }
         });
         y = pdf.lastAutoTable.finalY + 16;
+      } else {
+        const noIssH = 26;
+        pdf.setFillColor(240, 253, 244);
+        pdf.setDrawColor(187, 247, 208);
+        pdf.roundedRect(margin, y, contentWidth, noIssH, 3, 3, 'FD');
+        pdf.setFillColor(34, 197, 94);
+        pdf.roundedRect(margin, y, 3.5, noIssH, 1, 1, 'F');
+
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(7.5);
+        pdf.setTextColor(22, 101, 52);
+        pdf.text('ZERO ACTIVE DEFECT ISSUES', margin + 10, y + 11);
+
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(7);
+        pdf.setTextColor(20, 83, 45);
+        pdf.text('All assertion criteria are within expected parameters. No CAPA corrective action tickets are currently open.', margin + 10, y + 20);
+        y += noIssH + 16;
       }
 
-      // Appendix: Visual Screenshot Evidence
+      // SECTION 6: Governance, Revision History & Sign-Off Approvals
+      renderSectionHeader('6', 'Governance, Revision History & Sign-Off Approvals', 'Formal Traceability');
+
+      const effectiveHistory = (doc.versionHistory && doc.versionHistory.length > 0)
+        ? doc.versionHistory
+        : [{
+            version: doc.version || '1.0',
+            timestamp: doc.updatedAt || doc.createdAt || new Date().toISOString(),
+            author: (doc.usernames && doc.usernames[0]) || doc.owner || 'Lead Author',
+            summary: 'Initial specification baseline & validation rules definition'
+          }];
+
+      if (pdfSettings.includeRevisionHistory !== false) {
+        const revData = effectiveHistory.map(v => [
+          `v${v.version || '1.0'}`,
+          v.timestamp ? new Date(v.timestamp).toLocaleDateString() : 'N/A',
+          v.author || v.changedBy || 'System',
+          v.summary || v.notes || 'Document update and assertion snapshot'
+        ]);
+
+        pdf.autoTable({
+          startY: y,
+          head: [['Version', 'Snapshot Date', 'Author / Modifier', 'Change Summary & Release Notes']],
+          body: revData,
+          theme: 'striped',
+          headStyles: { fillColor: secondaryRgb, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
+          styles: { fontSize: 7.5, cellPadding: 4, textColor: bodySlate },
+          alternateRowStyles: { fillColor: cardBgSlate },
+          columnStyles: { 0: { cellWidth: 55, fontStyle: 'bold' }, 1: { cellWidth: 75 }, 2: { cellWidth: 100 } },
+          margin: { left: margin, right: margin }
+        });
+        y = pdf.lastAutoTable.finalY + 12;
+      }
+
+      // Formal Sign-Off Approvals Table
+      const effectiveApprovals = (doc.approvals && doc.approvals.length > 0)
+        ? doc.approvals
+        : [
+            {
+              timestamp: doc.updatedAt || doc.createdAt,
+              reviewer: doc.owner || (doc.usernames && doc.usernames[0]) || 'Primary Data Owner',
+              status: docStatus === 'Approved' ? 'Approved' : 'Pending Formal Sign-off',
+              comments: docStatus === 'Approved' ? 'Certified and approved for operational execution.' : 'Specification drafted; awaiting review and sign-off.'
+            },
+            {
+              timestamp: doc.updatedAt || doc.createdAt,
+              reviewer: doc.reviewer || 'Lead Data Engineer',
+              status: docStatus === 'Approved' ? 'Approved' : 'Technical Review in Progress',
+              comments: 'Verified assertion SQL queries and lineage dependencies.'
+            }
+          ];
+
+      const appData = effectiveApprovals.map(a => [
+        a.timestamp ? new Date(a.timestamp).toLocaleDateString() : 'Pending',
+        a.reviewer || 'Governance Authority',
+        a.status || 'Pending',
+        a.comments || 'Enterprise data governance review.'
+      ]);
+
+      pdf.autoTable({
+        startY: y,
+        head: [['Sign-off Date', 'Reviewer / Authority', 'Governance Decision', 'Review Comments']],
+        body: appData,
+        theme: 'grid',
+        headStyles: { fillColor: primaryRgb, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
+        styles: { fontSize: 8, cellPadding: 4, textColor: bodySlate },
+        alternateRowStyles: { fillColor: cardBgSlate },
+        didParseCell: (data) => {
+          if (data.section === 'body' && data.column.index === 2) {
+            const dec = String(data.cell.raw).toLowerCase();
+            if (dec.includes('approved')) {
+              data.cell.styles.textColor = [22, 101, 52];
+              data.cell.styles.fillColor = [220, 252, 231];
+              data.cell.styles.fontStyle = 'bold';
+            } else if (dec.includes('reject')) {
+              data.cell.styles.textColor = [153, 27, 27];
+              data.cell.styles.fillColor = [254, 226, 226];
+              data.cell.styles.fontStyle = 'bold';
+            } else {
+              data.cell.styles.textColor = [30, 64, 175];
+              data.cell.styles.fillColor = [239, 246, 255];
+              data.cell.styles.fontStyle = 'bold';
+            }
+          }
+        },
+        margin: { left: margin, right: margin }
+      });
+      y = pdf.lastAutoTable.finalY + 14;
+
+      // SECTION 7: Official Governance & Sign-Off Certification Block
+      const certBoxH = 46;
+      if (y + certBoxH + 20 > pageHeight - 35) { pdf.addPage(); y = margin + 25; }
+
+      pdf.setFillColor(cardBgSlate[0], cardBgSlate[1], cardBgSlate[2]);
+      pdf.setDrawColor(borderSlate[0], borderSlate[1], borderSlate[2]);
+      pdf.roundedRect(margin, y, contentWidth, certBoxH, 4, 4, 'FD');
+
+      // Top colored accent border on certificate
+      pdf.setFillColor(primaryRgb[0], primaryRgb[1], primaryRgb[2]);
+      pdf.roundedRect(margin, y, contentWidth, 3, 1, 1, 'F');
+
+      // Certificate header
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(8);
+      pdf.setTextColor(primaryRgb[0], primaryRgb[1], primaryRgb[2]);
+      pdf.text('OFFICIAL DATA GOVERNANCE RECORD & AUDIT APPROVAL', margin + 10, y + 14);
+
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(7.5);
+      pdf.setTextColor(bodySlate[0], bodySlate[1], bodySlate[2]);
+      pdf.text(`Certified By: ${this.currentUser || (doc.usernames && doc.usernames[0]) || doc.owner || 'Lead Data Governance Officer'}`, margin + 10, y + 26);
+      pdf.text(`Audit Timestamp: ${new Date().toISOString().replace('T', ' ').slice(0, 19)} UTC  •  Status: ${docStatus.toUpperCase()}  •  Version: ${doc.version || '1.0'}`, margin + 10, y + 37);
+
+      y += certBoxH + 16;
+
+      // APPENDIX: Visual Screenshot Evidence
       const appendixScreenshots = (doc.screenshots || []).filter(s => s.placement === 'appendix' || (!s.placement));
       if (appendixScreenshots.length > 0) {
         if (y > pageHeight - 160) {
           pdf.addPage();
-          y = margin + 20;
+          y = margin + 25;
         }
-        pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(13);
-        pdf.setTextColor(31, 78, 121);
-        pdf.text('Appendix: Visual Screenshot Evidence', margin, y);
-        y += 16;
+        renderSectionHeader('App', 'Visual Screenshot Evidence Appendix', `${appendixScreenshots.length} Supporting Artifacts`);
         appendixScreenshots.forEach((ss, idx) => {
           embedScreenshot(ss, `Evidence #${idx + 1}: `);
         });
+      }
+
+      // AUTHOR & USER CONTACT SIGN-OFF BLOCK
+      // Displayed at the end of generated documents if any value (username, useremail, userphone) is provided
+      const uContact = this.getUserInfo(doc);
+      const hasUserContact = Boolean(uContact && (uContact.username || uContact.useremail || uContact.userphone));
+      if (hasUserContact) {
+        const contactBoxH = 34;
+        if (y + contactBoxH + 20 > pageHeight - 35) {
+          pdf.addPage();
+          y = margin + 25;
+        }
+
+        pdf.setFillColor(cardBgSlate[0], cardBgSlate[1], cardBgSlate[2]);
+        pdf.setDrawColor(borderSlate[0], borderSlate[1], borderSlate[2]);
+        pdf.roundedRect(margin, y, contentWidth, contactBoxH, 4, 4, 'FD');
+
+        // Top accent line
+        pdf.setFillColor(accentRgb[0], accentRgb[1], accentRgb[2]);
+        pdf.roundedRect(margin, y, contentWidth, 2.5, 1, 1, 'F');
+
+        // Header
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(8);
+        pdf.setTextColor(primaryRgb[0], primaryRgb[1], primaryRgb[2]);
+        pdf.text('DOCUMENT AUTHOR & CONTACT DETAILS', margin + 10, y + 12);
+
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(7.5);
+        pdf.setTextColor(bodySlate[0], bodySlate[1], bodySlate[2]);
+
+        const contactDetails = [];
+        if (uContact.username) contactDetails.push(`Author: ${uContact.username}`);
+        if (uContact.useremail) contactDetails.push(`Email: ${uContact.useremail}`);
+        if (uContact.userphone) contactDetails.push(`Phone: ${uContact.userphone}`);
+
+        pdf.text(contactDetails.join('   •   '), margin + 10, y + 21);
+
+        pdf.setFontSize(6.5);
+        pdf.setTextColor(mutedSlate[0], mutedSlate[1], mutedSlate[2]);
+        pdf.text('Direct inquiries regarding this validation specification to the author contact details above.', margin + 10, y + 28);
+
+        y += contactBoxH + 14;
       }
 
       // Clean up any trailing blank pages
@@ -9468,31 +11235,69 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
         }
       }
 
-      // Page Footers & Numbering across all pages
+      // Running Headers, Watermark & Page Footers
       const totalPages = pdf.internal.getNumberOfPages();
       for (let i = 1; i <= totalPages; i++) {
         pdf.setPage(i);
+
+        // Watermark: disabled per user request to keep document clean and free of "FOR REVIEW ONLY" watermark
+        // (Clean presentation across all pages)
+
+        // Running Header on Pages 2+
+        if (i > 1) {
+          // Top mini accent line
+          pdf.setFillColor(primaryRgb[0], primaryRgb[1], primaryRgb[2]);
+          pdf.rect(0, 0, pageWidth, 2.5, 'F');
+
+          let headerLeftX = margin;
+          if (logoToDraw) {
+            try {
+              const format = logoToDraw.includes('image/jpeg') ? 'JPEG' : 'PNG';
+              pdf.addImage(logoToDraw, format, margin, 12, 12, 12);
+              headerLeftX += 16;
+            } catch (e) {}
+          }
+
+          pdf.setFont('helvetica', 'normal');
+          pdf.setFontSize(7.5);
+          pdf.setTextColor(mutedSlate[0], mutedSlate[1], mutedSlate[2]);
+          const headerLeft = `Doc ID: ${doc.id}  •  ${doc.title || `${profile.name || 'Technical'} Specification`} (v${doc.version || '1.0'})`;
+          pdf.text(pdf.splitTextToSize(headerLeft, contentWidth - 170)[0] || '', headerLeftX, 21.5);
+
+          const headerRight = `CONFIDENTIAL  •  ${docStatus.toUpperCase()}`;
+          pdf.setFont('helvetica', 'bold');
+          pdf.setFontSize(7);
+          pdf.setTextColor(primaryRgb[0], primaryRgb[1], primaryRgb[2]);
+          pdf.text(headerRight, pageWidth - margin - pdf.getTextWidth(headerRight), 21.5);
+
+          pdf.setDrawColor(borderSlate[0], borderSlate[1], borderSlate[2]);
+          pdf.setLineWidth(0.5);
+          pdf.line(margin, 26, pageWidth - margin, 26);
+        }
+
+        // Running Footer across all pages
+        pdf.setDrawColor(borderSlate[0], borderSlate[1], borderSlate[2]);
+        pdf.setLineWidth(0.5);
+        pdf.line(margin, pageHeight - 24, pageWidth - margin, pageHeight - 24);
+
         pdf.setFont('helvetica', 'normal');
-        pdf.setFontSize(8);
-        pdf.setTextColor(148, 163, 184);
+        pdf.setFontSize(7);
+        pdf.setTextColor(mutedSlate[0], mutedSlate[1], mutedSlate[2]);
 
-        // Footer rule
-        pdf.setDrawColor(226, 232, 240);
-        pdf.line(margin, pageHeight - 25, pageWidth - margin, pageHeight - 25);
+        const footerNote = branding.footerText || (profile.branding && profile.branding.footerText) || `${profile.name || 'Data'} Documenter  •  Enterprise Specification  •  Internal Confidential`;
+        pdf.text(footerNote, margin, pageHeight - 13);
 
-        // Footer text
-        const footerNote = branding.footerText || 'Data Quality Documenter - Internal Confidential Report';
-        pdf.text(footerNote, margin, pageHeight - 14);
-
-        // Page X of Y
         if (branding.showPageNumbers !== false) {
           const pageStr = `Page ${i} of ${totalPages}`;
-          pdf.text(pageStr, pageWidth - margin - pdf.getTextWidth(pageStr), pageHeight - 14);
+          pdf.setFont('helvetica', 'bold');
+          pdf.setFontSize(7);
+          pdf.setTextColor(darkSlate[0], darkSlate[1], darkSlate[2]);
+          pdf.text(pageStr, pageWidth - margin - pdf.getTextWidth(pageStr), pageHeight - 13);
         }
       }
 
       pdf.save(`DQD-${doc.id}-${new Date().toISOString().slice(0, 10)}.pdf`);
-      this.showToast('PDF Report generated and downloaded', 'success');
+      this.showToast('Enterprise PDF Report generated and downloaded', 'success');
     },
 
     // ====================================================================

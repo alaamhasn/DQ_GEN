@@ -3,6 +3,83 @@
  * Ensures 100% functionality under file:// protocol without fetch CORS restrictions.
  */
 
+(function() {
+  function createDefaultLogoDataUrl() {
+    if (typeof document !== 'undefined') {
+      try {
+        const c = document.createElement('canvas');
+        c.width = 128;
+        c.height = 128;
+        const ctx = c.getContext('2d');
+        const grad = ctx.createLinearGradient(0, 0, 128, 128);
+        grad.addColorStop(0, '#0f172a');
+        grad.addColorStop(1, '#0284c7');
+        ctx.fillStyle = grad;
+        const r = 26;
+        ctx.beginPath();
+        ctx.moveTo(r, 0);
+        ctx.lineTo(128 - r, 0);
+        ctx.quadraticCurveTo(128, 0, 128, r);
+        ctx.lineTo(128, 128 - r);
+        ctx.quadraticCurveTo(128, 128, 128 - r, 128);
+        ctx.lineTo(r, 128);
+        ctx.quadraticCurveTo(0, 128, 0, 128 - r);
+        ctx.lineTo(0, r);
+        ctx.quadraticCurveTo(0, 0, r, 0);
+        ctx.closePath();
+        ctx.fill();
+
+        // Inner document sheet
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(36, 24);
+        ctx.lineTo(76, 24);
+        ctx.lineTo(92, 40);
+        ctx.lineTo(92, 102);
+        ctx.lineTo(36, 102);
+        ctx.closePath();
+        ctx.fill();
+
+        // Fold corner
+        ctx.fillStyle = '#cbd5e1';
+        ctx.beginPath();
+        ctx.moveTo(76, 24);
+        ctx.lineTo(76, 40);
+        ctx.lineTo(92, 40);
+        ctx.closePath();
+        ctx.fill();
+
+        // Document text lines
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillRect(46, 46, 26, 4.5);
+        ctx.fillRect(46, 56, 38, 4.5);
+        ctx.fillRect(46, 66, 38, 4.5);
+
+        // Quality check badge
+        ctx.fillStyle = '#10b981';
+        ctx.beginPath();
+        ctx.arc(82, 86, 18, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(75, 86);
+        ctx.lineTo(80, 91);
+        ctx.lineTo(89, 81);
+        ctx.stroke();
+
+        return c.toDataURL('image/png');
+      } catch (e) {
+        console.warn('Canvas default logo generation error:', e);
+      }
+    }
+    return '';
+  }
+  window.DQD_DEFAULT_LOGO_BASE64 = createDefaultLogoDataUrl();
+})();
+
 window.DQD_DEFAULT_TEMPLATES = [
   {
     "id": "tpl-validation-rules",
@@ -2260,16 +2337,361 @@ window.DQD_DEFAULT_TEMPLATES = [
     "actualResult": "CAPA mitigation verified: 14,200 orders backfilled; 0 discrepancies remaining.",
     "threshold": "0",
     "remediation": "Deploy updated dbt incremental logic with 3-day watermarking window, backfill missing partition range, and establish daily reconciliation alert."
+  },
+
+  // ====================================================================
+  // DATA ANALYSIS TEMPLATES
+  // ====================================================================
+  {
+    "id": "tpl-da-kpi-metric-spec",
+    "name": "Executive KPI & Metric Calculation Specification",
+    "category": "Data Analysis",
+    "teamProfile": "data_analysis",
+    "description": "Standardized analytical definition for executive KPIs, calculation logic, grain, dimension slices, and certified BI reporting queries.",
+    "documentType": "Metric & KPI Definition",
+    "validationType": "Metric Definition",
+    "team": "Finance BI & Product Analytics",
+    "usernames": ["alaam", "david.kim"],
+    "owner": "David Kim (Senior Analytics Engineer)",
+    "reviewer": "Elena Rostova (Controller)",
+    "status": "Approved",
+    "priority": "Critical",
+    "executionFrequency": "Daily (Post-ETL 04:00 UTC)",
+    "businessDomain": "Finance & General Ledger",
+    "dataSource": {
+      "system": "Snowflake Enterprise DW",
+      "catalog": "EDW_PROD",
+      "schema": "ANALYTICS",
+      "tables": ["FACT_SUBSCRIPTION_REVENUE", "DIM_ACCOUNT"],
+      "domain": "Revenue Metrics",
+      "dataOwner": "Elena Rostova (Controller)",
+      "technicalOwner": "David Kim (Senior Analytics Engineer)",
+      "dependencies": "Nightly dbt financial transformation models",
+      "mappings": [
+        {
+          "sourceCol": "NET_BILLED_AMOUNT",
+          "targetCol": "MRR_CONTRIBUTION_USD",
+          "dataType": "NUMERIC(18,2)",
+          "rule": "SUM(mrr_amount) WHERE status = 'ACTIVE'",
+          "nullable": "NO",
+          "description": "Monthly Recurring Revenue normalized to USD"
+        }
+      ]
+    },
+    "dynamicInputs": [
+      { "id": "f-1", "label": "Metric Calculation Formula", "value": "MRR = SUM(Active Subscription Value) - Discounts + Prorated Add-ons" },
+      { "id": "f-2", "label": "Target Stakeholder & Decision Maker", "value": "Chief Financial Officer (CFO) & Executive Committee" },
+      { "id": "f-3", "label": "Time Horizon & Date Granularity", "value": "Monthly Cohorts / Daily Rolling 30-Day Trend" },
+      { "id": "f-4", "label": "Dimension Slices & Segmentations", "value": "Customer Tier (Enterprise/SMB), Geography, Acquisition Channel" },
+      { "id": "f-5", "label": "BI Dashboard URL / Report ID", "value": "https://powerbi.company.internal/reports/finance-cfo-mrr" }
+    ],
+    "sqlDialect": "Snowflake",
+    "sqlQueries": [
+      {
+        "id": "Q-1",
+        "title": "Certified MRR Calculation Query",
+        "dialect": "Snowflake",
+        "query": "SELECT \n  DATE_TRUNC('month', billing_date) AS reporting_month,\n  customer_tier,\n  country_code,\n  COUNT(DISTINCT account_id) AS active_subscribers,\n  SUM(monthly_billed_amount) AS total_mrr_usd,\n  ROUND(AVG(monthly_billed_amount), 2) AS arpu_usd\nFROM edw_prod.analytics.fact_subscription_revenue\nWHERE subscription_status = 'ACTIVE'\n  AND billing_date >= DATEADD('month', -12, CURRENT_DATE)\nGROUP BY 1, 2, 3\nORDER BY 1 DESC, total_mrr_usd DESC;",
+        "notes": "Certified source query backing Executive Tableau and PowerBI Financial Portals"
+      }
+    ],
+    "executiveSummary": "Formal analytical definition of Monthly Recurring Revenue (MRR) and Average Revenue Per User (ARPU) aligned with IFRS-15 revenue recognition principles.",
+    "businessObjective": "Establish a single source of truth for recurring revenue across corporate reporting, investor decks, and board dashboards.",
+    "expectedResult": "Matches General Ledger sub-ledger reconciliation within $0.00 variance.",
+    "actualResult": "Variance confirmed at $0.00 across prior 12 fiscal quarters.",
+    "threshold": "0",
+    "remediation": "Investigate unassigned account tiers or missing foreign exchange rates in daily currency conversion table."
+  },
+  {
+    "id": "tpl-da-cohort-analysis",
+    "name": "Customer Retention & Cohort Funnel Study",
+    "category": "Data Analysis",
+    "teamProfile": "data_analysis",
+    "description": "In-depth exploratory and behavioral cohort study tracking customer lifecycle retention, activation milestones, and drop-off barriers.",
+    "documentType": "Cohort & Funnel Study",
+    "validationType": "Cohort & Funnel",
+    "team": "Growth Analytics Squad",
+    "usernames": ["alaam", "alex.miller"],
+    "owner": "Alex Miller (Staff Product Analyst)",
+    "reviewer": "Sarah Jenkins (Head of Product Strategy)",
+    "status": "Review",
+    "priority": "High",
+    "executionFrequency": "Weekly (Sunday 02:00 UTC)",
+    "businessDomain": "Marketing & Campaign Analytics",
+    "dataSource": {
+      "system": "Trino Lakehouse",
+      "catalog": "iceberg_prod",
+      "schema": "product_analytics",
+      "tables": ["user_events_stream", "dim_users"],
+      "domain": "User Retention",
+      "dataOwner": "Sarah Jenkins",
+      "technicalOwner": "Alex Miller",
+      "dependencies": "Kafka clickstream to Iceberg bronze-silver pipelines",
+      "mappings": []
+    },
+    "dynamicInputs": [
+      { "id": "f-1", "label": "Cohort Definition", "value": "Users registered within the same calendar week (W0)" },
+      { "id": "f-2", "label": "Activation Milestone", "value": "Completed at least 3 core workspace interactions within 7 days" },
+      { "id": "f-3", "label": "Time Horizon", "value": "Weekly retention evaluated through Week 12 (W12)" }
+    ],
+    "sqlDialect": "Trino",
+    "sqlQueries": [
+      {
+        "id": "Q-1",
+        "title": "Weekly Retention Matrix Calculation",
+        "dialect": "Trino",
+        "query": "WITH signup_cohorts AS (\n  SELECT \n    user_id,\n    DATE_TRUNC('week', created_at) AS cohort_week\n  FROM iceberg_prod.product_analytics.dim_users\n  WHERE created_at >= CURRENT_DATE - INTERVAL '90' DAY\n),\nactivity AS (\n  SELECT \n    e.user_id,\n    DATE_DIFF('week', c.cohort_week, DATE_TRUNC('week', e.event_timestamp)) AS week_number\n  FROM iceberg_prod.product_analytics.user_events_stream e\n  INNER JOIN signup_cohorts c ON e.user_id = c.user_id\n  WHERE e.event_type = 'core_action'\n)\nSELECT \n  cohort_week,\n  week_number,\n  COUNT(DISTINCT user_id) AS active_retained_users\nFROM activity\nGROUP BY 1, 2\nORDER BY cohort_week DESC, week_number ASC;",
+        "notes": "Calculates triangular cohort retention matrix for weekly growth sync"
+      }
+    ],
+    "executiveSummary": "Analyzes Week 1 to Week 12 retention benchmarks across registration cohorts to identify high-value acquisition segments.",
+    "businessObjective": "Increase 30-day user retention from 22% to 35% through targeted onboarding enhancements.",
+    "expectedResult": "W1 retention >= 40%; W4 retention >= 25%.",
+    "actualResult": "Baseline established: W1 at 38.2%, W4 at 24.1%.",
+    "threshold": "5%",
+    "remediation": "Trigger automated in-app guided tour for drop-off cohorts between Day 3 and Day 7."
+  },
+
+  // ====================================================================
+  // DATA ENGINEERING TEMPLATES
+  // ====================================================================
+  {
+    "id": "tpl-de-lakehouse-cdc-pipeline",
+    "name": "Real-Time CDC to Apache Iceberg Pipeline Spec",
+    "category": "Data Engineering",
+    "teamProfile": "data_engineering",
+    "description": "Production engineering specification for Debezium CDC ingestion from PostgreSQL/Oracle into Apache Iceberg table format via Kafka.",
+    "documentType": "Data Ingestion / CDC Feed Spec",
+    "validationType": "CDC Ingestion",
+    "team": "Data Platform Engineering",
+    "usernames": ["alaam", "michael.chang"],
+    "owner": "Michael Chang (Lead Data Engineer)",
+    "reviewer": "David Kim (Platform Architect)",
+    "status": "Approved",
+    "priority": "Critical",
+    "executionFrequency": "Real-Time / Streaming",
+    "businessDomain": "Data Lakehouse Platform",
+    "dataSource": {
+      "system": "Kafka / Flink Streaming",
+      "catalog": "iceberg_prod",
+      "schema": "raw_cdc",
+      "tables": ["orders_cdc_events", "iceberg_prod.raw_orders"],
+      "domain": "Lakehouse Ingestion",
+      "dataOwner": "Michael Chang",
+      "technicalOwner": "Michael Chang",
+      "dependencies": "Debezium 2.5 Connector -> Apache Kafka -> Apache Flink 1.18 -> Iceberg",
+      "mappings": [
+        {
+          "sourceCol": "op_type",
+          "targetCol": "_change_type",
+          "dataType": "VARCHAR(4)",
+          "rule": "CASE WHEN op = 'c' THEN 'INSERT' WHEN op = 'u' THEN 'UPDATE' ELSE 'DELETE' END",
+          "nullable": "NO",
+          "description": "CDC operation indicator"
+        }
+      ]
+    },
+    "dynamicInputs": [
+      { "id": "f-1", "label": "Airflow DAG / Task ID", "value": "dag_iceberg_cdc_compaction_hourly" },
+      { "id": "f-2", "label": "Compute Engine (Spark/dbt/Trino)", "value": "Apache Flink 1.18 + Spark 3.5 RewriteDataFiles" },
+      { "id": "f-3", "label": "Delivery SLA & Max Latency", "value": "< 120 seconds end-to-end event to queryable storage" },
+      { "id": "f-4", "label": "Idempotency & Deduplication Strategy", "value": "Upsert on primary_key with Iceberg v2 row-level delete equality" },
+      { "id": "f-5", "label": "Dead-Letter Queue (DLQ) Path", "value": "s3://lakehouse-dlq-prod/raw_cdc/orders/errors/" }
+    ],
+    "sqlDialect": "Trino",
+    "sqlQueries": [
+      {
+        "id": "Q-1",
+        "title": "CDC Pipeline Lag & Unprocessed Queue Check",
+        "dialect": "Trino",
+        "query": "SELECT \n  DATE_TRUNC('minute', _ingest_ts) AS ingest_minute,\n  COUNT(*) AS ingested_records,\n  MAX(DATE_DIFF('second', source_commit_ts, _ingest_ts)) AS max_cdc_lag_seconds,\n  AVG(DATE_DIFF('second', source_commit_ts, _ingest_ts)) AS avg_cdc_lag_seconds\nFROM iceberg_prod.raw_cdc.orders_cdc_events\nWHERE _ingest_ts >= CURRENT_TIMESTAMP - INTERVAL '1' HOUR\nGROUP BY 1\nORDER BY 1 DESC;",
+        "notes": "Real-time query measuring CDC end-to-end ingestion latency and SLA adherence"
+      }
+    ],
+    "executiveSummary": "High-throughput streaming ingestion pipeline capturing transactional database mutations into ACID Apache Iceberg lakehouse tables.",
+    "businessObjective": "Deliver fresh operational transaction data to business stakeholders with sub-2-minute latency.",
+    "expectedResult": "SLA latency under 120 seconds; zero lost transactions.",
+    "actualResult": "Average lag: 42 seconds; 99.99% SLA compliance maintained.",
+    "threshold": "120s",
+    "remediation": "Scale Flink TaskManager replicas and check Kafka partition distribution if consumer lag exceeds 90s."
+  },
+  {
+    "id": "tpl-de-dbt-elt-orchestration",
+    "name": "dbt Core Nightly Transformation & Airflow DAG Spec",
+    "category": "Data Engineering",
+    "teamProfile": "data_engineering",
+    "description": "Comprehensive pipeline spec for nightly dimensional transformation models executed via dbt-core and orchestrated with Apache Airflow.",
+    "documentType": "Pipeline & DAG Specification",
+    "validationType": "Batch Pipeline",
+    "team": "Analytics Engineering",
+    "usernames": ["alaam", "david.kim"],
+    "owner": "David Kim (Senior Analytics Engineer)",
+    "reviewer": "Michael Chang (Lead Data Engineer)",
+    "status": "Approved",
+    "priority": "High",
+    "executionFrequency": "Daily (Post-ETL 04:00 UTC)",
+    "businessDomain": "Data Lakehouse Platform",
+    "dataSource": {
+      "system": "Trino Lakehouse",
+      "catalog": "iceberg_prod",
+      "schema": "analytics",
+      "tables": ["fact_daily_financials", "dim_customers"],
+      "domain": "Core Analytics",
+      "dataOwner": "David Kim",
+      "technicalOwner": "David Kim",
+      "dependencies": "Raw CDC ingestion completion sensor -> Airflow DAG: edw_nightly_transformations",
+      "mappings": []
+    },
+    "dynamicInputs": [
+      { "id": "f-1", "label": "Airflow DAG / Task ID", "value": "dag_edw_nightly_dbt_run" },
+      { "id": "f-2", "label": "Compute Engine (Spark/dbt/Trino)", "value": "dbt-trino 1.7 on Kubernetes Executor" },
+      { "id": "f-3", "label": "Delivery SLA & Max Latency", "value": "Completed by 05:30 UTC (Total duration < 90 mins)" },
+      { "id": "f-4", "label": "Alerting & PagerDuty Escalation", "value": "PagerDuty Tier 2 on retry exhaustion (max 3 retries)" }
+    ],
+    "sqlDialect": "Trino",
+    "sqlQueries": [
+      {
+        "id": "Q-1",
+        "title": "Incremental Transformation Logic Verification",
+        "dialect": "Trino",
+        "query": "SELECT \n  CAST(order_date AS DATE) AS partition_date,\n  COUNT(*) AS total_model_rows,\n  SUM(net_amount) AS total_partition_revenue\nFROM iceberg_prod.analytics.fact_daily_financials\nWHERE order_date >= CURRENT_DATE - INTERVAL '3' DAY\nGROUP BY 1\nORDER BY 1 DESC;",
+        "notes": "Verifies row counts and daily aggregates across recent partition increments"
+      }
+    ],
+    "executiveSummary": "Standardizes the execution, retries, and data validation of all enterprise dimensional models running in dbt-core.",
+    "businessObjective": "Provide audited, reliable analytical marts to corporate BI tools before morning business hours.",
+    "expectedResult": "All dbt models finish without compilation or execution errors by 05:30 UTC.",
+    "actualResult": "Average run time: 54 minutes; 100% green execution.",
+    "threshold": "90 mins",
+    "remediation": "Trigger automated model retry; page on-call data engineer if root cause is upstream schema drift."
+  },
+
+  // ====================================================================
+  // DATA MODELLING TEMPLATES
+  // ====================================================================
+  {
+    "id": "tpl-dm-dimensional-star-schema",
+    "name": "Kimball Dimensional Star Schema (Fact & Dims) Spec",
+    "category": "Data Modelling",
+    "teamProfile": "data_modelling",
+    "description": "Architectural specification for Ralph Kimball dimensional star schemas: grain, surrogate keys, conformed dimensions, facts, and degenerate keys.",
+    "documentType": "Dimensional Model Specification",
+    "validationType": "Dimensional Model",
+    "team": "Enterprise Architecture & Data Modeling",
+    "usernames": ["alaam", "sarah.smith"],
+    "owner": "Sarah Smith (Principal Data Architect)",
+    "reviewer": "Elena Rostova (Controller)",
+    "status": "Approved",
+    "priority": "Critical",
+    "executionFrequency": "Weekly (Sunday 02:00 UTC)",
+    "businessDomain": "Finance & General Ledger",
+    "dataSource": {
+      "system": "Snowflake Enterprise DW",
+      "catalog": "EDW_PROD",
+      "schema": "CORE_DIMENSIONAL",
+      "tables": ["FACT_SALES_ORDERS", "DIM_CUSTOMER", "DIM_PRODUCT", "DIM_DATE"],
+      "domain": "Sales & Commerce Mart",
+      "dataOwner": "Sarah Smith",
+      "technicalOwner": "Sarah Smith",
+      "dependencies": "Staging 3NF operational tables -> Dimensional ETL",
+      "mappings": [
+        {
+          "sourceCol": "SRC_ORDER_ID",
+          "targetCol": "ORDER_SURROGATE_KEY",
+          "dataType": "BIGINT",
+          "rule": "SHA2_HEX(CONCAT(SRC_ORDER_ID, '|', TENANT_ID))",
+          "nullable": "NO",
+          "description": "Deterministic Surrogate Primary Key"
+        }
+      ]
+    },
+    "dynamicInputs": [
+      { "id": "f-1", "label": "Model Type (Star/Snowflake/Vault/3NF)", "value": "Dimensional Star Schema (Kimball Methodology)" },
+      { "id": "f-2", "label": "Grain & Natural Business Keys", "value": "One row per individual line item per fulfilled customer sales order" },
+      { "id": "f-3", "label": "Surrogate Key Strategy (Hash/UUID/Sequence)", "value": "BigInt Identity surrogate keys for dimensions; Hash surrogate for fact" },
+      { "id": "f-4", "label": "Fact Type (Transactional/Snapshot/Factless)", "value": "Atomic Transactional Fact Table" },
+      { "id": "f-5", "label": "Slowly Changing Dimension (SCD Type 1/2/3/6)", "value": "DIM_CUSTOMER: SCD Type 2 (effective_from, effective_to, is_current)" }
+    ],
+    "sqlDialect": "Snowflake",
+    "sqlQueries": [
+      {
+        "id": "Q-1",
+        "title": "Star Schema Referential & Orphan Key Integrity Check",
+        "dialect": "Snowflake",
+        "query": "SELECT \n  COUNT(*) AS total_fact_rows,\n  COUNT_IF(c.customer_sk IS NULL) AS orphan_customer_keys,\n  COUNT_IF(p.product_sk IS NULL) AS orphan_product_keys,\n  COUNT_IF(d.date_sk IS NULL) AS orphan_date_keys\nFROM edw_prod.core_dimensional.fact_sales_orders f\nLEFT JOIN edw_prod.core_dimensional.dim_customer c\n  ON f.customer_sk = c.customer_sk\nLEFT JOIN edw_prod.core_dimensional.dim_product p\n  ON f.product_sk = p.product_sk\nLEFT JOIN edw_prod.core_dimensional.dim_date d\n  ON f.order_date_sk = d.date_sk\nWHERE f.order_date >= DATEADD('day', -30, CURRENT_DATE);",
+        "notes": "Asserts zero orphan foreign keys in the star schema join matrix"
+      }
+    ],
+    "executiveSummary": "Defines the canonical enterprise sales dimensional model enabling multi-dimensional slicing across customers, products, and calendars.",
+    "businessObjective": "Standardize all revenue analytics queries on a certified, highly performant dimensional schema.",
+    "expectedResult": "0 orphan foreign keys; perfect 1:N join consistency.",
+    "actualResult": "All 4.2 million monthly facts join cleanly with zero orphans.",
+    "threshold": "0",
+    "remediation": "Route unmapped natural keys to default unknown member key (-1) and alert master data steward."
+  },
+  {
+    "id": "tpl-dm-data-vault-architecture",
+    "name": "Data Vault 2.0 (Hubs, Links, Satellites) Architecture",
+    "category": "Data Modelling",
+    "teamProfile": "data_modelling",
+    "description": "Enterprise Data Vault 2.0 modeling architecture: Hubs for core business keys, Links for transactions/relationships, and Satellites for temporal context.",
+    "documentType": "Data Vault 2.0 (Hub/Link/Sat) Spec",
+    "validationType": "Data Vault",
+    "team": "Enterprise Architecture & Data Modeling",
+    "usernames": ["alaam", "sarah.smith"],
+    "owner": "Sarah Smith (Principal Data Architect)",
+    "reviewer": "Michael Chang (Lead Data Engineer)",
+    "status": "Review",
+    "priority": "High",
+    "executionFrequency": "Weekly (Sunday 02:00 UTC)",
+    "businessDomain": "Data Lakehouse Platform",
+    "dataSource": {
+      "system": "Snowflake Enterprise DW",
+      "catalog": "EDW_PROD",
+      "schema": "RAW_VAULT",
+      "tables": ["HUB_CUSTOMER", "LINK_CUSTOMER_ACCOUNT", "SAT_CUSTOMER_CRM"],
+      "domain": "Enterprise Raw Vault",
+      "dataOwner": "Sarah Smith",
+      "technicalOwner": "Michael Chang",
+      "dependencies": "CDC Landing tables -> Staging Hashing Layer -> Raw Data Vault",
+      "mappings": []
+    },
+    "dynamicInputs": [
+      { "id": "f-1", "label": "Model Type (Star/Snowflake/Vault/3NF)", "value": "Data Vault 2.0 (Dan Linstedt Methodology)" },
+      { "id": "f-2", "label": "Grain & Natural Business Keys", "value": "Customer National ID / Global Business Identifier (GBI)" },
+      { "id": "f-3", "label": "Surrogate Key Strategy (Hash/UUID/Sequence)", "value": "MD5 / SHA256 Hash Keys for deterministic parallel loading" },
+      { "id": "f-4", "label": "Satellite Tracking Strategy", "value": "Hash Diff comparison for delta change capture on CRM context" }
+    ],
+    "sqlDialect": "Snowflake",
+    "sqlQueries": [
+      {
+        "id": "Q-1",
+        "title": "Hub vs Satellite Hash Collision & Completeness Audit",
+        "dialect": "Snowflake",
+        "query": "SELECT \n  h.hub_customer_hk,\n  COUNT(s.load_date) AS total_context_records,\n  MIN(s.load_date) AS first_seen_date,\n  MAX(s.load_date) AS latest_state_date\nFROM edw_prod.raw_vault.hub_customer h\nLEFT JOIN edw_prod.raw_vault.sat_customer_crm s\n  ON h.hub_customer_hk = s.hub_customer_hk\nGROUP BY 1\nHAVING total_context_records = 0;",
+        "notes": "Audits Hubs with missing context satellites to ensure load integrity"
+      }
+    ],
+    "executiveSummary": "Establishes an agile, auditable enterprise Raw Data Vault supporting multi-source integration without schema refactoring.",
+    "businessObjective": "Enable real-time, parallel ingestion of customer entity mutations across 5 source systems.",
+    "expectedResult": "0 orphaned Hub entries without context satellites.",
+    "actualResult": "100% Hub-Satellite coverage verified across 1.8M enterprise customers.",
+    "threshold": "0",
+    "remediation": "Re-run staging hash diff generator for omitted business keys."
   }
 ];
 
 window.DQD_DEFAULT_VOCABULARY = {
   "teams": [
+    "Data Quality Engineering",
     "Data Engineering",
     "Analytics Engineering",
+    "Data Modelling & Architecture",
+    "Product & Growth Analytics",
+    "Finance BI & Reporting",
     "Risk Analytics",
     "Governance Tribe",
-    "Finance BI"
+    "Data Platform & Lakehouse"
   ],
   "usernames": [
     "alaam",

@@ -20,7 +20,7 @@
         <img src="assets/logo.png" alt="DQD Logo" class="sidebar-logo" id="sidebar-logo-img" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'36\' height=\'36\' viewBox=\'0 0 36 36\'><rect width=\'36\' height=\'36\' rx=\'6\' fill=\'%231F4E79\'/><path d=\'M9 9h18v18H9z\' fill=\'none\' stroke=\'%23fff\' stroke-width=\'2\'/><path d=\'M15 18l3 3 6-6\' stroke=\'%2300A6A6\' stroke-width=\'2.5\' fill=\'none\' stroke-linecap=\'round\'/></svg>'">
         <div class="sidebar-brand">
           <span class="sidebar-brand-name" id="sidebar-app-name">Data Quality Documenter</span>
-          <span class="sidebar-brand-tag">Windows Portable</span>
+          <span class="sidebar-brand-tag" id="sidebar-brand-tag">Data Quality Edition</span>
         </div>
       </div>
 
@@ -117,6 +117,16 @@
         </div>
 
         <div class="navbar-right">
+          <div class="team-profile-widget" id="team-profile-widget" title="Switch Team Profile Workspace">
+            <span style="font-size: 13px;">🏢</span>
+            <label for="team-profile-select" style="font-size: 11px; font-weight: 700; color: var(--text-muted); margin: 0; text-transform: uppercase;">Team:</label>
+            <select id="team-profile-select" class="team-profile-select" title="Switch active team profile">
+              <option value="data_quality">🛡️ Data Quality</option>
+              <option value="data_analysis">📈 Data Analysis</option>
+              <option value="data_engineering">⚙️ Data Engineering</option>
+              <option value="data_modelling">📐 Data Modelling</option>
+            </select>
+          </div>
           <button class="btn btn-outline btn-sm" id="btn-quick-import-dqdoc" title="Import Document (.dqdoc or JSON)">
             <span>📥</span> Import .dqdoc
           </button>
