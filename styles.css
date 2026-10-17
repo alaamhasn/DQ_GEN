@@ -1020,6 +1020,115 @@ textarea.form-control {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sql-editor-toolbar .btn,
+.sql-toolbar-btn {
+  background: #1E293B;
+  color: #F8FAFC !important;
+  border: 1px solid #475569;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: var(--border-radius-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: all 0.15s ease-in-out;
+}
+
+.sql-editor-toolbar .btn:hover,
+.sql-toolbar-btn:hover {
+  background: #334155;
+  color: #FFFFFF !important;
+  border-color: #94A3B8;
+  transform: translateY(-1px);
+}
+
+.sql-editor-toolbar .btn-format,
+.sql-btn-format {
+  background: #0284C7 !important;
+  color: #FFFFFF !important;
+  border: 1px solid #38BDF8 !important;
+  font-weight: 600 !important;
+  box-shadow: 0 1px 3px rgba(2, 132, 199, 0.3) !important;
+}
+
+.sql-editor-toolbar .btn-format:hover,
+.sql-btn-format:hover {
+  background: #0369A1 !important;
+  color: #FFFFFF !important;
+  border-color: #7DD3FC !important;
+}
+
+.sql-editor-toolbar .btn-syntax,
+.sql-btn-syntax {
+  background: #7C3AED !important;
+  color: #FFFFFF !important;
+  border: 1px solid #A78BFA !important;
+  font-weight: 600 !important;
+  box-shadow: 0 1px 3px rgba(124, 58, 237, 0.3) !important;
+}
+
+.sql-editor-toolbar .btn-syntax:hover,
+.sql-btn-syntax:hover,
+.sql-editor-toolbar .btn-syntax.active,
+.sql-btn-syntax.active {
+  background: #6D28D9 !important;
+  color: #FFFFFF !important;
+  border-color: #C084FC !important;
+  box-shadow: 0 0 8px rgba(167, 139, 250, 0.7) !important;
+}
+
+.sql-editor-toolbar .btn-copy,
+.sql-btn-copy {
+  background: #059669 !important;
+  color: #FFFFFF !important;
+  border: 1px solid #34D399 !important;
+  font-weight: 600 !important;
+  box-shadow: 0 1px 3px rgba(5, 150, 105, 0.3) !important;
+}
+
+.sql-editor-toolbar .btn-copy:hover,
+.sql-btn-copy:hover {
+  background: #047857 !important;
+  color: #FFFFFF !important;
+  border-color: #6EE7B7 !important;
+}
+
+.sql-editor-toolbar .btn-clear,
+.sql-btn-clear {
+  background: #DC2626 !important;
+  color: #FFFFFF !important;
+  border: 1px solid #F87171 !important;
+  font-weight: 600 !important;
+  box-shadow: 0 1px 3px rgba(220, 38, 38, 0.3) !important;
+}
+
+.sql-editor-toolbar .btn-clear:hover,
+.sql-btn-clear:hover {
+  background: #B91C1C !important;
+  color: #FFFFFF !important;
+  border-color: #FCA5A5 !important;
+}
+
+.sql-editor-toolbar select {
+  background: #1E293B !important;
+  color: #F8FAFC !important;
+  border: 1px solid #64748B !important;
+  border-radius: var(--border-radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.sql-editor-toolbar select:focus {
+  border-color: #38BDF8 !important;
+  outline: none;
 }
 
 .sql-editor-body {

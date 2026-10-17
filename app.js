@@ -6550,7 +6550,7 @@ WHERE order_id IS NULL
                   <span id="rm-in-sql-stats" style="color: #CBD5E1;">1 line</span>
                 </div>
                 <div class="sql-toolbar-right" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-                  <select id="rm-in-sql-snippet-select" class="form-control form-control-sm" style="padding: 2px 6px; font-size: 11px; height: 26px; width: 175px; background: #1E293B; color: #E2E8F0; border-color: #475569;">
+                  <select id="rm-in-sql-snippet-select" class="form-control form-control-sm" style="padding: 2px 8px; font-size: 11px; height: 26px; width: 175px; background: #334155 !important; color: #FFFFFF !important; border: 1px solid #64748B !important; font-weight: 500;">
                     <option value="">⚡ Insert Assertion Template...</option>
                     <option value="null_check">Null / Missing Value Check</option>
                     <option value="duplicate_check">Duplicate Key Check</option>
@@ -6559,10 +6559,10 @@ WHERE order_id IS NULL
                     <option value="date_freshness_check">Date & Freshness Lag Check</option>
                     <option value="regex_format_check">Pattern / Regex Format Check</option>
                   </select>
-                  <button type="button" class="btn btn-outline btn-sm" id="btn-format-rm-sql" style="padding: 2px 8px; font-size: 11px; height: 26px;" title="Beautify Trino / ANSI SQL keywords">🎨 Format</button>
-                  <button type="button" class="btn btn-outline btn-sm" id="btn-toggle-rm-syntax" style="padding: 2px 8px; font-size: 11px; height: 26px;" title="Toggle syntax-highlighted preview">👁️ Syntax</button>
-                  <button type="button" class="btn btn-outline btn-sm" id="btn-copy-rm-sql" style="padding: 2px 8px; font-size: 11px; height: 26px;" title="Copy query to clipboard">📋 Copy</button>
-                  <button type="button" class="btn btn-outline btn-sm" id="btn-clear-rm-sql" style="padding: 2px 8px; font-size: 11px; height: 26px; color: #EF4444;" title="Clear editor content">🧹 Clear</button>
+                  <button type="button" class="btn btn-sm sql-btn-format" id="btn-format-rm-sql" style="background: #0284C7 !important; color: #FFFFFF !important; border: 1px solid #38BDF8 !important; font-weight: 700 !important; padding: 2px 10px; font-size: 11px; height: 26px; box-shadow: 0 1px 3px rgba(2, 132, 199, 0.4);" title="Beautify Trino / ANSI SQL keywords">🎨 Format</button>
+                  <button type="button" class="btn btn-sm sql-btn-syntax" id="btn-toggle-rm-syntax" style="background: #7C3AED !important; color: #FFFFFF !important; border: 1px solid #A78BFA !important; font-weight: 700 !important; padding: 2px 10px; font-size: 11px; height: 26px; box-shadow: 0 1px 3px rgba(124, 58, 237, 0.4);" title="Toggle syntax-highlighted preview">👁️ Syntax</button>
+                  <button type="button" class="btn btn-sm sql-btn-copy" id="btn-copy-rm-sql" style="background: #059669 !important; color: #FFFFFF !important; border: 1px solid #34D399 !important; font-weight: 700 !important; padding: 2px 10px; font-size: 11px; height: 26px; box-shadow: 0 1px 3px rgba(5, 150, 105, 0.4);" title="Copy query to clipboard">📋 Copy</button>
+                  <button type="button" class="btn btn-sm sql-btn-clear" id="btn-clear-rm-sql" style="background: #DC2626 !important; color: #FFFFFF !important; border: 1px solid #F87171 !important; font-weight: 700 !important; padding: 2px 10px; font-size: 11px; height: 26px; box-shadow: 0 1px 3px rgba(220, 38, 38, 0.4);" title="Clear editor content">🧹 Clear</button>
                 </div>
               </div>
               <div class="sql-editor-body" style="position: relative; display: flex; min-height: 180px; max-height: 280px; overflow: auto; background: #0F172A; font-family: 'Consolas', 'Fira Code', 'Courier New', monospace; font-size: 12.5px; line-height: 1.6;">
@@ -6750,7 +6750,7 @@ WHERE order_id IS NULL
                   <span id="custom-rule-sql-stats" style="color: #CBD5E1;">1 line</span>
                 </div>
                 <div class="sql-toolbar-right" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-                  <select id="custom-rule-sql-snippet-select" class="form-control form-control-sm" style="padding: 2px 6px; font-size: 11px; height: 26px; width: 175px; background: #1E293B; color: #E2E8F0; border-color: #475569;">
+                  <select id="custom-rule-sql-snippet-select" class="form-control form-control-sm" style="padding: 2px 8px; font-size: 11px; height: 26px; width: 175px; background: #334155 !important; color: #FFFFFF !important; border: 1px solid #64748B !important; font-weight: 500;">
                     <option value="">⚡ Insert Assertion Template...</option>
                     <option value="null_check">Null / Missing Value Check</option>
                     <option value="duplicate_check">Duplicate Key Check</option>
@@ -6759,10 +6759,10 @@ WHERE order_id IS NULL
                     <option value="date_freshness_check">Date & Freshness Lag Check</option>
                     <option value="regex_format_check">Pattern / Regex Format Check</option>
                   </select>
-                  <button type="button" class="btn btn-outline btn-sm" id="btn-format-custom-rule-sql" style="padding: 2px 8px; font-size: 11px; height: 26px;" title="Beautify Trino / ANSI SQL keywords">🎨 Format</button>
-                  <button type="button" class="btn btn-outline btn-sm" id="btn-toggle-custom-rule-syntax" style="padding: 2px 8px; font-size: 11px; height: 26px;" title="Toggle syntax-highlighted preview">👁️ Syntax</button>
-                  <button type="button" class="btn btn-outline btn-sm" id="btn-copy-custom-rule-sql" style="padding: 2px 8px; font-size: 11px; height: 26px;" title="Copy query to clipboard">📋 Copy</button>
-                  <button type="button" class="btn btn-outline btn-sm" id="btn-clear-custom-rule-sql" style="padding: 2px 8px; font-size: 11px; height: 26px; color: #EF4444;" title="Clear editor content">🧹 Clear</button>
+                  <button type="button" class="btn btn-sm sql-btn-format" id="btn-format-custom-rule-sql" style="background: #0284C7 !important; color: #FFFFFF !important; border: 1px solid #38BDF8 !important; font-weight: 700 !important; padding: 2px 10px; font-size: 11px; height: 26px; box-shadow: 0 1px 3px rgba(2, 132, 199, 0.4);" title="Beautify Trino / ANSI SQL keywords">🎨 Format</button>
+                  <button type="button" class="btn btn-sm sql-btn-syntax" id="btn-toggle-custom-rule-syntax" style="background: #7C3AED !important; color: #FFFFFF !important; border: 1px solid #A78BFA !important; font-weight: 700 !important; padding: 2px 10px; font-size: 11px; height: 26px; box-shadow: 0 1px 3px rgba(124, 58, 237, 0.4);" title="Toggle syntax-highlighted preview">👁️ Syntax</button>
+                  <button type="button" class="btn btn-sm sql-btn-copy" id="btn-copy-custom-rule-sql" style="background: #059669 !important; color: #FFFFFF !important; border: 1px solid #34D399 !important; font-weight: 700 !important; padding: 2px 10px; font-size: 11px; height: 26px; box-shadow: 0 1px 3px rgba(5, 150, 105, 0.4);" title="Copy query to clipboard">📋 Copy</button>
+                  <button type="button" class="btn btn-sm sql-btn-clear" id="btn-clear-custom-rule-sql" style="background: #DC2626 !important; color: #FFFFFF !important; border: 1px solid #F87171 !important; font-weight: 700 !important; padding: 2px 10px; font-size: 11px; height: 26px; box-shadow: 0 1px 3px rgba(220, 38, 38, 0.4);" title="Clear editor content">🧹 Clear</button>
                 </div>
               </div>
               <div class="sql-editor-body" style="position: relative; display: flex; min-height: 180px; max-height: 280px; overflow: auto; background: #0F172A; font-family: 'Consolas', 'Fira Code', 'Courier New', monospace; font-size: 12.5px; line-height: 1.6;">
@@ -6933,13 +6933,11 @@ WHERE order_id IS NULL
         syntaxBtn.onclick = () => {
           if (preview.classList.contains('active')) {
             preview.classList.remove('active');
-            syntaxBtn.classList.remove('btn-primary');
-            syntaxBtn.classList.add('btn-outline');
+            syntaxBtn.classList.remove('active');
           } else {
             preview.innerHTML = this.highlightTrinoSql(textarea.value);
             preview.classList.add('active');
-            syntaxBtn.classList.remove('btn-outline');
-            syntaxBtn.classList.add('btn-primary');
+            syntaxBtn.classList.add('active');
           }
         };
       }
