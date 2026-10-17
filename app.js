@@ -5471,26 +5471,38 @@ ${q.query || '-- No SQL specified'}
         tbody.innerHTML = rules.map((r, idx) => `
           <tr>
             <td><strong>${this.escapeHtml(r.id)}</strong></td>
-            <td>${this.escapeHtml(r.name)}</td>
+            <td>
+              <div style="font-weight: 600;">${this.escapeHtml(r.name)}</div>
+              ${r.sql ? `<div style="font-family: monospace; font-size: 11px; color: var(--text-muted); max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${this.escapeHtml(r.sql)}">${this.escapeHtml(r.sql.replace(/\s+/g, ' '))}</div>` : ''}
+            </td>
             <td><span class="badge badge-info">${this.escapeHtml(r.dimension)}</span></td>
             <td>${this.getSeverityBadge(r.severity)}</td>
             <td>${this.escapeHtml(r.expectedResult || '')}</td>
             <td>${this.escapeHtml(r.threshold || '0')}</td>
-            <td>
-              <button class="btn btn-outline btn-sm btn-doc-delete-rule" data-idx="${idx}">Remove</button>
+            <td style="white-space: nowrap;">
+              <button class="btn btn-outline btn-sm btn-doc-edit-rule" data-idx="${idx}" title="Edit rule and SQL query">✏️ Edit</button>
+              <button class="btn btn-outline btn-sm btn-doc-delete-rule" data-idx="${idx}" style="color: #ef4444;" title="Remove rule from document">🗑️</button>
             </td>
           </tr>
         `).join('');
       }
-      this.bindEditorRulesDeleteButtons();
+      this.bindEditorRulesActionButtons();
     },
 
-    bindEditorRulesDeleteButtons() {
+    bindEditorRulesActionButtons() {
       const tbody = document.getElementById('tbody-doc-rules');
       if (!tbody) return;
+      tbody.querySelectorAll('.btn-doc-edit-rule').forEach(b => {
+        b.onclick = (e) => {
+          const idx = parseInt(e.currentTarget.dataset.idx, 10);
+          if (this.currentDoc?.rules && this.currentDoc.rules[idx] !== undefined) {
+            this.showAddCustomRuleModal(this.currentDoc.rules[idx], idx);
+          }
+        };
+      });
       tbody.querySelectorAll('.btn-doc-delete-rule').forEach(b => {
         b.onclick = (e) => {
-          const idx = parseInt(e.target.dataset.idx, 10);
+          const idx = parseInt(e.currentTarget.dataset.idx, 10);
           if (this.currentDoc?.rules && this.currentDoc.rules[idx] !== undefined) {
             this.currentDoc.rules.splice(idx, 1);
             this.updateEditorRulesTable();
@@ -5498,6 +5510,10 @@ ${q.query || '-- No SQL specified'}
           }
         };
       });
+    },
+
+    bindEditorRulesDeleteButtons() {
+      this.bindEditorRulesActionButtons();
     },
 
     updateEditorExecutionsTable() {
@@ -6518,10 +6534,44 @@ WHERE order_id IS NULL
           <textarea id="rm-in-desc" class="form-control" rows="2">${this.escapeHtml(r.description || '')}</textarea>
         </div>
 
-        <div class="form-group">
-          <label class="form-label required">SQL Assertion Query</label>
-          <textarea id="rm-in-sql" class="form-control" rows="4" style="font-family: monospace;">${this.escapeHtml(r.sql || '')}</textarea>
-        </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" style="display: flex; justify-content: space-between; align-items: center;">
+              <span><strong>SQL Assertion Query (Editor Workbench)</strong></span>
+              <span style="font-size: 11px; font-weight: normal; color: var(--text-muted);">Tab key indents 2 spaces • Exact assertion logic preserved</span>
+            </label>
+            <div class="sql-editor-container" style="border: 1px solid var(--surface-border-strong); border-radius: 6px; overflow: hidden; background: #1E293B;">
+              <div class="sql-editor-toolbar" style="background: #0F172A; padding: 7px 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #334155; font-size: 11px; color: #94A3B8;">
+                <div class="sql-toolbar-left" style="display: flex; align-items: center; gap: 8px;">
+                  <span style="display: inline-flex; align-items: center; gap: 5px;">
+                    <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #10B981;"></span>
+                    Dialect: <strong id="rm-in-sql-dialect-badge" style="color: #38BDF8;">${this.escapeHtml(r.dialect || 'Snowflake')}</strong>
+                  </span>
+                  <span style="opacity: 0.4;">|</span>
+                  <span id="rm-in-sql-stats" style="color: #CBD5E1;">1 line</span>
+                </div>
+                <div class="sql-toolbar-right" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                  <select id="rm-in-sql-snippet-select" class="form-control form-control-sm" style="padding: 2px 6px; font-size: 11px; height: 26px; width: 175px; background: #1E293B; color: #E2E8F0; border-color: #475569;">
+                    <option value="">⚡ Insert Assertion Template...</option>
+                    <option value="null_check">Null / Missing Value Check</option>
+                    <option value="duplicate_check">Duplicate Key Check</option>
+                    <option value="range_check">Boundary & Range Check</option>
+                    <option value="referential_check">Foreign Key Orphan Check</option>
+                    <option value="date_freshness_check">Date & Freshness Lag Check</option>
+                    <option value="regex_format_check">Pattern / Regex Format Check</option>
+                  </select>
+                  <button type="button" class="btn btn-outline btn-sm" id="btn-format-rm-sql" style="padding: 2px 8px; font-size: 11px; height: 26px;" title="Beautify Trino / ANSI SQL keywords">🎨 Format</button>
+                  <button type="button" class="btn btn-outline btn-sm" id="btn-toggle-rm-syntax" style="padding: 2px 8px; font-size: 11px; height: 26px;" title="Toggle syntax-highlighted preview">👁️ Syntax</button>
+                  <button type="button" class="btn btn-outline btn-sm" id="btn-copy-rm-sql" style="padding: 2px 8px; font-size: 11px; height: 26px;" title="Copy query to clipboard">📋 Copy</button>
+                  <button type="button" class="btn btn-outline btn-sm" id="btn-clear-rm-sql" style="padding: 2px 8px; font-size: 11px; height: 26px; color: #EF4444;" title="Clear editor content">🧹 Clear</button>
+                </div>
+              </div>
+              <div class="sql-editor-body" style="position: relative; display: flex; min-height: 180px; max-height: 280px; overflow: auto; background: #0F172A; font-family: 'Consolas', 'Fira Code', 'Courier New', monospace; font-size: 12.5px; line-height: 1.6;">
+                <div id="rm-in-sql-lines" class="sql-line-numbers" style="padding: 10px 8px; background: #090D16; color: #64748B; text-align: right; user-select: none; border-right: 1px solid #1E293B; min-width: 40px; white-space: pre-line; font-size: 12px;">1</div>
+                <textarea id="rm-in-sql" class="sql-input-area" spellcheck="false" style="flex: 1; padding: 10px 12px; background: transparent; color: #F8FAFC; border: none; outline: none; font-family: inherit; font-size: inherit; line-height: inherit; resize: none; white-space: pre; overflow-wrap: normal; overflow-x: auto;" placeholder="-- Enter SQL validation assertion here...&#10;-- Should return 0 defect rows when data quality criteria pass&#10;SELECT *&#10;FROM target_table&#10;WHERE column_name IS NULL;">${this.escapeHtml(r.sql || '')}</textarea>
+              </div>
+              <div id="rm-in-sql-preview" class="sql-syntax-preview" style="max-height: 220px; font-size: 12px; padding: 10px 14px;"></div>
+            </div>
+          </div>
 
         <div class="grid-cols-2">
           <div class="form-group">
@@ -6567,7 +6617,22 @@ WHERE order_id IS NULL
           this.updateRulesTable();
           this.showToast('Validation rule saved', 'success');
         }}
-      ]);
+      ], { size: 'lg' });
+
+      // Initialize the modal SQL Editor controls
+      this.initModalSqlEditorControls({
+        textareaId: 'rm-in-sql',
+        linesId: 'rm-in-sql-lines',
+        statsId: 'rm-in-sql-stats',
+        dialectSelectId: 'rm-in-dialect',
+        dialectBadgeId: 'rm-in-sql-dialect-badge',
+        formatBtnId: 'btn-format-rm-sql',
+        syntaxBtnId: 'btn-toggle-rm-syntax',
+        copyBtnId: 'btn-copy-rm-sql',
+        clearBtnId: 'btn-clear-rm-sql',
+        previewId: 'rm-in-sql-preview',
+        snippetSelectId: 'rm-in-sql-snippet-select'
+      });
     },
 
     showRulePickerModal() {
@@ -6613,62 +6678,328 @@ WHERE order_id IS NULL
       ]);
     },
 
-    showAddCustomRuleModal() {
-      this.openModal('Add Custom Rule to Document', `
-        <div class="form-group">
-          <label class="form-label required">Rule Name</label>
-          <input type="text" id="custom-rule-name" class="form-control" placeholder="e.g. Null Check on Account Created At">
-        </div>
-        <div class="grid-cols-2">
-          <div class="form-group">
-            <label class="form-label">Dimension</label>
-            <select id="custom-rule-dim" class="form-control">
-              <option value="Completeness">Completeness</option>
-              <option value="Uniqueness">Uniqueness</option>
-              <option value="Validity">Validity</option>
-              <option value="Accuracy">Accuracy</option>
-              <option value="Consistency">Consistency</option>
-              <option value="Freshness">Freshness</option>
-            </select>
+    showAddCustomRuleModal(ruleToEdit = null, ruleIndex = null) {
+      const isEdit = ruleToEdit !== null && ruleIndex !== null;
+      const initialRule = ruleToEdit || {
+        id: 'RULE-' + Math.floor(1000 + Math.random() * 9000),
+        name: '',
+        dimension: 'Completeness',
+        severity: 'High',
+        dialect: (this.currentDoc && this.currentDoc.sqlDialect) || 'Snowflake',
+        description: '',
+        sql: '',
+        expectedResult: '0 defect rows returned (100% Pass)',
+        threshold: '0'
+      };
+
+      const modalTitle = isEdit ? `Edit Custom Rule: ${initialRule.name || initialRule.id}` : 'Add Custom Rule to Document';
+
+      const modalHtml = `
+        <div style="display: flex; flex-direction: column; gap: 14px;">
+          <div class="grid-cols-2">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label required">Rule Name / Assertion Target</label>
+              <input type="text" id="custom-rule-name" class="form-control" value="${this.escapeHtml(initialRule.name || '')}" placeholder="e.g. Account Balance Not Negative & Non-Null">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label">Quality Dimension</label>
+              <select id="custom-rule-dim" class="form-control">
+                ${['Completeness', 'Uniqueness', 'Validity', 'Accuracy', 'Consistency', 'Freshness', 'Timeliness', 'Referential integrity', 'Reconciliation'].map(d => `
+                  <option value="${d}" ${initialRule.dimension === d ? 'selected' : ''}>${d}</option>
+                `).join('')}
+              </select>
+            </div>
           </div>
-          <div class="form-group">
-            <label class="form-label">Severity</label>
-            <select id="custom-rule-sev" class="form-control">
-              <option value="Critical">Critical</option>
-              <option value="High" selected>High</option>
-              <option value="Medium">Medium</option>
-              <option value="Low">Low</option>
-            </select>
+
+          <div class="grid-cols-3">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label">Severity Classification</label>
+              <select id="custom-rule-sev" class="form-control">
+                ${['Critical', 'High', 'Medium', 'Low'].map(s => `
+                  <option value="${s}" ${initialRule.severity === s ? 'selected' : ''}>${s}</option>
+                `).join('')}
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label">SQL Dialect</label>
+              <select id="custom-rule-dialect" class="form-control">
+                ${['Snowflake', 'Trino', 'PostgreSQL', 'MySQL', 'BigQuery', 'SQL Server', 'ANSI SQL'].map(dia => `
+                  <option value="${dia}" ${initialRule.dialect === dia ? 'selected' : ''}>${dia}</option>
+                `).join('')}
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label">Tolerance Threshold</label>
+              <input type="text" id="custom-rule-thresh" class="form-control" value="${this.escapeHtml(initialRule.threshold || '0')}" placeholder="e.g. 0 or <= 0.05%">
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" style="display: flex; justify-content: space-between; align-items: center;">
+              <span><strong>SQL Assertion Query (Editor Workbench)</strong></span>
+              <span style="font-size: 11px; font-weight: normal; color: var(--text-muted);">Tab key indents 2 spaces • Exact assertion logic preserved</span>
+            </label>
+            <div class="sql-editor-container" style="border: 1px solid var(--surface-border-strong); border-radius: 6px; overflow: hidden; background: #1E293B;">
+              <div class="sql-editor-toolbar" style="background: #0F172A; padding: 7px 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #334155; font-size: 11px; color: #94A3B8;">
+                <div class="sql-toolbar-left" style="display: flex; align-items: center; gap: 8px;">
+                  <span style="display: inline-flex; align-items: center; gap: 5px;">
+                    <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #10B981;"></span>
+                    Dialect: <strong id="custom-rule-sql-dialect-badge" style="color: #38BDF8;">${this.escapeHtml(initialRule.dialect || 'Snowflake')}</strong>
+                  </span>
+                  <span style="opacity: 0.4;">|</span>
+                  <span id="custom-rule-sql-stats" style="color: #CBD5E1;">1 line</span>
+                </div>
+                <div class="sql-toolbar-right" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                  <select id="custom-rule-sql-snippet-select" class="form-control form-control-sm" style="padding: 2px 6px; font-size: 11px; height: 26px; width: 175px; background: #1E293B; color: #E2E8F0; border-color: #475569;">
+                    <option value="">⚡ Insert Assertion Template...</option>
+                    <option value="null_check">Null / Missing Value Check</option>
+                    <option value="duplicate_check">Duplicate Key Check</option>
+                    <option value="range_check">Boundary & Range Check</option>
+                    <option value="referential_check">Foreign Key Orphan Check</option>
+                    <option value="date_freshness_check">Date & Freshness Lag Check</option>
+                    <option value="regex_format_check">Pattern / Regex Format Check</option>
+                  </select>
+                  <button type="button" class="btn btn-outline btn-sm" id="btn-format-custom-rule-sql" style="padding: 2px 8px; font-size: 11px; height: 26px;" title="Beautify Trino / ANSI SQL keywords">🎨 Format</button>
+                  <button type="button" class="btn btn-outline btn-sm" id="btn-toggle-custom-rule-syntax" style="padding: 2px 8px; font-size: 11px; height: 26px;" title="Toggle syntax-highlighted preview">👁️ Syntax</button>
+                  <button type="button" class="btn btn-outline btn-sm" id="btn-copy-custom-rule-sql" style="padding: 2px 8px; font-size: 11px; height: 26px;" title="Copy query to clipboard">📋 Copy</button>
+                  <button type="button" class="btn btn-outline btn-sm" id="btn-clear-custom-rule-sql" style="padding: 2px 8px; font-size: 11px; height: 26px; color: #EF4444;" title="Clear editor content">🧹 Clear</button>
+                </div>
+              </div>
+              <div class="sql-editor-body" style="position: relative; display: flex; min-height: 180px; max-height: 280px; overflow: auto; background: #0F172A; font-family: 'Consolas', 'Fira Code', 'Courier New', monospace; font-size: 12.5px; line-height: 1.6;">
+                <div id="custom-rule-sql-lines" class="sql-line-numbers" style="padding: 10px 8px; background: #090D16; color: #64748B; text-align: right; user-select: none; border-right: 1px solid #1E293B; min-width: 40px; white-space: pre-line; font-size: 12px;">1</div>
+                <textarea id="custom-rule-sql" class="sql-input-area" spellcheck="false" style="flex: 1; padding: 10px 12px; background: transparent; color: #F8FAFC; border: none; outline: none; font-family: inherit; font-size: inherit; line-height: inherit; resize: none; white-space: pre; overflow-wrap: normal; overflow-x: auto;" placeholder="-- Enter SQL validation assertion here...&#10;-- Should return 0 defect rows when data quality criteria pass&#10;SELECT *&#10;FROM target_table&#10;WHERE column_name IS NULL;">${this.escapeHtml(initialRule.sql || '')}</textarea>
+              </div>
+              <div id="custom-rule-sql-preview" class="sql-syntax-preview" style="max-height: 220px; font-size: 12px; padding: 10px 14px;"></div>
+            </div>
+          </div>
+
+          <div class="grid-cols-2">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label">Expected Result</label>
+              <input type="text" id="custom-rule-exp" class="form-control" value="${this.escapeHtml(initialRule.expectedResult || '0 defect rows returned (100% Pass)')}" placeholder="e.g. 0 rows returned">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label">Description / Business Context</label>
+              <input type="text" id="custom-rule-desc" class="form-control" value="${this.escapeHtml(initialRule.description || '')}" placeholder="e.g. Verifies data conformance and integrity criteria">
+            </div>
           </div>
         </div>
-        <div class="form-group">
-          <label class="form-label">SQL Query</label>
-          <textarea id="custom-rule-sql" class="form-control" rows="3" style="font-family: monospace;"></textarea>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Expected Result</label>
-          <input type="text" id="custom-rule-exp" class="form-control" value="0 rows">
-        </div>
-      `, [
+      `;
+
+      this.openModal(modalTitle, modalHtml, [
         { label: 'Cancel', class: 'btn-outline', action: () => this.closeModal() },
-        { label: 'Add Rule', class: 'btn-primary', action: () => {
-          const name = document.getElementById('custom-rule-name').value.trim();
-          if (!name) return alert('Name required');
-          const newRule = {
-            id: 'RULE-' + Math.floor(1000 + Math.random() * 9000),
-            name,
-            dimension: document.getElementById('custom-rule-dim').value,
-            severity: document.getElementById('custom-rule-sev').value,
-            sql: document.getElementById('custom-rule-sql').value.trim(),
-            expectedResult: document.getElementById('custom-rule-exp').value.trim(),
-            threshold: '0'
+        { 
+          label: isEdit ? 'Update Rule' : 'Add Rule to Document', 
+          class: 'btn-primary', 
+          action: () => {
+            const name = document.getElementById('custom-rule-name')?.value.trim();
+            if (!name) {
+              this.showToast('Rule Name is required', 'error');
+              return;
+            }
+
+            const sql = document.getElementById('custom-rule-sql')?.value.trim() || '';
+            const dimension = document.getElementById('custom-rule-dim')?.value || 'Completeness';
+            const severity = document.getElementById('custom-rule-sev')?.value || 'High';
+            const dialect = document.getElementById('custom-rule-dialect')?.value || 'Snowflake';
+            const threshold = document.getElementById('custom-rule-thresh')?.value.trim() || '0';
+            const expectedResult = document.getElementById('custom-rule-exp')?.value.trim() || '0 rows';
+            const description = document.getElementById('custom-rule-desc')?.value.trim() || '';
+
+            if (isEdit) {
+              this.currentDoc.rules[ruleIndex] = {
+                ...initialRule,
+                name,
+                dimension,
+                severity,
+                dialect,
+                sql,
+                threshold,
+                expectedResult,
+                description
+              };
+              this.showToast(`Rule "${name}" updated in document`, 'success');
+            } else {
+              const newRule = {
+                id: initialRule.id || ('RULE-' + Math.floor(1000 + Math.random() * 9000)),
+                name,
+                dimension,
+                severity,
+                dialect,
+                sql,
+                threshold,
+                expectedResult,
+                description
+              };
+              if (!Array.isArray(this.currentDoc.rules)) this.currentDoc.rules = [];
+              this.currentDoc.rules.push(newRule);
+              this.showToast('Custom rule added to document', 'success');
+            }
+
+            this.closeModal();
+            this.updateEditorRulesTable();
+          }
+        }
+      ], { size: 'lg' });
+
+      // Initialize the modal SQL Editor controls
+      this.initModalSqlEditorControls({
+        textareaId: 'custom-rule-sql',
+        linesId: 'custom-rule-sql-lines',
+        statsId: 'custom-rule-sql-stats',
+        dialectSelectId: 'custom-rule-dialect',
+        dialectBadgeId: 'custom-rule-sql-dialect-badge',
+        formatBtnId: 'btn-format-custom-rule-sql',
+        syntaxBtnId: 'btn-toggle-custom-rule-syntax',
+        copyBtnId: 'btn-copy-custom-rule-sql',
+        clearBtnId: 'btn-clear-custom-rule-sql',
+        previewId: 'custom-rule-sql-preview',
+        snippetSelectId: 'custom-rule-sql-snippet-select'
+      });
+    },
+
+    // Modal SQL Editor Interactive Controls Helper
+    initModalSqlEditorControls(cfg) {
+      const textarea = document.getElementById(cfg.textareaId);
+      const lineNumbers = document.getElementById(cfg.linesId);
+      const stats = document.getElementById(cfg.statsId);
+      const dialectSelect = document.getElementById(cfg.dialectSelectId);
+      const dialectBadge = document.getElementById(cfg.dialectBadgeId);
+      const formatBtn = document.getElementById(cfg.formatBtnId);
+      const syntaxBtn = document.getElementById(cfg.syntaxBtnId);
+      const copyBtn = document.getElementById(cfg.copyBtnId);
+      const clearBtn = document.getElementById(cfg.clearBtnId);
+      const preview = document.getElementById(cfg.previewId);
+      const snippetSelect = document.getElementById(cfg.snippetSelectId);
+
+      if (!textarea) return;
+
+      const updateLinesAndStats = () => {
+        const val = textarea.value || '';
+        const lines = (val.match(/\n/g) || []).length + 1;
+        let numStr = '';
+        for (let i = 1; i <= lines; i++) numStr += i + '\n';
+        if (lineNumbers) lineNumbers.textContent = numStr;
+        if (stats) {
+          stats.textContent = `${lines} line${lines > 1 ? 's' : ''} • ${val.length} char${val.length === 1 ? '' : 's'}`;
+        }
+        if (preview && preview.classList.contains('active')) {
+          preview.innerHTML = this.highlightTrinoSql(val);
+        }
+      };
+
+      // Synchronize scrolling between editor and line numbers
+      textarea.addEventListener('scroll', () => {
+        if (lineNumbers) lineNumbers.scrollTop = textarea.scrollTop;
+        if (preview && preview.classList.contains('active')) preview.scrollTop = textarea.scrollTop;
+      });
+
+      // Update on input, keyup, change
+      textarea.addEventListener('input', updateLinesAndStats);
+      textarea.addEventListener('keyup', updateLinesAndStats);
+
+      // Support Tab key indentation (2 spaces) without losing focus
+      textarea.addEventListener('keydown', (e) => {
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          const start = textarea.selectionStart;
+          const end = textarea.selectionEnd;
+          const val = textarea.value;
+          textarea.value = val.substring(0, start) + '  ' + val.substring(end);
+          textarea.selectionStart = textarea.selectionEnd = start + 2;
+          updateLinesAndStats();
+        }
+      });
+
+      // Dialect sync
+      if (dialectSelect && dialectBadge) {
+        dialectSelect.addEventListener('change', (e) => {
+          dialectBadge.textContent = e.target.value;
+        });
+      }
+
+      // Format SQL
+      if (formatBtn) {
+        formatBtn.onclick = () => {
+          if (!textarea.value.trim()) return;
+          textarea.value = this.beautifyTrinoSql(textarea.value);
+          updateLinesAndStats();
+          this.showToast('SQL formatted & keywords capitalized', 'success');
+        };
+      }
+
+      // Toggle Syntax Preview
+      if (syntaxBtn && preview) {
+        syntaxBtn.onclick = () => {
+          if (preview.classList.contains('active')) {
+            preview.classList.remove('active');
+            syntaxBtn.classList.remove('btn-primary');
+            syntaxBtn.classList.add('btn-outline');
+          } else {
+            preview.innerHTML = this.highlightTrinoSql(textarea.value);
+            preview.classList.add('active');
+            syntaxBtn.classList.remove('btn-outline');
+            syntaxBtn.classList.add('btn-primary');
+          }
+        };
+      }
+
+      // Copy SQL
+      if (copyBtn) {
+        copyBtn.onclick = () => {
+          const text = textarea.value || '';
+          if (!text) {
+            this.showToast('SQL editor is empty', 'warning');
+            return;
+          }
+          navigator.clipboard.writeText(text).then(() => {
+            this.showToast('SQL assertion query copied to clipboard', 'success');
+          });
+        };
+      }
+
+      // Clear SQL
+      if (clearBtn) {
+        clearBtn.onclick = () => {
+          if (!textarea.value) return;
+          if (confirm('Clear SQL query from editor?')) {
+            textarea.value = '';
+            updateLinesAndStats();
+            this.showToast('SQL editor cleared', 'info');
+          }
+        };
+      }
+
+      // Snippet templates
+      if (snippetSelect) {
+        snippetSelect.addEventListener('change', (e) => {
+          const type = e.target.value;
+          if (!type) return;
+
+          const snippets = {
+            null_check: `-- Completeness / Null Check Assertion\nSELECT\n  record_id,\n  column_name,\n  CURRENT_TIMESTAMP AS audit_timestamp\nFROM target_table\nWHERE column_name IS NULL;`,
+            duplicate_check: `-- Uniqueness / Primary Key Duplicate Assertion\nSELECT\n  primary_key_column,\n  COUNT(*) AS duplicate_occurrences\nFROM target_table\nGROUP BY primary_key_column\nHAVING COUNT(*) > 1;`,
+            range_check: `-- Validity / Range & Boundary Assertion\nSELECT\n  transaction_id,\n  transaction_amount\nFROM fact_orders\nWHERE transaction_amount < 0.00\n   OR transaction_amount > 100000.00;`,
+            referential_check: `-- Referential Integrity / Orphan Record Assertion\nSELECT\n  child.child_id,\n  child.parent_fk\nFROM child_table child\nLEFT JOIN parent_table parent\n  ON child.parent_fk = parent.id\nWHERE parent.id IS NULL;`,
+            date_freshness_check: `-- Freshness / Ingestion SLA Assertion\nSELECT\n  MAX(event_timestamp) AS latest_record_time,\n  DATE_DIFF('minute', MAX(event_timestamp), CURRENT_TIMESTAMP) AS lag_minutes\nFROM fact_stream_events\nHAVING DATE_DIFF('minute', MAX(event_timestamp), CURRENT_TIMESTAMP) > 60;`,
+            regex_format_check: `-- Pattern / Format Regex Validity Assertion\nSELECT\n  user_id,\n  email_address\nFROM dim_users\nWHERE NOT REGEXP_LIKE(email_address, '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$');`
           };
-          this.currentDoc.rules.push(newRule);
-          this.closeModal();
-          this.updateEditorRulesTable();
-          this.showToast('Custom rule added', 'success');
-        }}
-      ]);
+
+          if (snippets[type]) {
+            if (textarea.value.trim() && !confirm('Replace current editor content with template?')) {
+              e.target.value = '';
+              return;
+            }
+            textarea.value = snippets[type];
+            updateLinesAndStats();
+            this.showToast('Assertion template loaded', 'success');
+          }
+          e.target.value = '';
+        });
+      }
+
+      // Initial line numbers calculation
+      updateLinesAndStats();
     },
 
     // CSV & Excel Rule Export & Import (Formula injection protected)
@@ -12781,7 +13112,14 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
     // 22. MODAL & TOAST UTILITIES
     // ====================================================================
 
-    openModal(title, contentHtml, buttons = []) {
+    openModal(title, contentHtml, buttons = [], options = {}) {
+      const dialog = document.getElementById('modal-dialog-box');
+      if (dialog) {
+        dialog.classList.remove('modal-lg', 'modal-xl');
+        if (options && options.size) {
+          dialog.classList.add(`modal-${options.size}`);
+        }
+      }
       document.getElementById('modal-title-text').textContent = title;
       document.getElementById('modal-body-content').innerHTML = contentHtml;
 
@@ -12801,7 +13139,10 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
     },
 
     closeModal() {
-      document.getElementById('app-modal').classList.remove('active');
+      const modal = document.getElementById('app-modal');
+      if (modal) modal.classList.remove('active');
+      const dialog = document.getElementById('modal-dialog-box');
+      if (dialog) dialog.classList.remove('modal-lg', 'modal-xl');
     },
 
     showToast(message, type = 'info') {
