@@ -2596,8 +2596,9 @@
                     <button class="btn btn-outline btn-sm btn-doc-action-edit" data-id="${doc.id}" title="Edit Document">✏️ Edit</button>
                     <button class="btn btn-outline btn-sm btn-doc-action-share" data-id="${doc.id}" title="Share to Slack / Teams / Email">💬 Share</button>
                     <button class="btn btn-outline btn-sm btn-doc-action-clone" data-id="${doc.id}" title="Clone Document">📑 Clone</button>
-                    <button class="btn btn-outline btn-sm btn-doc-action-pdf" data-id="${doc.id}" title="Generate PDF Report">📄 PDF</button>
-                    <button class="btn btn-outline btn-sm btn-doc-action-dldoc" data-id="${doc.id}" title="Download complete .dldoc file (with screenshots)">📦 .dldoc</button>
+                    <button class="btn btn-outline btn-sm btn-doc-action-pdf" data-id="${doc.id}" title="Generate PDF Report (Only)">📄 PDF</button>
+                    <button class="btn btn-outline btn-sm btn-doc-action-dldoc" data-id="${doc.id}" title="Generate .dldoc file (Only)">📦 .dldoc</button>
+                    <button class="btn btn-outline btn-sm btn-doc-action-both" data-id="${doc.id}" title="Generate Both (PDF + .dldoc files)">📦 Both</button>
                     <button class="btn btn-outline btn-sm btn-doc-action-export" data-id="${doc.id}" title="Export JSON">💾</button>
                     <button class="btn btn-danger btn-sm btn-doc-action-delete" data-id="${doc.id}" title="Delete Document">🗑️</button>
                   </td>
@@ -2643,7 +2644,14 @@
       container.querySelectorAll('.btn-doc-action-dldoc, .btn-doc-action-dqdoc').forEach(btn => {
         btn.addEventListener('click', () => {
           const doc = this.documents.find(d => d.id === btn.dataset.id);
-          if (doc) this.exportDocumentDataFile(doc);
+          if (doc) this.generateDldocOnly(doc);
+        });
+      });
+
+      container.querySelectorAll('.btn-doc-action-both').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const doc = this.documents.find(d => d.id === btn.dataset.id);
+          if (doc) this.generateDocumentDualFiles(doc);
         });
       });
 
@@ -2830,9 +2838,9 @@
             <button class="btn btn-outline btn-sm" id="editor-btn-share-markdown" title="Export formatted Slack / Microsoft Teams / Email Markdown">💬 Share</button>
             <button class="btn btn-outline btn-sm" id="editor-btn-clone">📑 Clone</button>
             <button class="btn btn-outline btn-sm" id="editor-btn-snapshot">📌 New Version</button>
-            <button class="btn btn-outline btn-sm" id="editor-btn-export-dldoc" title="Download complete portable .dldoc file with all embedded screenshots">📦 Export .dldoc</button>
-            <button class="btn btn-secondary btn-sm" id="editor-btn-pdf-only" title="Generate and download official PDF Report only (without .dldoc file)">📄 Generate PDF (Only)</button>
-            <button class="btn btn-outline btn-sm" id="editor-btn-pdf" title="Generate both PDF Report and .dldoc data file">📦 Both (PDF + .dldoc)</button>
+            <button class="btn ${(this.config.pdf?.generationMode === 'dldoc_only' || this.config.pdf?.onlyGenerateDldoc) ? 'btn-secondary' : 'btn-outline'} btn-sm" id="editor-btn-dldoc-only" title="Generate and download portable .dldoc data file only (without PDF report)">📦 Generate .dldoc (Only)</button>
+            <button class="btn ${(this.config.pdf?.generationMode !== 'dldoc_only' && !this.config.pdf?.onlyGenerateDldoc && this.config.pdf?.generationMode !== 'both') ? 'btn-secondary' : 'btn-outline'} btn-sm" id="editor-btn-pdf-only" title="Generate and download official PDF Report only (without .dldoc file)">📄 Generate PDF (Only)</button>
+            <button class="btn ${this.config.pdf?.generationMode === 'both' ? 'btn-secondary' : 'btn-outline'} btn-sm" id="editor-btn-pdf" title="Generate both PDF Report and .dldoc data file">📦 Both (PDF + .dldoc)</button>
             ${(this.documents.some(d => d.id === doc.id) || doc._originalId) ? `<button class="btn btn-danger btn-sm" id="editor-btn-delete" title="Permanently delete this document">🗑️ Delete</button>` : ''}
             <button class="btn btn-primary btn-sm" id="editor-btn-save">💾 Save Document (Ctrl+S)</button>
           </div>
@@ -3775,9 +3783,8 @@
         if (this.currentDoc.id) this.showCloneModal(this.currentDoc.id);
       });
       document.getElementById('editor-btn-snapshot').addEventListener('click', () => this.promptCreateVersionSnapshot());
-      (document.getElementById('editor-btn-export-dldoc') || document.getElementById('editor-btn-export-dqdoc'))?.addEventListener('click', () => {
-        this.syncDocFromForm();
-        this.exportDocumentDataFile(this.currentDoc);
+      (document.getElementById('editor-btn-dldoc-only') || document.getElementById('editor-btn-export-dldoc') || document.getElementById('editor-btn-export-dqdoc'))?.addEventListener('click', () => {
+        this.generateDldocOnly(this.currentDoc);
       });
 
       document.getElementById('editor-btn-pdf-only')?.addEventListener('click', () => {
@@ -10321,7 +10328,13 @@ WHERE order_id IS NULL
                 <label><input type="checkbox" id="set-chk-pdf-rev" ${p.includeRevisionHistory !== false ? 'checked' : ''}> Include Document Revision History in PDF</label>
               </div>
               <div class="form-group">
-                <label><input type="checkbox" id="set-chk-pdf-only" ${p.onlyGeneratePdf !== false ? 'checked' : ''}> Default to PDF-only export (skip automatic .dldoc download)</label>
+                <label class="form-label">Default Document Generation Action</label>
+                <select id="set-sel-generation-mode" class="form-control">
+                  <option value="dldoc_only" ${(p.generationMode === 'dldoc_only' || p.onlyGenerateDldoc) ? 'selected' : ''}>📦 Generate .dldoc File (Only)</option>
+                  <option value="pdf_only" ${(p.generationMode === 'pdf_only' || (p.onlyGeneratePdf && p.generationMode !== 'dldoc_only' && !p.onlyGenerateDldoc && p.generationMode !== 'both')) ? 'selected' : ''}>📄 Generate PDF Report (Only)</option>
+                  <option value="both" ${(p.generationMode === 'both' || (!p.generationMode && !p.onlyGeneratePdf && !p.onlyGenerateDldoc)) ? 'selected' : ''}>📦 Both Files (PDF + .dldoc)</option>
+                </select>
+                <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px;">Choose the primary generation style highlighted in the Document Editor and Document Library.</span>
               </div>
               <div class="form-group">
                 <label><input type="checkbox" id="set-chk-allow-incomplete-pub" ${this.config.allowPublicationWithMissingFields !== false ? 'checked' : ''}> Allow publication & approval with missing/incomplete records</label>
@@ -10465,8 +10478,12 @@ WHERE order_id IS NULL
         if (selPdfOrient) this.config.pdf.orientation = selPdfOrient.value;
         const chkPdfRev = document.getElementById('set-chk-pdf-rev');
         if (chkPdfRev) this.config.pdf.includeRevisionHistory = chkPdfRev.checked;
-        const chkPdfOnly = document.getElementById('set-chk-pdf-only');
-        if (chkPdfOnly) this.config.pdf.onlyGeneratePdf = chkPdfOnly.checked;
+        const selGenMode = document.getElementById('set-sel-generation-mode');
+        if (selGenMode) {
+          this.config.pdf.generationMode = selGenMode.value;
+          this.config.pdf.onlyGenerateDldoc = (selGenMode.value === 'dldoc_only');
+          this.config.pdf.onlyGeneratePdf = (selGenMode.value === 'pdf_only');
+        }
         const chkAllowIncPub = document.getElementById('set-chk-allow-incomplete-pub');
         if (chkAllowIncPub) this.config.allowPublicationWithMissingFields = chkAllowIncPub.checked;
 
@@ -11540,6 +11557,14 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
       });
 
       return html;
+    },
+
+    generateDldocOnly(doc) {
+      if (!doc) doc = this.currentDoc;
+      if (!doc) return;
+      this.syncDocFromForm();
+      this.exportDocumentDataFile(doc);
+      this.showToast(`Generated portable .dldoc file (only)`, 'success');
     },
 
     generateDocumentDualFiles(doc) {
