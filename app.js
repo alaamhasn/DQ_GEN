@@ -12313,6 +12313,122 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
         }
       };
 
+      // Reusable Dark SQL Code Editor Workbench Block for PDF
+      const drawSqlEditorBlock = (qTitle, qDialect, queryStr, badgeRgb = secondaryRgb) => {
+        if (!queryStr || !String(queryStr).trim()) return;
+        const rawLines = String(queryStr).replace(/\r\n/g, '\n').split('\n');
+        const headerBarHeight = 18;
+
+        if (y + headerBarHeight + 30 > pageHeight - 40) {
+          pdf.addPage();
+          y = margin + 25;
+        }
+
+        // Terminal/IDE Chrome Header Bar
+        pdf.setFillColor(30, 41, 59);
+        pdf.roundedRect(margin, y, contentWidth, headerBarHeight, 3, 3, 'F');
+
+        // macOS/Linux style window dots
+        pdf.setFillColor(239, 68, 68); pdf.circle(margin + 10, y + 9, 2.5, 'F');
+        pdf.setFillColor(245, 158, 11); pdf.circle(margin + 17, y + 9, 2.5, 'F');
+        pdf.setFillColor(34, 197, 94); pdf.circle(margin + 24, y + 9, 2.5, 'F');
+
+        // Dialect pill inside header
+        pdf.setFillColor(badgeRgb[0], badgeRgb[1], badgeRgb[2]);
+        pdf.roundedRect(margin + 30, y + 2.5, 65, 13, 2, 2, 'F');
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(7);
+        pdf.setTextColor(255, 255, 255);
+        pdf.text(String(qDialect || 'SQL').slice(0, 14), margin + 34, y + 11.5);
+
+        // Query Title
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(8);
+        pdf.setTextColor(248, 250, 252);
+        const titleSnippet = pdf.splitTextToSize(qTitle, contentWidth - 190)[0] || '';
+        pdf.text(titleSnippet, margin + 102, y + 12);
+
+        // Total line count indicator
+        const linesLabel = `${rawLines.length} line${rawLines.length === 1 ? '' : 's'}`;
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(7);
+        pdf.setTextColor(148, 163, 184);
+        pdf.text(linesLabel, pageWidth - margin - pdf.getTextWidth(linesLabel) - 8, y + 12);
+
+        y += headerBarHeight;
+
+        // Multi-page code line wrapping with line numbers gutter
+        const gutterW = 26;
+        const codeWidth = contentWidth - gutterW - 12;
+        const codeLineH = 10.5;
+
+        const displayLines = [];
+        rawLines.forEach((lStr, lIdx) => {
+          const wrapped = pdf.splitTextToSize(lStr || ' ', codeWidth);
+          if (!wrapped || wrapped.length === 0) {
+            displayLines.push({ num: lIdx + 1, text: '', isCont: false });
+          } else {
+            wrapped.forEach((wStr, wIdx) => {
+              displayLines.push({
+                num: wIdx === 0 ? (lIdx + 1) : '',
+                text: wStr,
+                isCont: wIdx > 0
+              });
+            });
+          }
+        });
+
+        let linePtr = 0;
+        while (linePtr < displayLines.length) {
+          if (y + codeLineH + 16 > pageHeight - 35) {
+            pdf.addPage();
+            y = margin + 25;
+            pdf.setFillColor(30, 41, 59);
+            pdf.rect(margin, y, contentWidth, 13, 'F');
+            pdf.setFont('helvetica', 'italic');
+            pdf.setFontSize(7);
+            pdf.setTextColor(148, 163, 184);
+            pdf.text(`${qTitle} (continued...)`, margin + 8, y + 9.5);
+            y += 13;
+          }
+
+          const availH = (pageHeight - 35) - y;
+          const linesToDraw = Math.min(Math.floor(availH / codeLineH), displayLines.length - linePtr);
+          const chunkH = linesToDraw * codeLineH + 4;
+
+          // Dark code editor body background
+          pdf.setFillColor(15, 23, 42);
+          pdf.rect(margin, y, contentWidth, chunkH, 'F');
+
+          // Gutter divider
+          pdf.setDrawColor(51, 65, 85);
+          pdf.line(margin + gutterW, y, margin + gutterW, y + chunkH);
+
+          for (let i = 0; i < linesToDraw; i++) {
+            const curItem = displayLines[linePtr + i];
+            const curY = y + (i * codeLineH) + 8.5;
+
+            if (curItem.num) {
+              pdf.setFont('courier', 'normal');
+              pdf.setFontSize(6.5);
+              pdf.setTextColor(100, 116, 139);
+              const nStr = String(curItem.num);
+              pdf.text(nStr, margin + gutterW - pdf.getTextWidth(nStr) - 5, curY);
+            }
+
+            pdf.setFont('courier', 'normal');
+            pdf.setFontSize(7.5);
+            pdf.setTextColor(248, 250, 252);
+            pdf.text(curItem.text, margin + gutterW + 6, curY);
+          }
+
+          y += chunkH + 2;
+          linePtr += linesToDraw;
+        }
+
+        y += 16;
+      };
+
       // SECTION 1: Data Architecture & System Specification
       renderSectionHeader('1', 'Data Architecture & System Specification', 'System Catalogs, Schemas & Lineage Mappings');
 
@@ -12587,117 +12703,7 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
         }
 
         if (qObj.query) {
-          const rawLines = qObj.query.replace(/\r\n/g, '\n').split('\n');
-          const headerBarHeight = 18;
-
-          if (y + headerBarHeight + 30 > pageHeight - 40) {
-            pdf.addPage();
-            y = margin + 25;
-          }
-
-          // Terminal/IDE Chrome Header Bar
-          pdf.setFillColor(30, 41, 59);
-          pdf.roundedRect(margin, y, contentWidth, headerBarHeight, 3, 3, 'F');
-
-          // macOS/Linux style window dots
-          pdf.setFillColor(239, 68, 68); pdf.circle(margin + 10, y + 9, 2.5, 'F');
-          pdf.setFillColor(245, 158, 11); pdf.circle(margin + 17, y + 9, 2.5, 'F');
-          pdf.setFillColor(34, 197, 94); pdf.circle(margin + 24, y + 9, 2.5, 'F');
-
-          // Dialect pill inside header
-          pdf.setFillColor(secondaryRgb[0], secondaryRgb[1], secondaryRgb[2]);
-          pdf.roundedRect(margin + 30, y + 2.5, 65, 13, 2, 2, 'F');
-          pdf.setFont('helvetica', 'bold');
-          pdf.setFontSize(7);
-          pdf.setTextColor(255, 255, 255);
-          pdf.text(qDialect.slice(0, 14), margin + 34, y + 11.5);
-
-          // Query Title
-          pdf.setFont('helvetica', 'bold');
-          pdf.setFontSize(8);
-          pdf.setTextColor(248, 250, 252);
-          const titleSnippet = pdf.splitTextToSize(qTitle, contentWidth - 190)[0] || '';
-          pdf.text(titleSnippet, margin + 102, y + 12);
-
-          // Total line count indicator
-          const linesLabel = `${rawLines.length} lines`;
-          pdf.setFont('helvetica', 'normal');
-          pdf.setFontSize(7);
-          pdf.setTextColor(148, 163, 184);
-          pdf.text(linesLabel, pageWidth - margin - pdf.getTextWidth(linesLabel) - 8, y + 12);
-
-          y += headerBarHeight;
-
-          // Multi-page code line wrapping with line numbers gutter
-          const gutterW = 26;
-          const codeWidth = contentWidth - gutterW - 12;
-          const codeLineH = 10.5;
-
-          const displayLines = [];
-          rawLines.forEach((lStr, lIdx) => {
-            const wrapped = pdf.splitTextToSize(lStr || ' ', codeWidth);
-            if (!wrapped || wrapped.length === 0) {
-              displayLines.push({ num: lIdx + 1, text: '', isCont: false });
-            } else {
-              wrapped.forEach((wStr, wIdx) => {
-                displayLines.push({
-                  num: wIdx === 0 ? (lIdx + 1) : '',
-                  text: wStr,
-                  isCont: wIdx > 0
-                });
-              });
-            }
-          });
-
-          let linePtr = 0;
-          while (linePtr < displayLines.length) {
-            if (y + codeLineH + 16 > pageHeight - 35) {
-              pdf.addPage();
-              y = margin + 25;
-              pdf.setFillColor(30, 41, 59);
-              pdf.rect(margin, y, contentWidth, 13, 'F');
-              pdf.setFont('helvetica', 'italic');
-              pdf.setFontSize(7);
-              pdf.setTextColor(148, 163, 184);
-              pdf.text(`${qTitle} (continued...)`, margin + 8, y + 9.5);
-              y += 13;
-            }
-
-            const availH = (pageHeight - 35) - y;
-            const linesToDraw = Math.min(Math.floor(availH / codeLineH), displayLines.length - linePtr);
-            const chunkH = linesToDraw * codeLineH + 4;
-
-            // Dark code editor body background
-            pdf.setFillColor(15, 23, 42);
-            pdf.rect(margin, y, contentWidth, chunkH, 'F');
-
-            // Gutter divider
-            pdf.setDrawColor(51, 65, 85);
-            pdf.line(margin + gutterW, y, margin + gutterW, y + chunkH);
-
-            for (let i = 0; i < linesToDraw; i++) {
-              const curItem = displayLines[linePtr + i];
-              const curY = y + (i * codeLineH) + 8.5;
-
-              if (curItem.num) {
-                pdf.setFont('courier', 'normal');
-                pdf.setFontSize(6.5);
-                pdf.setTextColor(100, 116, 139);
-                const nStr = String(curItem.num);
-                pdf.text(nStr, margin + gutterW - pdf.getTextWidth(nStr) - 5, curY);
-              }
-
-              pdf.setFont('courier', 'normal');
-              pdf.setFontSize(7.5);
-              pdf.setTextColor(248, 250, 252);
-              pdf.text(curItem.text, margin + gutterW + 6, curY);
-            }
-
-            y += chunkH + 2;
-            linePtr += linesToDraw;
-          }
-
-          y += 20;
+          drawSqlEditorBlock(qTitle, qDialect, qObj.query, secondaryRgb);
         }
 
         // Screenshots linked under this query
@@ -12772,38 +12778,33 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
           }
         }
 
-        const execData = executions.map(e => {
-          const rawEv = (e.evidence && String(e.evidence).trim()) || 'Log artifact verified';
-          const lines = rawEv.split('\n');
-          const formattedEv = lines.length > 4 ? lines.slice(0, 4).join('\n') + '\n...' : rawEv;
-          return [
-            new Date(e.timestamp).toLocaleDateString(),
-            e.ruleId || 'RULE-DQ-001',
-            e.environment || 'PROD',
-            e.status || 'PASS',
-            (e.totalRecords || 0).toLocaleString(),
-            (e.failedRecords || 0).toLocaleString(),
-            e.failurePercentage ? e.failurePercentage + '%' : '0.0%',
-            formattedEv
-          ];
-        });
+        const execData = executions.map(e => [
+          new Date(e.timestamp).toLocaleDateString(),
+          e.ruleId || 'RULE-DQ-001',
+          e.environment || 'PROD',
+          e.status || 'PASS',
+          (e.totalRecords || 0).toLocaleString(),
+          (e.passedRecords || 0).toLocaleString(),
+          (e.failedRecords || 0).toLocaleString(),
+          e.failurePercentage ? e.failurePercentage + '%' : '0.0%'
+        ]);
 
         pdf.autoTable({
           startY: y,
-          head: [['Audit Date', 'Rule ID', 'Env', 'Audit Status', 'Total Records', 'Defects', 'Defect %', 'Execution Evidence / Query']],
+          head: [['Audit Date', 'Rule ID', 'Environment', 'Audit Status', 'Total Records', 'Passed Records', 'Defects', 'Defect %']],
           body: execData,
           theme: 'striped',
           headStyles: { fillColor: primaryRgb, textColor: [255, 255, 255], fontSize: 7.8, fontStyle: 'bold' },
-          styles: { fontSize: 7.2, cellPadding: 4, textColor: bodySlate },
+          styles: { fontSize: 7.5, cellPadding: 4, textColor: bodySlate },
           columnStyles: {
-            0: { cellWidth: 50 },
-            1: { cellWidth: 65, fontStyle: 'bold' },
-            2: { cellWidth: 32 },
-            3: { cellWidth: 48, halign: 'center' },
-            4: { cellWidth: 52, halign: 'right' },
-            5: { cellWidth: 40, halign: 'right' },
-            6: { cellWidth: 42, halign: 'right' },
-            7: { font: 'courier', fontSize: 6.5 }
+            0: { cellWidth: 55 },
+            1: { cellWidth: 70, fontStyle: 'bold' },
+            2: { cellWidth: 40 },
+            3: { cellWidth: 55, halign: 'center' },
+            4: { halign: 'right' },
+            5: { halign: 'right' },
+            6: { halign: 'right' },
+            7: { halign: 'right' }
           },
           alternateRowStyles: { fillColor: cardBgSlate },
           didParseCell: (data) => {
@@ -12826,35 +12827,23 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
           },
           margin: { left: margin, right: margin }
         });
-        y = pdf.lastAutoTable.finalY + 22;
-      } else {
-        const placeholderExecRows = [
-          ['TEST-01 (Baseline)', doc.title || 'Target Table', 'READY / PENDING', 'Target Entity Scope', '0 Defect Records (Target)', doc.executionFrequency || 'Daily at 02:00 UTC', 'Automated Scheduled Runner']
-        ];
-        pdf.autoTable({
-          startY: y,
-          head: [['Test Run ID', 'Test Target Entity', 'Execution Status', 'Audited Scope', 'Defect Tolerance', 'Schedule Cadence', 'Execution Engine']],
-          body: placeholderExecRows,
-          theme: 'striped',
-          headStyles: { fillColor: primaryRgb, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
-          styles: { fontSize: 7.5, cellPadding: 4.5, textColor: bodySlate },
-          alternateRowStyles: { fillColor: cardBgSlate },
-          didParseCell: (data) => {
-            if (data.section === 'body' && data.column.index === 2) {
-              data.cell.styles.textColor = [30, 64, 175];
-              data.cell.styles.fillColor = [239, 246, 255];
-              data.cell.styles.fontStyle = 'bold';
-            }
-          },
-          margin: { left: margin, right: margin }
-        });
-        y = pdf.lastAutoTable.finalY + 12;
+        y = pdf.lastAutoTable.finalY + 16;
 
+        // Render each Execution Evidence / Query as an authentic SQL query workbench editor block
+        executions.forEach((e, idx) => {
+          if (e.evidence && String(e.evidence).trim()) {
+            const isFailed = (e.status === 'FAIL' || e.status === 'FAILED');
+            const statusBadgeRgb = isFailed ? [220, 38, 38] : primaryRgb;
+            const title = `Execution Evidence / Query: ${e.ruleId || `Run #${idx + 1}`} (${e.environment || 'PROD'} • ${e.status || 'PASSED'})`;
+            drawSqlEditorBlock(title, e.dialect || doc.sqlDialect || 'SQL', e.evidence, statusBadgeRgb);
+          }
+        });
+      } else {
         pdf.setFont('helvetica', 'italic');
-        pdf.setFontSize(7);
+        pdf.setFontSize(7.5);
         pdf.setTextColor(mutedSlate[0], mutedSlate[1], mutedSlate[2]);
-        pdf.text('Note: No historical execution logs are attached yet. Test runs can be logged via the Test Executions workspace or automated CI/CD runners.', margin, y);
-        y += 20;
+        pdf.text('No historical test execution runs or DDL verification logs recorded yet for this specification.', margin, y);
+        y += 18;
       }
 
       // SECTION 5: Operational Remediation Runbook & Issues
@@ -12998,59 +12987,50 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
       }
 
       // Formal Sign-Off Approvals Table
-      const effectiveApprovals = (doc.approvals && doc.approvals.length > 0)
-        ? doc.approvals
-        : [
-            {
-              timestamp: doc.updatedAt || doc.createdAt,
-              reviewer: doc.owner || (doc.usernames && doc.usernames[0]) || 'Primary Data Owner',
-              status: docStatus === 'Approved' ? 'Approved' : 'Pending Formal Sign-off',
-              comments: docStatus === 'Approved' ? 'Certified and approved for operational execution.' : 'Specification drafted; awaiting review and sign-off.'
-            },
-            {
-              timestamp: doc.updatedAt || doc.createdAt,
-              reviewer: doc.reviewer || 'Lead Data Engineer',
-              status: docStatus === 'Approved' ? 'Approved' : 'Technical Review in Progress',
-              comments: 'Verified assertion SQL queries and lineage dependencies.'
-            }
-          ];
+      if (doc.approvals && doc.approvals.length > 0) {
+        const appData = doc.approvals.map(a => [
+          a.timestamp ? new Date(a.timestamp).toLocaleDateString() : 'Pending',
+          a.reviewer || 'Governance Authority',
+          a.status || 'Pending',
+          a.comments || 'Enterprise data governance review.'
+        ]);
 
-      const appData = effectiveApprovals.map(a => [
-        a.timestamp ? new Date(a.timestamp).toLocaleDateString() : 'Pending',
-        a.reviewer || 'Governance Authority',
-        a.status || 'Pending',
-        a.comments || 'Enterprise data governance review.'
-      ]);
-
-      pdf.autoTable({
-        startY: y,
-        head: [['Sign-off Date', 'Reviewer / Authority', 'Governance Decision', 'Review Comments']],
-        body: appData,
-        theme: 'grid',
-        headStyles: { fillColor: primaryRgb, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
-        styles: { fontSize: 8, cellPadding: 4.5, textColor: bodySlate },
-        alternateRowStyles: { fillColor: cardBgSlate },
-        didParseCell: (data) => {
-          if (data.section === 'body' && data.column.index === 2) {
-            const dec = String(data.cell.raw).toLowerCase();
-            if (dec.includes('approved')) {
-              data.cell.styles.textColor = [22, 101, 52];
-              data.cell.styles.fillColor = [220, 252, 231];
-              data.cell.styles.fontStyle = 'bold';
-            } else if (dec.includes('reject')) {
-              data.cell.styles.textColor = [153, 27, 27];
-              data.cell.styles.fillColor = [254, 226, 226];
-              data.cell.styles.fontStyle = 'bold';
-            } else {
-              data.cell.styles.textColor = [30, 64, 175];
-              data.cell.styles.fillColor = [239, 246, 255];
-              data.cell.styles.fontStyle = 'bold';
+        pdf.autoTable({
+          startY: y,
+          head: [['Sign-off Date', 'Reviewer / Authority', 'Governance Decision', 'Review Comments']],
+          body: appData,
+          theme: 'grid',
+          headStyles: { fillColor: primaryRgb, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
+          styles: { fontSize: 8, cellPadding: 4.5, textColor: bodySlate },
+          alternateRowStyles: { fillColor: cardBgSlate },
+          didParseCell: (data) => {
+            if (data.section === 'body' && data.column.index === 2) {
+              const dec = String(data.cell.raw).toLowerCase();
+              if (dec.includes('approved')) {
+                data.cell.styles.textColor = [22, 101, 52];
+                data.cell.styles.fillColor = [220, 252, 231];
+                data.cell.styles.fontStyle = 'bold';
+              } else if (dec.includes('reject')) {
+                data.cell.styles.textColor = [153, 27, 27];
+                data.cell.styles.fillColor = [254, 226, 226];
+                data.cell.styles.fontStyle = 'bold';
+              } else {
+                data.cell.styles.textColor = [30, 64, 175];
+                data.cell.styles.fillColor = [239, 246, 255];
+                data.cell.styles.fontStyle = 'bold';
+              }
             }
-          }
-        },
-        margin: { left: margin, right: margin }
-      });
-      y = pdf.lastAutoTable.finalY + 22;
+          },
+          margin: { left: margin, right: margin }
+        });
+        y = pdf.lastAutoTable.finalY + 22;
+      } else {
+        pdf.setFont('helvetica', 'italic');
+        pdf.setFontSize(7.5);
+        pdf.setTextColor(mutedSlate[0], mutedSlate[1], mutedSlate[2]);
+        pdf.text('No formal sign-off approvals recorded yet. Approvals can be submitted via Document Review.', margin, y);
+        y += 18;
+      }
 
       // SECTION 7: Official Governance & Sign-Off Certification Block
       const certBoxH = 46;
