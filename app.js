@@ -12255,23 +12255,6 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
         pdf.text(item, margin + 10 + halfW, y + 27 + (tIdx * 13));
       });
 
-      // 5. Official Governance Assurance Notice (Bottom Cover Card)
-      y += tocCardH + 10;
-      const noteH = 28;
-      pdf.setFillColor(241, 245, 249);
-      pdf.setDrawColor(borderSlate[0], borderSlate[1], borderSlate[2]);
-      pdf.roundedRect(margin, y, contentWidth, noteH, 3, 3, 'FD');
-
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(7);
-      pdf.setTextColor(primaryRgb[0], primaryRgb[1], primaryRgb[2]);
-      pdf.text('OFFICIAL ENTERPRISE GOVERNANCE ASSURANCE STATEMENT', margin + 10, y + 11);
-
-      pdf.setFont('helvetica', 'italic');
-      pdf.setFontSize(6.5);
-      pdf.setTextColor(mutedSlate[0], mutedSlate[1], mutedSlate[2]);
-      pdf.text('This specification is a certified enterprise data management artifact. Automated rules defined herein are enforced against production entities.', margin + 10, y + 20);
-
       // ====================================================================
       // START TECHNICAL SECTIONS ON PAGE 2
       // ====================================================================
