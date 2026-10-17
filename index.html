@@ -10,7 +10,7 @@
   <meta name="description" content="Offline standalone technical documentation and validation rule management suite for Data Quality Engineers.">
   <link rel="icon" id="app-favicon" href="assets/logo.png" type="image/png">
   <link rel="shortcut icon" href="favicon.ico">
-  <link rel="stylesheet" href="styles.css?v=3.5">
+  <link rel="stylesheet" href="styles.css?v=3.6">
 </head>
 <body>
   <div id="app-container">
@@ -94,6 +94,11 @@
           <span class="nav-icon">⚙️</span>
           <span>Settings</span>
         </a>
+        <a class="nav-item" data-view="how-to-use" id="nav-how-to-use" data-tooltip="How To Use">
+          <span class="nav-icon">📖</span>
+          <span>How To Use</span>
+          <span class="nav-badge" style="background: var(--accent-color); color: #fff;">Guide</span>
+        </a>
       </nav>
 
       <div class="sidebar-footer">
@@ -132,6 +137,15 @@
         </div>
 
         <div class="navbar-right">
+          <div class="team-profile-widget" title="Active Discipline Workspace">
+            <span style="font-size: 13px;">💼</span>
+            <select id="team-profile-select" class="team-profile-select" aria-label="Select Team Profile">
+              <option value="data_quality">🛡️ Data Quality</option>
+              <option value="data_analysis">📈 Data Analysis</option>
+              <option value="data_engineering">⚙️ Data Engineering</option>
+              <option value="data_modelling">📐 Data Modelling</option>
+            </select>
+          </div>
           <button class="btn btn-outline btn-sm" id="btn-quick-import-dldoc" title="Import Document (.dldoc or JSON)">
             <span>📥</span> Import .dldoc
           </button>
@@ -175,13 +189,13 @@
   <div id="dqd-datalists-container"></div>
 
   <!-- BUNDLED LIBRARIES (All purely local offline in lib/) -->
-  <script src="config.js?v=4.5"></script>
+  <script src="config.js?v=4.7"></script>
   <script src="lib/jspdf.umd.min.js"></script>
   <script src="lib/jspdf.plugin.autotable.min.js"></script>
   <script src="lib/pdf.min.js"></script>
   <script src="lib/xlsx.full.min.js"></script>
   <script src="lib/chart.umd.min.js"></script>
-  <script src="defaults.js?v=4.5"></script>
-  <script src="app.js?v=4.5"></script>
+  <script src="defaults.js?v=4.7"></script>
+  <script src="app.js?v=4.7"></script>
 </body>
 </html>

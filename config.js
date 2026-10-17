@@ -99,7 +99,6 @@ window.DQD_CONFIG = {
         "Uniqueness Constraint / Grain",
         "SLA Delivery Deadline",
         "Pipeline Dependency / Airflow DAG",
-        "Corrective & Preventive Action (CAPA)",
         "Severity Classification & Impact"
       ],
       profileAttributes: [
@@ -111,7 +110,6 @@ window.DQD_CONFIG = {
         { key: "uniquenessGrain", label: "Uniqueness Constraint / Primary Key Grain", placeholder: "e.g. Composite unique (transaction_id, tenant_id)", type: "text" },
         { key: "slaDelivery", label: "SLA Delivery Deadline & Freshness", placeholder: "e.g. Validated daily by 05:00 UTC before morning BI sync", type: "text" },
         { key: "pipelineDag", label: "Upstream Pipeline Dependency / Airflow DAG", placeholder: "e.g. dag_etl_sales_ingest_v2", type: "text" },
-        { key: "remediationCapa", label: "Corrective & Preventive Action (CAPA) Runbook", placeholder: "e.g. Halt downstream BI sync; execute quarantine_reconcile.sql", type: "textarea", rows: 2 },
         { key: "severityLevel", label: "Severity Classification & Business Impact", placeholder: "e.g. Tier-1 Critical (Financial Reporting & Tax Compliance)", type: "text" }
       ]
     },

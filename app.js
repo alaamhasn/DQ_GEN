@@ -152,6 +152,21 @@
         this.config = JSON.parse(JSON.stringify(defaults));
       }
 
+      // Prioritize Author Attribution & Sign-Off Details directly from config.js
+      if (defaults && defaults.username !== undefined && defaults.username !== null && String(defaults.username).trim() !== '') {
+        this.config.username = String(defaults.username).trim();
+      }
+      if (defaults && defaults.useremail !== undefined && defaults.useremail !== null && String(defaults.useremail).trim() !== '') {
+        this.config.useremail = String(defaults.useremail).trim();
+      }
+      if (defaults && defaults.userphone !== undefined && defaults.userphone !== null && String(defaults.userphone).trim() !== '') {
+        this.config.userphone = String(defaults.userphone).trim();
+      }
+      if (!this.config.userInfo) this.config.userInfo = {};
+      if (this.config.username) this.config.userInfo.username = this.config.username;
+      if (this.config.useremail) this.config.userInfo.useremail = this.config.useremail;
+      if (this.config.userphone) this.config.userInfo.userphone = this.config.userphone;
+
       // Resolve active team profile
       const savedProfile = localStorage.getItem('DQD_ACTIVE_PROFILE');
       if (savedProfile && this.config.teamProfiles && this.config.teamProfiles[savedProfile]) {
@@ -233,28 +248,54 @@
     },
 
     getUserInfo(doc = null) {
-      // 1. If document has its own userInfo
+      // 1. Author Attribution & Sign-Off Details from config.js (window.DQD_CONFIG)
+      const winCfg = (typeof window !== 'undefined' && window.DQD_CONFIG) ? window.DQD_CONFIG : {};
+      const winUser = (winCfg.userInfo && typeof winCfg.userInfo === 'object') ? winCfg.userInfo : {};
+
+      const configUsername = (winCfg.username !== undefined && winCfg.username !== null && String(winCfg.username).trim() !== '') 
+        ? String(winCfg.username).trim() 
+        : ((winUser.username && String(winUser.username).trim() !== '') ? String(winUser.username).trim() : null);
+
+      const configUseremail = (winCfg.useremail !== undefined && winCfg.useremail !== null && String(winCfg.useremail).trim() !== '') 
+        ? String(winCfg.useremail).trim() 
+        : ((winUser.useremail && String(winUser.useremail).trim() !== '') ? String(winUser.useremail).trim() : null);
+
+      const configUserphone = (winCfg.userphone !== undefined && winCfg.userphone !== null && String(winCfg.userphone).trim() !== '') 
+        ? String(winCfg.userphone).trim() 
+        : ((winUser.userphone && String(winUser.userphone).trim() !== '') ? String(winUser.userphone).trim() : null);
+
+      // App config / local storage fallbacks
+      const appCfg = this.config || {};
+      const appUser = appCfg.userInfo || {};
+      const fallbackName = configUsername || (appCfg.username && String(appCfg.username).trim()) || (appUser.username && String(appUser.username).trim()) || localStorage.getItem('DQD_USER_NAME') || null;
+      const fallbackEmail = configUseremail || (appCfg.useremail && String(appCfg.useremail).trim()) || (appUser.useremail && String(appUser.useremail).trim()) || localStorage.getItem('DQD_USER_EMAIL') || null;
+      const fallbackPhone = configUserphone || (appCfg.userphone && String(appCfg.userphone).trim()) || (appUser.userphone && String(appUser.userphone).trim()) || localStorage.getItem('DQD_USER_PHONE') || null;
+
+      // 2. If document has its own userInfo
       if (doc && doc.userInfo && typeof doc.userInfo === 'object') {
         const u = doc.userInfo;
-        if (u.username || u.useremail || u.userphone) {
-          return {
-            username: u.username ? String(u.username).trim() : null,
-            useremail: u.useremail ? String(u.useremail).trim() : null,
-            userphone: u.userphone ? String(u.userphone).trim() : null
-          };
-        }
+        const uName = (u.username !== undefined && u.username !== null && String(u.username).trim() !== '') ? String(u.username).trim() : fallbackName;
+        const uEmail = (u.useremail !== undefined && u.useremail !== null && String(u.useremail).trim() !== '') ? String(u.useremail).trim() : fallbackEmail;
+        const uPhone = (u.userphone !== undefined && u.userphone !== null && String(u.userphone).trim() !== '') ? String(u.userphone).trim() : fallbackPhone;
+        return {
+          username: uName,
+          useremail: uEmail,
+          userphone: uPhone
+        };
       }
 
-      // 2. Fallback to global config or localStorage
-      const cfgUser = (this.config && this.config.userInfo) || {};
-      const uName = (this.config && this.config.username) || cfgUser.username || localStorage.getItem('DQD_USER_NAME');
-      const uEmail = (this.config && this.config.useremail) || cfgUser.useremail || localStorage.getItem('DQD_USER_EMAIL');
-      const uPhone = (this.config && this.config.userphone) || cfgUser.userphone || localStorage.getItem('DQD_USER_PHONE');
+      if (doc && (doc.username || doc.useremail || doc.userphone)) {
+        return {
+          username: (doc.username && String(doc.username).trim()) || fallbackName,
+          useremail: (doc.useremail && String(doc.useremail).trim()) || fallbackEmail,
+          userphone: (doc.userphone && String(doc.userphone).trim()) || fallbackPhone
+        };
+      }
 
       return {
-        username: uName ? String(uName).trim() : null,
-        useremail: uEmail ? String(uEmail).trim() : null,
-        userphone: uPhone ? String(uPhone).trim() : null
+        username: fallbackName,
+        useremail: fallbackEmail,
+        userphone: fallbackPhone
       };
     },
 
@@ -928,7 +969,7 @@
             sql: "SELECT COUNT(*) FROM DIM_CUSTOMER WHERE CUSTOMER_ID IS NULL;",
             expectedResult: "0 rows returned",
             threshold: "0",
-            owner: "Sarah Jenkins",
+            owner: "Ahmed Hassan",
             dialect: "Snowflake"
           },
           {
@@ -940,7 +981,7 @@
             sql: "SELECT TRANSACTION_ID, COUNT(*) FROM FACT_TRANSACTIONS GROUP BY TRANSACTION_ID HAVING COUNT(*) > 1;",
             expectedResult: "0 duplicates found",
             threshold: "0",
-            owner: "Michael Chang",
+            owner: "Tarek Mostafa",
             dialect: "PostgreSQL"
           },
           {
@@ -952,7 +993,7 @@
             sql: "SELECT CUSTOMER_ID, EMAIL FROM DIM_CUSTOMER WHERE EMAIL IS NOT NULL AND EMAIL NOT RLIKE '^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+$';",
             expectedResult: "0 rows",
             threshold: "0",
-            owner: "Sarah Jenkins",
+            owner: "Ahmed Hassan",
             dialect: "Snowflake"
           },
           {
@@ -1084,6 +1125,7 @@
       const profile = this.getActiveProfile();
       const titleMap = {
         'dashboard': ['Dashboard', profile.subtitle || 'Quality Metrics & Workspace Overview'],
+        'how-to-use': ['How To Use', 'Multi-Discipline Engineering Guides & Platform Manual'],
         'documents': ['Document Library', `Manage ${profile.name} Documents & Specifications`],
         'users': ['User & Team Directory', 'Explore Documents by Assigned Team Members and Author Attribution'],
         'editor': [this.currentDoc && this.currentDoc.id ? 'Edit Document' : 'Create New Document', `Author ${profile.label} Specification, Mappings & Logic`],
@@ -1112,6 +1154,9 @@
       switch (viewName) {
         case 'dashboard':
           this.renderDashboard(container);
+          break;
+        case 'how-to-use':
+          this.renderHowToUse(container, params);
           break;
         case 'documents':
           this.renderDocuments(container);
@@ -2636,6 +2681,8 @@
         // Create new empty document structure
         const now = new Date().toISOString();
         const genId = 'DOC-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + Math.floor(1000 + Math.random() * 9000);
+        const defaultAuthorInfo = this.getUserInfo();
+        const defaultAuthorName = defaultAuthorInfo.username || "";
         this.currentDoc = {
           id: genId,
           title: "",
@@ -2643,14 +2690,14 @@
           teamAttributes: {},
           validationType: defaultType,
           team: profile.name,
-          usernames: [],
+          usernames: defaultAuthorName ? [defaultAuthorName] : [],
           dynamicInputs: [],
           validatedModels: [],
           validatedTables: [],
           screenshots: [],
           documentType: defaultDocType,
           businessDomain: "",
-          owner: "",
+          owner: defaultAuthorName,
           reviewer: "",
           status: "Draft",
           priority: "Medium",
@@ -2660,6 +2707,14 @@
           updatedAt: now,
           executiveSummary: "",
           businessObjective: "",
+          userInfo: {
+            username: defaultAuthorInfo.username || null,
+            useremail: defaultAuthorInfo.useremail || null,
+            userphone: defaultAuthorInfo.userphone || null
+          },
+          username: defaultAuthorInfo.username || null,
+          useremail: defaultAuthorInfo.useremail || null,
+          userphone: defaultAuthorInfo.userphone || null,
           dataSource: {
             system: "",
             catalog: "",
@@ -2695,7 +2750,7 @@
             {
               version: "1.0",
               createdAt: now,
-              author: "",
+              author: defaultAuthorName,
               summary: "Initial Document Creation"
             }
           ]
@@ -2716,8 +2771,20 @@
         }
         if (!this.currentDoc.validationType) this.currentDoc.validationType = defaultType;
         if (this.currentDoc.team === undefined) this.currentDoc.team = "";
-        if (!Array.isArray(this.currentDoc.usernames)) {
-          this.currentDoc.usernames = this.currentDoc.owner ? [this.currentDoc.owner] : [];
+        
+        const fallbackAuthor = this.getUserInfo();
+        if (!this.currentDoc.userInfo || typeof this.currentDoc.userInfo !== 'object') {
+          this.currentDoc.userInfo = {
+            username: fallbackAuthor.username || null,
+            useremail: fallbackAuthor.useremail || null,
+            userphone: fallbackAuthor.userphone || null
+          };
+        }
+        if (!this.currentDoc.owner && fallbackAuthor.username) {
+          this.currentDoc.owner = fallbackAuthor.username;
+        }
+        if (!Array.isArray(this.currentDoc.usernames) || this.currentDoc.usernames.length === 0) {
+          this.currentDoc.usernames = this.currentDoc.owner ? [this.currentDoc.owner] : (fallbackAuthor.username ? [fallbackAuthor.username] : []);
         }
         if (!Array.isArray(this.currentDoc.dynamicInputs)) this.currentDoc.dynamicInputs = [];
         if (!Array.isArray(this.currentDoc.validatedModels)) this.currentDoc.validatedModels = [];
@@ -2796,257 +2863,44 @@
           <button class="tab-btn ${activeTab === 'tab-governance' ? 'active' : ''}" data-tab="tab-governance">8. Versions & Approvals</button>
         </div>
 
-        <!-- TAB 1: METADATA -->
+        <!-- TAB 1: METADATA & SPECIFICATION -->
         <div class="tab-pane ${activeTab === 'tab-meta' ? 'active' : ''}" id="tab-meta">
-          <div class="card">
-            <div class="card-header" style="justify-content: space-between;">
-              <span class="card-title">Document Specification & Metadata</span>
-              <span class="badge badge-info" id="badge-doc-active-type">${this.escapeHtml(doc.validationType || 'Model Validation')}</span>
+          
+          <!-- CARD 1: PRIMARY DOCUMENT IDENTITY & CORE GOVERNANCE -->
+          <div class="card" style="margin-bottom: 20px; border-top: 4px solid var(--primary-color);">
+            <div class="card-header" style="justify-content: space-between; align-items: center; background: var(--surface-alt); padding: 12px 20px;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 18px;">📄</span>
+                <div>
+                  <span class="card-title" style="font-size: 15px; font-weight: 700; margin: 0;">1. Document Identity & Governance</span>
+                  <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Primary identifiers, document classification, tracking codes, and operational governance</div>
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="badge badge-info" id="badge-doc-active-type" style="font-size: 11px; font-weight: 700;">${this.escapeHtml(doc.validationType || 'Model Validation')}</span>
+                <span class="badge ${doc.status === 'Approved' ? 'badge-passed' : 'badge-status-draft'}" style="font-size: 11px;">${this.escapeHtml(doc.status || 'Draft')}</span>
+              </div>
             </div>
-            <div class="card-body">
-              <!-- 0. Discipline Workspace / Team Profile Selector -->
-              <div class="form-group" style="margin-bottom: 20px; padding: 12px 14px; background: var(--surface-alt); border-radius: var(--border-radius-sm); border: 1px solid var(--surface-border);">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                  <label for="doc-input-team-profile" class="form-label required" style="font-size: 13px; font-weight: 700; margin: 0; color: var(--primary-color);">
-                    🎯 Document Discipline Workspace (${this.escapeHtml(profile.label || profile.name)})
-                  </label>
-                  <span class="badge badge-info" style="font-size: 11px;">Active: ${this.escapeHtml(profile.editionTag || profile.name)}</span>
-                </div>
-                <select id="doc-input-team-profile" class="form-control" style="font-weight: 600;">
-                  ${Object.keys((this.config && this.config.teamProfiles) || {}).map(k => {
-                    const p = this.config.teamProfiles[k];
-                    return `<option value="${k}" ${k === docProfileKey ? 'selected' : ''}>${this.escapeHtml(p.label || p.name)} (${this.escapeHtml(p.editionTag || p.roleTitle)})</option>`;
-                  }).join('')}
-                </select>
-                <div class="form-text">Switching the discipline adapts specification types, recommended inputs, and technical specification attributes.</div>
-              </div>
-
-              <!-- 1. Primary Specification Subtype Selector -->
+            <div class="card-body" style="padding: 20px;">
+              <!-- Prominent Title Input with Hero Style -->
               <div class="form-group" style="margin-bottom: 20px;">
-                <label class="form-label required" style="font-size: 13px; font-weight: 700;">Select Specification Type (${this.escapeHtml(profile.label || 'Team Profile')})</label>
-                <div class="val-type-grid">
-                  ${(profile.subtypes || []).map(st => `
-                    <div class="val-type-card ${doc.validationType === st.name || doc.validationType === st.id ? 'active' : ''}" data-type="${this.escapeHtml(st.name)}">
-                      <span class="val-type-icon">${st.icon || '📄'}</span>
-                      <span class="val-type-title">${this.escapeHtml(st.name)}</span>
-                      <span class="val-type-desc">${this.escapeHtml(st.desc || '')}</span>
-                    </div>
-                  `).join('')}
-                </div>
+                <label for="doc-input-title" class="form-label required" style="font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 6px;">
+                  <span>Document Title</span>
+                  <span style="font-size: 11px; font-weight: 400; color: var(--text-muted);">(Clear, descriptive title for this specification or quality contract)</span>
+                </label>
+                <input type="text" id="doc-input-title" class="form-control" style="font-size: 15px; font-weight: 600; padding: 10px 14px; border: 1.5px solid var(--surface-border-strong);" value="${this.escapeHtml(doc.title || '')}" placeholder="e.g. ${this.escapeHtml(profile.label || 'Data')} Quality Specification & Verification Contract">
               </div>
 
-              <!-- Team & Multi-User Attribution -->
-              <div class="grid-cols-2" style="margin-bottom: 16px;">
+              <!-- Primary Metadata Grid -->
+              <div class="grid-cols-3" style="margin-bottom: 16px;">
                 <div class="form-group">
-                  <label class="form-label required">Related Team / Squad</label>
-                  <input type="text" id="doc-input-team" class="form-control" list="dl-teams" value="${this.escapeHtml(doc.team || profile.name || '')}" placeholder="e.g. Analytics Engineering, Finance BI, Risk Team">
-                  <div class="form-text">Team or squad responsible for this specification.</div>
+                  <label for="doc-input-id-meta" class="form-label required" style="font-weight: 600; font-size: 12px;">Document ID / Code</label>
+                  <input type="text" id="doc-input-id-meta" class="form-control" style="font-family: 'Consolas', 'Courier New', monospace; font-weight: 700; background: var(--surface-alt);" value="${this.escapeHtml(doc.id || '')}" placeholder="e.g. DOC-20261011-7927" spellcheck="false" autocomplete="off">
+                  <div class="form-text">Unique tracking identifier (synced across header & exports).</div>
                 </div>
                 <div class="form-group">
-                  <label class="form-label required">Document Usernames (Multi-User Assignment)</label>
-                  <div class="user-chips-container" id="doc-user-chips-box">
-                    ${(doc.usernames || []).map(u => `
-                      <span class="user-chip">
-                        <span>${this.escapeHtml(u)}</span>
-                        <button type="button" class="user-chip-remove" data-user="${this.escapeHtml(u)}">&times;</button>
-                      </span>
-                    `).join('')}
-                    <input type="text" class="user-chips-input" id="doc-input-new-user" list="dl-usernames" placeholder="Type username & hit Enter/comma...">
-                    <button type="button" class="btn btn-outline btn-sm" id="btn-add-doc-user" style="padding: 2px 8px; font-size: 11px;">+ Add</button>
-                  </div>
-                  <div class="form-text">Add multiple owners, authors, or assignees. Type username and press Enter.</div>
-                </div>
-              </div>
-
-              <!-- Discipline Technical Specification Attributes Card -->
-              <div class="card" style="margin-bottom: 20px; border: 1px solid var(--surface-border-strong); box-shadow: var(--shadow-sm);">
-                <div class="card-header" style="background: var(--surface-alt); padding: 10px 16px; justify-content: space-between;">
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                    <span style="font-size: 16px;">🛠️</span>
-                    <span class="card-title" style="font-size: 13px; font-weight: 700; color: var(--primary-color);">
-                      ${this.escapeHtml(profile.label)} - Technical Specification Attributes
-                    </span>
-                  </div>
-                  <span class="badge badge-info" style="font-size: 11px;">${profileAttrs.length} Attributes</span>
-                </div>
-                <div class="card-body" style="padding: 14px;">
-                  <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px;">
-                    Technical attributes specific to <strong>${this.escapeHtml(profile.label)}</strong>. Saved to this document, bundled into .dldoc file, and printed in Section 2 of PDF reports.
-                  </div>
-                  <div class="grid-cols-2" style="gap: 12px;">
-                    ${profileAttrs.map(attr => {
-                      const val = (doc.teamAttributes && doc.teamAttributes[attr.key] !== undefined) ? doc.teamAttributes[attr.key] : '';
-                      if (attr.type === 'textarea') {
-                        return `
-                          <div class="form-group" style="grid-column: 1 / -1;">
-                            <label class="form-label" style="font-weight: 600; font-size: 11.5px; color: var(--text-color);">${this.escapeHtml(attr.label)}</label>
-                            <textarea class="form-control form-control-sm team-profile-attr-input" data-attr-key="${attr.key}" rows="${attr.rows || 2}" placeholder="${this.escapeHtml(attr.placeholder || '')}">${this.escapeHtml(val)}</textarea>
-                          </div>
-                        `;
-                      }
-                      return `
-                        <div class="form-group">
-                          <label class="form-label" style="font-weight: 600; font-size: 11.5px; color: var(--text-color);">${this.escapeHtml(attr.label)}</label>
-                          <input type="text" class="form-control form-control-sm team-profile-attr-input" data-attr-key="${attr.key}" value="${this.escapeHtml(val)}" placeholder="${this.escapeHtml(attr.placeholder || '')}">
-                        </div>
-                      `;
-                    }).join('')}
-                  </div>
-                </div>
-              </div>
-
-              <!-- Dynamic Validation Inputs Section -->
-              <div class="dynamic-fields-section">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
-                  <div>
-                    <strong style="font-size: 13px; color: var(--primary-color);">Dynamic Inputs for <span id="lbl-dyn-val-type">${this.escapeHtml(doc.validationType || 'Specification')}</span></strong>
-                    <div style="font-size: 11px; color: var(--text-muted);">Recommended attributes tailored for ${this.escapeHtml(profile.label)}</div>
-                  </div>
-                </div>
-
-                <!-- Suggested Quick-Add Pills based on active type -->
-                <div style="margin-bottom: 12px;" id="suggested-pills-container">
-                  <span style="font-size: 11px; font-weight: 700; color: var(--text-muted); margin-right: 6px;">RECOMMENDED INPUTS:</span>
-                  ${this.getSuggestedInputsForType(doc.validationType || (profile.subtypes && profile.subtypes[0] && profile.subtypes[0].name) || 'Specification').map(s => `
-                    <button type="button" class="dynamic-field-pill btn-quick-add-field" data-name="${this.escapeHtml(s)}">+ ${this.escapeHtml(s)}</button>
-                  `).join('')}
-                </div>
-
-                <!-- Search & Add Bar -->
-                <div style="display: flex; gap: 8px; margin-bottom: 14px;">
-                  <input type="text" id="txt-search-add-field" class="form-control form-control-sm" placeholder="🔍 Search or type any custom field name to add (e.g. Warehouse Cluster, SLA, Grain)...">
-                  <button type="button" class="btn btn-secondary btn-sm" id="btn-add-dynamic-field">➕ Add Input Field</button>
-                </div>
-
-                <!-- Container of Active Dynamic Fields -->
-                <div id="container-dynamic-fields">
-                  ${(doc.dynamicInputs || []).map((f, fIdx) => `
-                    <div class="dynamic-field-card" data-id="${f.id || `f-${fIdx}`}">
-                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                        <strong class="dynamic-field-label" style="font-size: 12px; color: var(--text-color);">${this.escapeHtml(f.label || 'Field')}</strong>
-                        <button type="button" class="btn btn-outline btn-sm btn-remove-dynamic-field" data-id="${f.id || `f-${fIdx}`}" style="color: #ef4444; padding: 1px 6px; font-size: 11px;" title="Remove field">&times;</button>
-                      </div>
-                      <input type="text" class="form-control form-control-sm dynamic-field-input" value="${this.escapeHtml(f.value || '')}" placeholder="Enter ${this.escapeHtml(f.label)}...">
-                    </div>
-                  `).join('')}
-                  ${(!doc.dynamicInputs || doc.dynamicInputs.length === 0) ? `
-                    <div id="empty-dynamic-fields-note" style="font-size: 12px; color: var(--text-muted); font-style: italic; text-align: center; padding: 10px;">No dynamic inputs added yet. Click any recommended input above or type a custom field name to add.</div>
-                  ` : ''}
-                </div>
-              </div>
-
-              <!-- Composite Multi-Validation: Models Section -->
-              <div id="section-validated-models" style="${(doc.validationType === 'Model Validation' || doc.validationType === 'Model and Table Validation') ? '' : 'display: none;'} margin-bottom: 20px;">
-                <div class="card" style="border: 1px solid var(--surface-border-strong);">
-                  <div class="card-header" style="background: var(--surface-alt); padding: 10px 16px;">
-                    <span class="card-title" style="font-size: 13px;">🧩 Validated Models (${(doc.validatedModels || []).length})</span>
-                    <button type="button" class="btn btn-outline btn-sm" id="btn-add-validated-model">➕ Add Validated Model</button>
-                  </div>
-                  <div class="card-body" id="container-validated-models" style="padding: 12px;">
-                    ${(doc.validatedModels || []).map((m, mIdx) => `
-                      <div class="card val-model-card" data-idx="${mIdx}" style="margin-bottom: 10px; padding: 12px; border: 1px solid var(--surface-border);">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                          <strong>Model #${mIdx + 1}</strong>
-                          <button type="button" class="btn btn-outline btn-sm btn-delete-val-model" data-idx="${mIdx}" style="color: #ef4444; padding: 1px 6px;">&times; Remove</button>
-                        </div>
-                        <div class="grid-cols-3">
-                          <div>
-                            <label class="form-label" style="font-size: 11px;">Model Name</label>
-                            <input type="text" class="form-control form-control-sm val-model-name" value="${this.escapeHtml(m.modelName || '')}" placeholder="e.g. stg_orders / fct_monthly_sales">
-                          </div>
-                          <div>
-                            <label class="form-label" style="font-size: 11px;">Primary Key / Grain</label>
-                            <input type="text" class="form-control form-control-sm val-model-grain" value="${this.escapeHtml(m.grain || '')}" placeholder="e.g. order_id, line_item_id">
-                          </div>
-                          <div>
-                            <label class="form-label" style="font-size: 11px;">Materialization</label>
-                            <select class="form-control form-control-sm val-model-mat">
-                              <option value="Table" ${m.materialization === 'Table' ? 'selected' : ''}>Table</option>
-                              <option value="View" ${m.materialization === 'View' ? 'selected' : ''}>View</option>
-                              <option value="Incremental" ${m.materialization === 'Incremental' ? 'selected' : ''}>Incremental</option>
-                              <option value="Ephemeral" ${m.materialization === 'Ephemeral' ? 'selected' : ''}>Ephemeral</option>
-                            </select>
-                          </div>
-                        </div>
-                        <div style="margin-top: 8px;">
-                          <label class="form-label" style="font-size: 11px;">Lineage & Upstream Sources</label>
-                          <input type="text" class="form-control form-control-sm val-model-sources" value="${this.escapeHtml(m.upstreamSources || '')}" placeholder="e.g. source('raw', 'orders'), ref('stg_customers')">
-                        </div>
-                      </div>
-                    `).join('')}
-                    ${(!doc.validatedModels || doc.validatedModels.length === 0) ? `
-                      <div style="font-size: 12px; color: var(--text-muted); font-style: italic; text-align: center; padding: 10px;">No multiple models added yet. Click "+ Add Validated Model" to audit multiple models in this single document.</div>
-                    ` : ''}
-                  </div>
-                </div>
-              </div>
-
-              <!-- Composite Multi-Validation: Tables Section -->
-              <div id="section-validated-tables" style="${(doc.validationType === 'Table Validation' || doc.validationType === 'Model and Table Validation') ? '' : 'display: none;'} margin-bottom: 20px;">
-                <div class="card" style="border: 1px solid var(--surface-border-strong);">
-                  <div class="card-header" style="background: var(--surface-alt); padding: 10px 16px;">
-                    <span class="card-title" style="font-size: 13px;">🗄️ Validated Physical Tables (${(doc.validatedTables || []).length})</span>
-                    <button type="button" class="btn btn-outline btn-sm" id="btn-add-validated-table">➕ Add Validated Table</button>
-                  </div>
-                  <div class="card-body" id="container-validated-tables" style="padding: 12px;">
-                    ${(doc.validatedTables || []).map((t, tIdx) => `
-                      <div class="card val-table-card" data-idx="${tIdx}" style="margin-bottom: 10px; padding: 12px; border: 1px solid var(--surface-border);">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                          <strong>Physical Table #${tIdx + 1}</strong>
-                          <button type="button" class="btn btn-outline btn-sm btn-delete-val-table" data-idx="${tIdx}" style="color: #ef4444; padding: 1px 6px;">&times; Remove</button>
-                        </div>
-                        <div class="grid-cols-3">
-                          <div>
-                            <label class="form-label" style="font-size: 11px;">Table / View Name</label>
-                            <input type="text" class="form-control form-control-sm val-table-name" value="${this.escapeHtml(t.tableName || '')}" placeholder="e.g. prod_dwh.fact_transactions">
-                          </div>
-                          <div>
-                            <label class="form-label" style="font-size: 11px;">Catalog & Schema</label>
-                            <input type="text" class="form-control form-control-sm val-table-schema" value="${this.escapeHtml(t.schema || '')}" placeholder="e.g. iceberg_prod.finance">
-                          </div>
-                          <div>
-                            <label class="form-label" style="font-size: 11px;">Storage Format</label>
-                            <select class="form-control form-control-sm val-table-format">
-                              <option value="Parquet" ${t.storageFormat === 'Parquet' ? 'selected' : ''}>Parquet</option>
-                              <option value="Iceberg" ${t.storageFormat === 'Iceberg' ? 'selected' : ''}>Iceberg</option>
-                              <option value="Delta Lake" ${t.storageFormat === 'Delta Lake' ? 'selected' : ''}>Delta Lake</option>
-                              <option value="ORC" ${t.storageFormat === 'ORC' ? 'selected' : ''}>ORC</option>
-                              <option value="CSV / Text" ${t.storageFormat === 'CSV / Text' ? 'selected' : ''}>CSV / Text</option>
-                            </select>
-                          </div>
-                        </div>
-                        <div class="grid-cols-2" style="margin-top: 8px;">
-                          <div>
-                            <label class="form-label" style="font-size: 11px;">Partitioning & Cluster Keys</label>
-                            <input type="text" class="form-control form-control-sm val-table-partitions" value="${this.escapeHtml(t.partitionKeys || '')}" placeholder="e.g. partition by day(event_date), cluster by country">
-                          </div>
-                          <div>
-                            <label class="form-label" style="font-size: 11px;">Volume / Row Count</label>
-                            <input type="text" class="form-control form-control-sm val-table-volume" value="${this.escapeHtml(t.volume || '')}" placeholder="e.g. ~45,000,000 rows (daily +200k)">
-                          </div>
-                        </div>
-                      </div>
-                    `).join('')}
-                    ${(!doc.validatedTables || doc.validatedTables.length === 0) ? `
-                      <div style="font-size: 12px; color: var(--text-muted); font-style: italic; text-align: center; padding: 10px;">No multiple tables added yet. Click "+ Add Validated Table" to validate multiple tables in this document.</div>
-                    ` : ''}
-                  </div>
-                </div>
-              </div>
-
-              <div class="grid-cols-3">
-                <div class="form-group">
-                  <label class="form-label required">Document ID / Code</label>
-                  <input type="text" id="doc-input-id-meta" class="form-control" style="font-family: 'Consolas', 'Courier New', monospace; font-weight: 700;" value="${this.escapeHtml(doc.id || '')}" placeholder="e.g. DOC-20261011-7927" spellcheck="false" autocomplete="off">
-                  <div class="form-text">Unique tracking ID (synced with header).</div>
-                </div>
-                <div class="form-group">
-                  <label class="form-label required">Document Title</label>
-                  <input type="text" id="doc-input-title" class="form-control" value="${this.escapeHtml(doc.title || '')}" placeholder="e.g. ${this.escapeHtml(profile.label || 'Data')} Specification">
-                </div>
-                <div class="form-group">
-                  <label class="form-label required">Document Type</label>
-                  <select id="doc-input-type" class="form-control">
+                  <label for="doc-input-type" class="form-label required" style="font-weight: 600; font-size: 12px;">Document Classification</label>
+                  <select id="doc-input-type" class="form-control" style="font-weight: 600;">
                     ${(profile.documentTypes || [
                       "Data Quality Validation Rules",
                       "Data Quality Assessment",
@@ -3058,80 +2912,378 @@
                       <option value="${this.escapeHtml(doc.documentType)}" selected>${this.escapeHtml(doc.documentType)}</option>
                     ` : ''}
                   </select>
+                  <div class="form-text">Standard enterprise taxonomy category.</div>
+                </div>
+                <div class="form-group">
+                  <label for="doc-input-domain" class="form-label" style="font-weight: 600; font-size: 12px;">Business Domain</label>
+                  <input type="text" id="doc-input-domain" class="form-control" list="dl-domains" value="${this.escapeHtml(doc.businessDomain || '')}" placeholder="e.g. Finance, Customer, Supply Chain, Operations">
+                  <div class="form-text">Functional business area owning the underlying data.</div>
                 </div>
               </div>
 
+              <!-- Operational Governance Grid -->
               <div class="grid-cols-3">
-                <div class="form-group">
-                  <label class="form-label">Business Domain</label>
-                  <input type="text" id="doc-input-domain" class="form-control" list="dl-domains" value="${this.escapeHtml(doc.businessDomain || '')}" placeholder="e.g. Finance, Customer, Supply Chain">
-                </div>
-                <div class="form-group">
-                  <label class="form-label">Author / Data Owner</label>
-                  <input type="text" id="doc-input-owner" class="form-control" list="dl-owners" value="${this.escapeHtml(doc.owner || '')}" placeholder="e.g. Sarah Jenkins">
-                </div>
-                <div class="form-group">
-                  <label class="form-label">Assigned Reviewer</label>
-                  <input type="text" id="doc-input-reviewer" class="form-control" list="dl-reviewers" value="${this.escapeHtml(doc.reviewer || '')}" placeholder="e.g. David Kim">
-                </div>
-              </div>
-
-              <div class="grid-cols-3">
-                <div class="form-group">
-                  <label class="form-label">Governance Status</label>
-                  <select id="doc-input-status" class="form-control">
-                    <option value="Draft" ${doc.status === 'Draft' ? 'selected' : ''}>Draft</option>
-                    <option value="In Review" ${doc.status === 'In Review' ? 'selected' : ''}>In Review</option>
-                    <option value="Changes Requested" ${doc.status === 'Changes Requested' ? 'selected' : ''}>Changes Requested</option>
-                    <option value="Approved" ${doc.status === 'Approved' ? 'selected' : ''}>Approved</option>
-                    <option value="Rejected" ${doc.status === 'Rejected' ? 'selected' : ''}>Rejected</option>
-                    <option value="Archived" ${doc.status === 'Archived' ? 'selected' : ''}>Archived</option>
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="doc-input-status" class="form-label" style="font-weight: 600; font-size: 12px;">Governance Status</label>
+                  <select id="doc-input-status" class="form-control" style="font-weight: 600;">
+                    <option value="Draft" ${doc.status === 'Draft' ? 'selected' : ''}>📝 Draft</option>
+                    <option value="In Review" ${doc.status === 'In Review' ? 'selected' : ''}>👀 In Review</option>
+                    <option value="Changes Requested" ${doc.status === 'Changes Requested' ? 'selected' : ''}>🔄 Changes Requested</option>
+                    <option value="Approved" ${doc.status === 'Approved' ? 'selected' : ''}>✅ Approved</option>
+                    <option value="Rejected" ${doc.status === 'Rejected' ? 'selected' : ''}>❌ Rejected</option>
+                    <option value="Archived" ${doc.status === 'Archived' ? 'selected' : ''}>📦 Archived</option>
                   </select>
                 </div>
-                <div class="form-group">
-                  <label class="form-label">Priority</label>
-                  <select id="doc-input-priority" class="form-control">
-                    <option value="Critical" ${doc.priority === 'Critical' ? 'selected' : ''}>Critical</option>
-                    <option value="High" ${doc.priority === 'High' ? 'selected' : ''}>High</option>
-                    <option value="Medium" ${doc.priority === 'Medium' ? 'selected' : ''}>Medium</option>
-                    <option value="Low" ${doc.priority === 'Low' ? 'selected' : ''}>Low</option>
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="doc-input-priority" class="form-label" style="font-weight: 600; font-size: 12px;">Priority / SLA Tier</label>
+                  <select id="doc-input-priority" class="form-control" style="font-weight: 600;">
+                    <option value="Critical" ${doc.priority === 'Critical' ? 'selected' : ''}>🔥 Critical (P1)</option>
+                    <option value="High" ${doc.priority === 'High' ? 'selected' : ''}>⚡ High (P2)</option>
+                    <option value="Medium" ${doc.priority === 'Medium' ? 'selected' : ''}>🔹 Medium (P3)</option>
+                    <option value="Low" ${doc.priority === 'Low' ? 'selected' : ''}>⚪ Low (P4)</option>
                   </select>
                 </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="doc-input-frequency" class="form-label" style="font-weight: 600; font-size: 12px;">Execution Cadence</label>
+                  <input type="text" id="doc-input-frequency" class="form-control" list="dl-frequencies" value="${this.escapeHtml(doc.executionFrequency || '')}" placeholder="e.g. Daily at 04:00 UTC, Real-Time Microbatch">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- CARD 2: DISCIPLINE WORKSPACE & SPECIFICATION SUBTYPE -->
+          <div class="card" style="margin-bottom: 20px;">
+            <div class="card-header" style="justify-content: space-between; align-items: center; background: var(--surface-alt); padding: 12px 20px;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 18px;">🎯</span>
+                <div>
+                  <span class="card-title" style="font-size: 15px; font-weight: 700; margin: 0;">2. Discipline Workspace & Specification Subtype</span>
+                  <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Tailor the documentation environment and validation cards to your professional specialty</div>
+                </div>
+              </div>
+              <span class="badge badge-info" style="font-size: 11px;">Active: ${this.escapeHtml(profile.label || profile.name)}</span>
+            </div>
+            <div class="card-body" style="padding: 20px;">
+              <!-- Discipline Workspace Selector -->
+              <div style="margin-bottom: 20px; padding: 14px 16px; background: var(--surface-alt); border-radius: var(--border-radius-md); border: 1px solid var(--surface-border-strong);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                  <label for="doc-input-team-profile" class="form-label required" style="font-size: 13px; font-weight: 700; margin: 0; color: var(--primary-color);">
+                    Professional Discipline Workspace
+                  </label>
+                  <span class="badge badge-primary" style="font-size: 11px;">${this.escapeHtml(profile.editionTag || profile.name)}</span>
+                </div>
+                <select id="doc-input-team-profile" class="form-control" style="font-weight: 600; font-size: 13px;">
+                  ${Object.keys((this.config && this.config.teamProfiles) || {}).map(k => {
+                    const p = this.config.teamProfiles[k];
+                    return `<option value="${k}" ${k === docProfileKey ? 'selected' : ''}>${this.escapeHtml(p.label || p.name)} — ${this.escapeHtml(p.editionTag || p.roleTitle)}</option>`;
+                  }).join('')}
+                </select>
+                <div class="form-text" style="margin-top: 6px;">Changing discipline workspace dynamically configures specification subtypes, recommended dynamic fields, and specialized technical attributes.</div>
+              </div>
+
+              <!-- Primary Specification Subtype Selector -->
+              <div>
+                <label class="form-label required" style="font-size: 13px; font-weight: 700; margin-bottom: 10px; display: block;">
+                  Select Specification Subtype (${this.escapeHtml(profile.label || 'Team Profile')})
+                </label>
+                <div class="val-type-grid" style="margin-bottom: 0;">
+                  ${(profile.subtypes || []).map(st => `
+                    <div class="val-type-card ${doc.validationType === st.name || doc.validationType === st.id ? 'active' : ''}" data-type="${this.escapeHtml(st.name)}">
+                      <span class="val-type-icon">${st.icon || '📄'}</span>
+                      <span class="val-type-title">${this.escapeHtml(st.name)}</span>
+                      <span class="val-type-desc">${this.escapeHtml(st.desc || '')}</span>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- CARD 3: TEAM & MULTI-USER ATTRIBUTION -->
+          <div class="card" style="margin-bottom: 20px;">
+            <div class="card-header" style="justify-content: space-between; align-items: center; background: var(--surface-alt); padding: 12px 20px;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 18px;">👥</span>
+                <div>
+                  <span class="card-title" style="font-size: 15px; font-weight: 700; margin: 0;">3. Team Attribution & Assignees</span>
+                  <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Owners, collaborators, engineering squad, and governance peer reviewers</div>
+                </div>
+              </div>
+            </div>
+            <div class="card-body" style="padding: 20px;">
+              <div class="grid-cols-2" style="margin-bottom: 16px;">
                 <div class="form-group">
-                  <label class="form-label">Execution Frequency</label>
-                  <input type="text" id="doc-input-frequency" class="form-control" list="dl-frequencies" value="${this.escapeHtml(doc.executionFrequency || '')}" placeholder="e.g. Daily at 04:00 UTC">
+                  <label for="doc-input-team" class="form-label required" style="font-weight: 600; font-size: 12px;">Responsible Squad / Team</label>
+                  <input type="text" id="doc-input-team" class="form-control" list="dl-teams" value="${this.escapeHtml(doc.team || profile.name || '')}" placeholder="e.g. Analytics Engineering, Finance BI, Risk Data Platform">
+                  <div class="form-text">Primary team or pod accountable for this specification.</div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label required" style="font-weight: 600; font-size: 12px;">Multi-User Assignment & Collaborators</label>
+                  <div class="user-chips-container" id="doc-user-chips-box">
+                    ${(doc.usernames || []).map(u => `
+                      <span class="user-chip">
+                        <span>${this.escapeHtml(u)}</span>
+                        <button type="button" class="user-chip-remove" data-user="${this.escapeHtml(u)}">&times;</button>
+                      </span>
+                    `).join('')}
+                    <input type="text" class="user-chips-input" id="doc-input-new-user" list="dl-usernames" placeholder="Type username & hit Enter/comma...">
+                    <button type="button" class="btn btn-outline btn-sm" id="btn-add-doc-user" style="padding: 2px 8px; font-size: 11px;">+ Add</button>
+                  </div>
+                  <div class="form-text">Add multiple owners, engineers, or consumers. Type username and hit Enter.</div>
                 </div>
               </div>
 
-              <div class="form-group">
-                <label class="form-label">Executive Summary</label>
-                <textarea id="doc-input-summary" class="form-control" rows="3" placeholder="Brief summary describing the scope and intent of this quality document...">${this.escapeHtml(doc.executiveSummary || '')}</textarea>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Business Objective</label>
-                <textarea id="doc-input-objective" class="form-control" rows="2" placeholder="Why is this data quality check critical for business operations and compliance?">${this.escapeHtml(doc.businessObjective || '')}</textarea>
-              </div>
-
-              <!-- Author Sign-Off & Contact Details (Optional: null or string value) -->
-              <div style="margin-top: 18px; padding-top: 14px; border-top: 1px dashed var(--surface-border-strong);">
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
-                  <span style="font-size: 13px; font-weight: 700; color: var(--primary-color);">👤 Document Author & Contact Info (Optional)</span>
-                  <span style="font-size: 11px; color: var(--text-muted);">Can be blank/null. If populated, displayed at the end of generated PDF documents & saved in .dldoc files.</span>
+              <div class="grid-cols-2">
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="doc-input-owner" class="form-label" style="font-weight: 600; font-size: 12px;">Lead Author / Data Steward</label>
+                  <input type="text" id="doc-input-owner" class="form-control" list="dl-owners" value="${this.escapeHtml(doc.owner || docUser.username || '')}" placeholder="e.g. ${this.escapeHtml(docUser.username || 'Ahmed Hassan')}">
+                  <div class="form-text">Primary individual author or accountable point of contact.</div>
                 </div>
-                <div class="grid-cols-3">
-                  <div class="form-group" style="margin-bottom: 0;">
-                    <label class="form-label" style="font-size: 11px;">Author Username / Name</label>
-                    <input type="text" id="doc-input-username" class="form-control form-control-sm" value="${this.escapeHtml(docUser.username || '')}" placeholder="e.g. jdoe or Jane Doe">
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="doc-input-reviewer" class="form-label" style="font-weight: 600; font-size: 12px;">Designated Peer Reviewer</label>
+                  <input type="text" id="doc-input-reviewer" class="form-control" list="dl-reviewers" value="${this.escapeHtml(doc.reviewer || '')}" placeholder="e.g. Omar Farouk">
+                  <div class="form-text">Quality engineer or lead assigned to approve this specification.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- CARD 4: EXECUTIVE SCOPE & OBJECTIVES -->
+          <div class="card" style="margin-bottom: 20px;">
+            <div class="card-header" style="justify-content: space-between; align-items: center; background: var(--surface-alt); padding: 12px 20px;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 18px;">💡</span>
+                <div>
+                  <span class="card-title" style="font-size: 15px; font-weight: 700; margin: 0;">4. Executive Scope & Business Objective</span>
+                  <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">High-level business context, intent, operational impact, and regulatory justification</div>
+                </div>
+              </div>
+            </div>
+            <div class="card-body" style="padding: 20px;">
+              <div class="grid-cols-2" style="gap: 16px;">
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="doc-input-summary" class="form-label" style="font-weight: 600; font-size: 12px;">Executive Summary</label>
+                  <textarea id="doc-input-summary" class="form-control" rows="3" placeholder="Brief summary describing the scope, business background, and intent of this quality document...">${this.escapeHtml(doc.executiveSummary || '')}</textarea>
+                  <div class="form-text">High-level narrative printed in executive briefings and report summaries.</div>
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="doc-input-objective" class="form-label" style="font-weight: 600; font-size: 12px;">Business Objective & Compliance Value</label>
+                  <textarea id="doc-input-objective" class="form-control" rows="3" placeholder="Why is this data quality check critical for business operations, financial reporting, and compliance?">${this.escapeHtml(doc.businessObjective || '')}</textarea>
+                  <div class="form-text">Explains financial, regulatory, or operational risk if validation fails.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- CARD 5: DISCIPLINE TECHNICAL SPECIFICATION ATTRIBUTES -->
+          <div class="card" style="margin-bottom: 20px; border: 1px solid var(--surface-border-strong);">
+            <div class="card-header" style="background: var(--surface-alt); padding: 12px 20px; justify-content: space-between; align-items: center;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 18px;">🛠️</span>
+                <div>
+                  <span class="card-title" style="font-size: 15px; font-weight: 700; color: var(--primary-color); margin: 0;">
+                    5. ${this.escapeHtml(profile.label)} — Technical Specification Attributes
+                  </span>
+                  <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">
+                    Specialized metadata fields specific to <strong>${this.escapeHtml(profile.label)}</strong>. Embedded into .dldoc files and printed in Section 2 of PDF reports.
                   </div>
-                  <div class="form-group" style="margin-bottom: 0;">
-                    <label class="form-label" style="font-size: 11px;">Author Email</label>
-                    <input type="email" id="doc-input-useremail" class="form-control form-control-sm" value="${this.escapeHtml(docUser.useremail || '')}" placeholder="e.g. jane.doe@company.com">
+                </div>
+              </div>
+              <span class="badge badge-info" style="font-size: 11px;">${profileAttrs.length} Attributes</span>
+            </div>
+            <div class="card-body" style="padding: 20px;">
+              <div class="grid-cols-2" style="gap: 16px;">
+                ${profileAttrs.map(attr => {
+                  const val = (doc.teamAttributes && doc.teamAttributes[attr.key] !== undefined) ? doc.teamAttributes[attr.key] : '';
+                  if (attr.type === 'textarea') {
+                    return `
+                      <div class="form-group" style="grid-column: 1 / -1; margin-bottom: 0;">
+                        <label class="form-label" style="font-weight: 600; font-size: 12px; color: var(--text-color);">${this.escapeHtml(attr.label)}</label>
+                        <textarea class="form-control team-profile-attr-input" data-attr-key="${attr.key}" rows="${attr.rows || 2}" placeholder="${this.escapeHtml(attr.placeholder || '')}">${this.escapeHtml(val)}</textarea>
+                      </div>
+                    `;
+                  }
+                  return `
+                    <div class="form-group" style="margin-bottom: 0;">
+                      <label class="form-label" style="font-weight: 600; font-size: 12px; color: var(--text-color);">${this.escapeHtml(attr.label)}</label>
+                      <input type="text" class="form-control team-profile-attr-input" data-attr-key="${attr.key}" value="${this.escapeHtml(val)}" placeholder="${this.escapeHtml(attr.placeholder || '')}">
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          </div>
+
+          <!-- CARD 6: DYNAMIC VALIDATION INPUTS -->
+          <div class="dynamic-fields-section" style="margin-bottom: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 18px;">⚡</span>
+                <div>
+                  <strong style="font-size: 14px; color: var(--primary-color);">6. Dynamic Inputs for <span id="lbl-dyn-val-type">${this.escapeHtml(doc.validationType || 'Specification')}</span></strong>
+                  <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Recommended dynamic attributes tailored for ${this.escapeHtml(profile.label)}</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Suggested Quick-Add Pills based on active type -->
+            <div style="margin-bottom: 14px;" id="suggested-pills-container">
+              <span style="font-size: 11px; font-weight: 700; color: var(--text-muted); margin-right: 6px;">RECOMMENDED INPUTS:</span>
+              ${this.getSuggestedInputsForType(doc.validationType || (profile.subtypes && profile.subtypes[0] && profile.subtypes[0].name) || 'Specification').map(s => `
+                <button type="button" class="dynamic-field-pill btn-quick-add-field" data-name="${this.escapeHtml(s)}">+ ${this.escapeHtml(s)}</button>
+              `).join('')}
+            </div>
+
+            <!-- Search & Add Bar -->
+            <div style="display: flex; gap: 8px; margin-bottom: 14px;">
+              <input type="text" id="txt-search-add-field" class="form-control form-control-sm" placeholder="🔍 Search or type any custom field name to add (e.g. Warehouse Cluster, SLA, Grain)...">
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-add-dynamic-field">➕ Add Input Field</button>
+            </div>
+
+            <!-- Container of Active Dynamic Fields -->
+            <div id="container-dynamic-fields">
+              ${(doc.dynamicInputs || []).map((f, fIdx) => `
+                <div class="dynamic-field-card" data-id="${f.id || `f-${fIdx}`}">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <strong class="dynamic-field-label" style="font-size: 12px; color: var(--text-color);">${this.escapeHtml(f.label || 'Field')}</strong>
+                    <button type="button" class="btn btn-outline btn-sm btn-remove-dynamic-field" data-id="${f.id || `f-${fIdx}`}" style="color: #ef4444; padding: 1px 6px; font-size: 11px;" title="Remove field">&times;</button>
                   </div>
-                  <div class="form-group" style="margin-bottom: 0;">
-                    <label class="form-label" style="font-size: 11px;">Author Phone</label>
-                    <input type="tel" id="doc-input-userphone" class="form-control form-control-sm" value="${this.escapeHtml(docUser.userphone || '')}" placeholder="e.g. +1 (555) 019-2834">
+                  <input type="text" class="form-control form-control-sm dynamic-field-input" value="${this.escapeHtml(f.value || '')}" placeholder="Enter ${this.escapeHtml(f.label)}...">
+                </div>
+              `).join('')}
+              ${(!doc.dynamicInputs || doc.dynamicInputs.length === 0) ? `
+                <div id="empty-dynamic-fields-note" style="font-size: 12px; color: var(--text-muted); font-style: italic; text-align: center; padding: 10px;">No dynamic inputs added yet. Click any recommended input above or type a custom field name to add.</div>
+              ` : ''}
+            </div>
+          </div>
+
+          <!-- CARD 7A: COMPOSITE MULTI-VALIDATION (MODELS) -->
+          <div id="section-validated-models" style="${(doc.validationType === 'Model Validation' || doc.validationType === 'Model and Table Validation') ? '' : 'display: none;'} margin-bottom: 20px;">
+            <div class="card" style="border: 1px solid var(--surface-border-strong);">
+              <div class="card-header" style="background: var(--surface-alt); padding: 12px 20px; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span style="font-size: 16px;">🧩</span>
+                  <span class="card-title" style="font-size: 14px; font-weight: 700;">7A. Validated Models (${(doc.validatedModels || []).length})</span>
+                </div>
+                <button type="button" class="btn btn-outline btn-sm" id="btn-add-validated-model">➕ Add Validated Model</button>
+              </div>
+              <div class="card-body" id="container-validated-models" style="padding: 16px;">
+                ${(doc.validatedModels || []).map((m, mIdx) => `
+                  <div class="card val-model-card" data-idx="${mIdx}" style="margin-bottom: 12px; padding: 14px; border: 1px solid var(--surface-border);">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px; align-items: center;">
+                      <strong>Model #${mIdx + 1}</strong>
+                      <button type="button" class="btn btn-outline btn-sm btn-delete-val-model" data-idx="${mIdx}" style="color: #ef4444; padding: 1px 8px;">&times; Remove</button>
+                    </div>
+                    <div class="grid-cols-3">
+                      <div>
+                        <label class="form-label" style="font-size: 11.5px; font-weight: 600;">Model Name</label>
+                        <input type="text" class="form-control form-control-sm val-model-name" value="${this.escapeHtml(m.modelName || '')}" placeholder="e.g. stg_orders / fct_monthly_sales">
+                      </div>
+                      <div>
+                        <label class="form-label" style="font-size: 11.5px; font-weight: 600;">Primary Key / Grain</label>
+                        <input type="text" class="form-control form-control-sm val-model-grain" value="${this.escapeHtml(m.grain || '')}" placeholder="e.g. order_id, line_item_id">
+                      </div>
+                      <div>
+                        <label class="form-label" style="font-size: 11.5px; font-weight: 600;">Materialization</label>
+                        <select class="form-control form-control-sm val-model-mat">
+                          <option value="Table" ${m.materialization === 'Table' ? 'selected' : ''}>Table</option>
+                          <option value="View" ${m.materialization === 'View' ? 'selected' : ''}>View</option>
+                          <option value="Incremental" ${m.materialization === 'Incremental' ? 'selected' : ''}>Incremental</option>
+                          <option value="Ephemeral" ${m.materialization === 'Ephemeral' ? 'selected' : ''}>Ephemeral</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div style="margin-top: 10px;">
+                      <label class="form-label" style="font-size: 11.5px; font-weight: 600;">Lineage & Upstream Sources</label>
+                      <input type="text" class="form-control form-control-sm val-model-sources" value="${this.escapeHtml(m.upstreamSources || '')}" placeholder="e.g. source('raw', 'orders'), ref('stg_customers')">
+                    </div>
                   </div>
+                `).join('')}
+                ${(!doc.validatedModels || doc.validatedModels.length === 0) ? `
+                  <div style="font-size: 12px; color: var(--text-muted); font-style: italic; text-align: center; padding: 12px;">No multiple models added yet. Click "+ Add Validated Model" to audit multiple models in this single document.</div>
+                ` : ''}
+              </div>
+            </div>
+          </div>
+
+          <!-- CARD 7B: COMPOSITE MULTI-VALIDATION (PHYSICAL TABLES) -->
+          <div id="section-validated-tables" style="${(doc.validationType === 'Table Validation' || doc.validationType === 'Model and Table Validation') ? '' : 'display: none;'} margin-bottom: 20px;">
+            <div class="card" style="border: 1px solid var(--surface-border-strong);">
+              <div class="card-header" style="background: var(--surface-alt); padding: 12px 20px; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span style="font-size: 16px;">🗄️</span>
+                  <span class="card-title" style="font-size: 14px; font-weight: 700;">7B. Validated Physical Tables (${(doc.validatedTables || []).length})</span>
+                </div>
+                <button type="button" class="btn btn-outline btn-sm" id="btn-add-validated-table">➕ Add Validated Table</button>
+              </div>
+              <div class="card-body" id="container-validated-tables" style="padding: 16px;">
+                ${(doc.validatedTables || []).map((t, tIdx) => `
+                  <div class="card val-table-card" data-idx="${tIdx}" style="margin-bottom: 12px; padding: 14px; border: 1px solid var(--surface-border);">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px; align-items: center;">
+                      <strong>Physical Table #${tIdx + 1}</strong>
+                      <button type="button" class="btn btn-outline btn-sm btn-delete-val-table" data-idx="${tIdx}" style="color: #ef4444; padding: 1px 8px;">&times; Remove</button>
+                    </div>
+                    <div class="grid-cols-3">
+                      <div>
+                        <label class="form-label" style="font-size: 11.5px; font-weight: 600;">Table / View Name</label>
+                        <input type="text" class="form-control form-control-sm val-table-name" value="${this.escapeHtml(t.tableName || '')}" placeholder="e.g. prod_dwh.fact_transactions">
+                      </div>
+                      <div>
+                        <label class="form-label" style="font-size: 11.5px; font-weight: 600;">Catalog & Schema</label>
+                        <input type="text" class="form-control form-control-sm val-table-schema" value="${this.escapeHtml(t.schema || '')}" placeholder="e.g. iceberg_prod.finance">
+                      </div>
+                      <div>
+                        <label class="form-label" style="font-size: 11.5px; font-weight: 600;">Storage Format</label>
+                        <select class="form-control form-control-sm val-table-format">
+                          <option value="Parquet" ${t.storageFormat === 'Parquet' ? 'selected' : ''}>Parquet</option>
+                          <option value="Iceberg" ${t.storageFormat === 'Iceberg' ? 'selected' : ''}>Iceberg</option>
+                          <option value="Delta Lake" ${t.storageFormat === 'Delta Lake' ? 'selected' : ''}>Delta Lake</option>
+                          <option value="ORC" ${t.storageFormat === 'ORC' ? 'selected' : ''}>ORC</option>
+                          <option value="CSV / Text" ${t.storageFormat === 'CSV / Text' ? 'selected' : ''}>CSV / Text</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div class="grid-cols-2" style="margin-top: 10px;">
+                      <div>
+                        <label class="form-label" style="font-size: 11.5px; font-weight: 600;">Partitioning & Cluster Keys</label>
+                        <input type="text" class="form-control form-control-sm val-table-partitions" value="${this.escapeHtml(t.partitionKeys || '')}" placeholder="e.g. partition by day(event_date), cluster by country">
+                      </div>
+                      <div>
+                        <label class="form-label" style="font-size: 11.5px; font-weight: 600;">Volume / Row Count</label>
+                        <input type="text" class="form-control form-control-sm val-table-volume" value="${this.escapeHtml(t.volume || '')}" placeholder="e.g. ~45,000,000 rows (daily +200k)">
+                      </div>
+                    </div>
+                  </div>
+                `).join('')}
+                ${(!doc.validatedTables || doc.validatedTables.length === 0) ? `
+                  <div style="font-size: 12px; color: var(--text-muted); font-style: italic; text-align: center; padding: 12px;">No multiple tables added yet. Click "+ Add Validated Table" to validate multiple tables in this document.</div>
+                ` : ''}
+              </div>
+            </div>
+          </div>
+
+          <!-- CARD 8: AUTHOR CONTACT CREDENTIALS (FROM CONFIG.JS) -->
+          <div class="card" style="margin-bottom: 20px; border: 1px dashed var(--surface-border-strong); background: var(--surface-alt);">
+            <div class="card-header" style="padding: 12px 20px; justify-content: space-between; align-items: center; background: transparent; border-bottom: 1px dashed var(--surface-border-strong);">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 16px;">👤</span>
+                <span class="card-title" style="font-size: 13px; font-weight: 700; color: var(--primary-color);">8. Document Author & Contact Info (${docUser.username ? 'Author: ' + this.escapeHtml(docUser.username) : 'Optional'})</span>
+              </div>
+              <span style="font-size: 11px; color: var(--text-muted);">Configured in config.js (Author Attribution & Sign-Off Details). Displayed in generated PDF & saved in .dldoc.</span>
+            </div>
+            <div class="card-body" style="padding: 16px 20px;">
+              <div class="grid-cols-3">
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="doc-input-username" class="form-label" style="font-size: 11.5px; font-weight: 600;">Author Username / Name</label>
+                  <input type="text" id="doc-input-username" class="form-control form-control-sm" value="${this.escapeHtml(docUser.username || '')}" placeholder="e.g. ${this.escapeHtml(docUser.username || 'Alaa Mohamed')}">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="doc-input-useremail" class="form-label" style="font-size: 11.5px; font-weight: 600;">Author Corporate Email</label>
+                  <input type="email" id="doc-input-useremail" class="form-control form-control-sm" value="${this.escapeHtml(docUser.useremail || '')}" placeholder="e.g. ${this.escapeHtml(docUser.useremail || 'alaa.mohamed@company.com')}">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="doc-input-userphone" class="form-label" style="font-size: 11.5px; font-weight: 600;">Author Phone / Contact</label>
+                  <input type="tel" id="doc-input-userphone" class="form-control form-control-sm" value="${this.escapeHtml(docUser.userphone || '')}" placeholder="e.g. +20 10 1234 5678">
                 </div>
               </div>
             </div>
@@ -5633,7 +5785,7 @@ ${q.query || '-- No SQL specified'}
         </div>
         <div class="form-group">
           <label class="form-label">Author Name</label>
-          <input type="text" id="ver-input-author" class="form-control" value="${this.escapeHtml(this.currentDoc.owner || (Array.isArray(this.currentDoc.usernames) && this.currentDoc.usernames[0]) || '')}" placeholder="e.g. Sarah Jenkins">
+          <input type="text" id="ver-input-author" class="form-control" value="${this.escapeHtml(this.currentDoc.owner || (Array.isArray(this.currentDoc.usernames) && this.currentDoc.usernames[0]) || '')}" placeholder="e.g. Ahmed Hassan">
         </div>
         <div class="form-group">
           <label class="form-label">Change Summary Notes</label>
@@ -7390,7 +7542,7 @@ WHERE order_id IS NULL
         <div class="grid-cols-3">
           <div class="form-group">
             <label class="form-label">Owner</label>
-            <input type="text" id="iss-in-owner" class="form-control" placeholder="e.g. Michael Chang">
+            <input type="text" id="iss-in-owner" class="form-control" placeholder="e.g. Youssef Mansour">
           </div>
           <div class="form-group">
             <label class="form-label">Status</label>
@@ -7483,7 +7635,7 @@ WHERE order_id IS NULL
         <div class="grid-cols-3">
           <div class="form-group">
             <label class="form-label">Owner</label>
-            <input type="text" id="iss-edit-owner" class="form-control" value="${this.escapeHtml(iss.owner || '')}" placeholder="e.g. Michael Chang">
+            <input type="text" id="iss-edit-owner" class="form-control" value="${this.escapeHtml(iss.owner || '')}" placeholder="e.g. Youssef Mansour">
           </div>
           <div class="form-group">
             <label class="form-label">Status</label>
@@ -8614,6 +8766,980 @@ WHERE order_id IS NULL
     },
 
     // ====================================================================
+    // 19B. VIEW: HOW TO USE - MULTI-DISCIPLINE ENGINEERING GUIDE
+    // ====================================================================
+
+    renderHowToUse(container, params = {}) {
+      container = container || document.getElementById('main-content-view');
+      if (!container) return;
+
+      const currentProfileKey = this.getActiveProfileKey();
+      const activeTab = params.activeTab || this._howToUseActiveTab || currentProfileKey || 'data_quality';
+      this._howToUseActiveTab = activeTab;
+
+      const profile = this.getActiveProfile();
+      const allProfiles = (this.config && this.config.teamProfiles) || {};
+      const activeProfileData = allProfiles[activeTab] || allProfiles['data_quality'] || {};
+
+      // Discipline definitions with specific clear step-by-step workflows
+      const disciplineDetails = {
+        data_quality: {
+          icon: '🛡️',
+          name: 'Data Quality Engineering',
+          roleTitle: 'Data Quality Engineer / Data Steward',
+          editionTag: 'Data Quality Edition',
+          themeColor: '#00A6A6',
+          badgeClass: 'badge-info',
+          mission: 'Guarantees reliable, trustworthy, and audit-compliant data assets. Codifies technical assertions, SLA thresholds, anomaly triage runbooks, and enterprise quality scorecards across lakehouse and warehouse storage layers.',
+          workflowSteps: [
+            {
+              step: '01',
+              phase: 'Phase 1: Initiation & Scoping',
+              title: 'Initialize Specification & Classify Severity',
+              icon: '📋',
+              location: 'Editor -> Tab 1 (Metadata)',
+              actionTarget: 'editor',
+              actionLabel: '✏️ Open Document Editor',
+              items: [
+                'Click <strong>New Document</strong> or select a pre-configured template from <strong>Templates</strong>.',
+                'Select your Subtype: choose <strong>Model Validation</strong> (for dbt transformation models) or <strong>Table Validation</strong> (for physical Iceberg/Snowflake tables).',
+                'Specify the <strong>Business Domain</strong> (e.g. <em>Checkout & Billing</em>), target delivery SLA, and primary data owner.',
+                'Assign the <strong>Severity Tier</strong> (<em>Tier-1 Critical</em>, <em>High</em>, <em>Medium</em>, <em>Low</em>) to define escalation priority.',
+                'Attach your author name and email in the attribution block to sign off on compliance.'
+              ],
+              tip: 'Non-blocking guidance allows you to save drafts and publish work immediately without administrative lockout.'
+            },
+            {
+              step: '02',
+              phase: 'Phase 2: Lineage & Schema',
+              title: 'Map System Lineage & Column Grain',
+              icon: '🗺️',
+              location: 'Editor -> Tab 2 (Source Mappings)',
+              actionTarget: 'editor',
+              actionLabel: '📋 Go to Source Mappings',
+              items: [
+                'Specify the upstream source system, catalog name (e.g. <code>iceberg_prod.analytics</code>), and schema.',
+                'Click <strong>Quick Paste Columns</strong> to ingest 50+ column names from SQL DDL, <code>DESCRIBE</code> output, or Excel in 1 click.',
+                'Map Source-to-Target column transformations, noting CASE expressions, cast logic, and composite primary key uniqueness grains.'
+              ],
+              tip: 'Documenting column transformation lineage here provides an unambiguous blueprint for data pipeline engineers.'
+            },
+            {
+              step: '03',
+              phase: 'Phase 3: Technical Assertions',
+              title: 'Author Multi-Dialect SQL Assertion Queries',
+              icon: '💾',
+              location: 'Editor -> Tab 3 (SQL Workbench)',
+              actionTarget: 'sql-library',
+              actionLabel: '💾 Open SQL Library',
+              items: [
+                'Write or paste technical verification queries in <strong>Trino, Snowflake, PostgreSQL, MySQL, SQL Server, or ANSI SQL</strong>.',
+                'Benefit from line numbering, dialect syntax tags, query search, and 1-click clipboard copy.',
+                'Save reusable assertions into the <strong>SQL Library</strong> to share standard queries across the engineering team.'
+              ],
+              tip: 'Ensure dialect is accurately tagged so query syntax and formatting render cleanly in PDF audit reports.'
+            },
+            {
+              step: '04',
+              phase: 'Phase 4: Dimension Thresholds',
+              title: 'Configure 12 Quality Dimensions & Tolerances',
+              icon: '🛡️',
+              location: 'Editor -> Tab 4 (Validation Rules)',
+              actionTarget: 'rules',
+              actionLabel: '🛡️ View Rules Catalog',
+              items: [
+                'Catalog rules across the 12 standard dimensions: <em>Completeness, Uniqueness, Validity, Accuracy, Consistency, Timeliness, Referential Integrity, Reconciliation, Schema Validation, Business Rules, Duplicate Detection, and Freshness</em>.',
+                'Define operators (<code>= 0</code>, <code>< 0.1%</code>, <code>BETWEEN</code>) and expected result thresholds.',
+                'Export or import rules directly via CSV/Excel with built-in formula injection sanitization.'
+              ],
+              tip: 'Categorizing checks into the 12 dimensions feeds live dimension breakdown charts on the Executive Dashboard.'
+            },
+            {
+              step: '05',
+              phase: 'Phase 5: Execution Auditing',
+              title: 'Audit Test Executions & Track Defect Drift',
+              icon: '⏱️',
+              location: 'Editor -> Tab 5 (Executions) / Test Executions',
+              actionTarget: 'executions',
+              actionLabel: '⏱️ View Test Executions',
+              items: [
+                'Log automated or manual test runs across environments: <strong>PROD, UAT, QA, DEV</strong>.',
+                'Record execution timestamp, processed record volume, defect count, defect percentage, and pass/fail status.',
+                'Attach verified execution evidence and inspect pass rate trends on the <strong>Quality Scorecards</strong> dashboard.'
+              ],
+              tip: 'Execution logs automatically feed off-screen Chart.js trend charts embedded directly in executive PDF audit reports.'
+            },
+            {
+              step: '06',
+              phase: 'Phase 6: Incident Remediation & Certification',
+              title: 'Triage CAPA Issues & Certify PDF Sign-Off',
+              icon: '📜',
+              location: 'Editor -> Tab 6 (Issues) / Topbar -> Export PDF',
+              actionTarget: 'issues',
+              actionLabel: '⚠️ View Issues & CAPA',
+              items: [
+                'For failing thresholds, initiate an Issue with <strong>5-Whys root-cause analysis</strong>, corrective actions (CAPA), target SLA dates, and remediation owners.',
+                'Click <strong>Export PDF</strong> in the editor header to generate an audit-ready, multi-page compliance report with embedded scorecard charts and formal digital sign-off blocks.',
+                'Click <strong>Backup</strong> or export single-file <code>.dldoc</code> to version control your specifications in Git.'
+              ],
+              tip: 'Commit .dldoc files directly into your Git repository alongside your dbt models for version-controlled quality history.'
+            }
+          ]
+        },
+
+        data_analysis: {
+          icon: '📈',
+          name: 'Data Analysis & BI',
+          roleTitle: 'Data Analyst / Analytics Engineer / BI Developer',
+          editionTag: 'Analytics Edition',
+          themeColor: '#4472C4',
+          badgeClass: 'badge-primary',
+          mission: 'Eliminates metric ambiguity, prevents "KPI drift", and aligns analytics outputs with executive decision makers. Standardizes metric formulas, cohort study criteria, A/B experimentation briefs, and dashboard deep links.',
+          workflowSteps: [
+            {
+              step: '01',
+              phase: 'Phase 1: Metric & Stakeholder Scope',
+              title: 'Define Analytical Brief & Align with OKRs',
+              icon: '📊',
+              location: 'Editor -> Tab 1 (Metadata)',
+              actionTarget: 'editor',
+              actionLabel: '✏️ Open Document Editor',
+              items: [
+                'Select Subtype: <strong>Metric & KPI Definition</strong>, <strong>Ad-Hoc Analysis Brief</strong>, <strong>Cohort & Funnel Study</strong>, or <strong>A/B Test Evaluation</strong>.',
+                'Specify the target stakeholder and decision maker (e.g. <em>VP of Product</em>, <em>Chief Marketing Officer</em>, <em>Growth Tribe Lead</em>).',
+                'Link the specification directly to company OKRs (e.g. <em>Q4 OKR 2.1: Increase 30-Day Subscriber Retention to 48%</em>).',
+                'Set time horizons (e.g. <em>Trailing 12 Months - T12M</em>) and date granularity (<em>Daily / Weekly / Monthly grain</em>).'
+              ],
+              tip: 'Directly aligning documents to strategic company OKRs guarantees executive visibility and adoption.'
+            },
+            {
+              step: '02',
+              phase: 'Phase 2: Formula & Dimension Cuts',
+              title: 'Codify Certified Metric Formula & Dimension Slices',
+              icon: '🧮',
+              location: 'Editor -> Tab 1 (Attributes) & Tab 2 (Mappings)',
+              actionTarget: 'editor',
+              actionLabel: '📋 Go to Source Mappings',
+              items: [
+                'Document the certified calculation formula: e.g. <code>SUM(net_revenue) / NULLIF(COUNT(DISTINCT active_users), 0)</code>.',
+                'Specify dimension slice hierarchies (e.g. <em>Region > Country > City</em>, <em>Platform > App Version > Device Tier</em>).',
+                'Paste deep-links to live BI dashboards (Looker, Tableau, PowerBI) for instant stakeholder cross-referencing.',
+                'Record baseline historical benchmarks (e.g. <em>+14.2% MoM vs Q3 baseline</em>) and data freshness SLAs (e.g. <em>daily refresh by 07:00 UTC</em>).'
+              ],
+              tip: 'Codifying exact formulas prevents conflicting KPI calculations across Marketing, Finance, and Product teams.'
+            },
+            {
+              step: '03',
+              phase: 'Phase 3: Statistical Rigor & Funnels',
+              title: 'Document Cohort Inception & A/B Statistical Criteria',
+              icon: '🧪',
+              location: 'Editor -> Tab 1 (Specialized Attributes)',
+              actionTarget: 'templates',
+              actionLabel: '📋 Browse Templates',
+              items: [
+                'For A/B Experimentation: document traffic splits (e.g. <em>50/50 Control vs Variant B</em>), minimum sample size (<em>25,000 users/arm</em>), statistical significance (<code>p < 0.01</code>), and 95% confidence intervals.',
+                'For Cohorts & Funnels: define milestone steps (<em>Landing -> Signup -> Workspace Created -> Paid Checkout</em>), inception criteria (<em>first purchase within 7 days</em>), and drop-off tolerances.',
+                'Document outlier filtering rules (e.g. <em>filter internal QA accounts and orders > $50,000</em>).'
+              ],
+              tip: 'Documenting data biases and analytical caveats upfront (e.g. iOS ATT opt-out modeling) builds deep trust with leadership.'
+            },
+            {
+              step: '04',
+              phase: 'Phase 4: SQL Benchmarking',
+              title: 'Author Analytical Benchmarking Queries',
+              icon: '💾',
+              location: 'Editor -> Tab 3 (SQL Workbench)',
+              actionTarget: 'sql-library',
+              actionLabel: '💾 Open SQL Library',
+              items: [
+                'Author verification queries in Trino or ANSI SQL that cross-check warehouse facts against dashboard aggregate totals.',
+                'Confirm underlying data freshness SLAs and metric calculation accuracy before executive presentations.',
+                'Save reusable cohort, retention, and funnel queries directly to the global <strong>SQL Library</strong>.'
+              ],
+              tip: 'Use the query line numbering and 1-click copy feature to paste queries directly into your BI semantic layer.'
+            },
+            {
+              step: '05',
+              phase: 'Phase 5: Actionable Insights',
+              title: 'Synthesize Strategic Recommendations & Takeaways',
+              icon: '💡',
+              location: 'Editor -> Tab 4 (Validation Rules & Actions)',
+              actionTarget: 'documents',
+              actionLabel: '📑 Browse Documents',
+              items: [
+                'Lead with concrete business recommendations: e.g. <em>allocate +15% ad-spend to Tier-1 organic mobile cohorts</em>.',
+                'Summarize exploratory findings, observed user behavioral drop-offs, and revenue upside.',
+                'Record analytical assumptions and model limitations clearly in the caveats field.'
+              ],
+              tip: 'Executive stakeholders prioritize the "so what?"—always lead with clear business recommendations.'
+            },
+            {
+              step: '06',
+              phase: 'Phase 6: Executive PDF Delivery',
+              title: 'Export Executive Insights Brief & Portable Archive',
+              icon: '📄',
+              location: 'Editor Header -> Export PDF / Settings',
+              actionTarget: 'dashboard',
+              actionLabel: '📊 Go to Dashboard',
+              items: [
+                'Click <strong>Export PDF</strong> to generate a high-resolution, executive-ready analytical brief with formatted tables, visual KPI scorecards, and author contact cards.',
+                'Export as single-file <code>.dldoc</code> to preserve calculations and lineage permanently.',
+                'Share the document with leadership or archive it alongside your Git repository.'
+              ],
+              tip: 'The PDF layout is optimized for high-resolution printing and formal C-level executive review.'
+            }
+          ]
+        },
+
+        data_engineering: {
+          icon: '⚙️',
+          name: 'Data Engineering & Pipelines',
+          roleTitle: 'Data Engineer / DataOps Engineer / Platform Architect',
+          editionTag: 'DataOps Edition',
+          themeColor: '#EA580C',
+          badgeClass: 'badge-warning',
+          mission: 'Documents robust orchestration pipelines, streaming CDC feeds, lakehouse table architectures (Iceberg/Delta), compute sizing, and disaster recovery runbooks. Bridges infrastructure, data contracts, and production SLAs.',
+          workflowSteps: [
+            {
+              step: '01',
+              phase: 'Phase 1: Pipeline Specification',
+              title: 'Define Pipeline Subtype & Orchestration Specs',
+              icon: '⚡',
+              location: 'Editor -> Tab 1 (Metadata)',
+              actionTarget: 'editor',
+              actionLabel: '✏️ Open Document Editor',
+              items: [
+                'Select Subtype: <strong>Batch ETL/ELT Pipeline</strong>, <strong>CDC & Ingestion Feed</strong>, <strong>Lakehouse Table Architecture</strong>, or <strong>Backfill & Recovery</strong>.',
+                'Specify the Airflow DAG ID (e.g. <code>dag_orders_silver_hourly.task_transform_iceberg</code>), execution engine (<em>Spark 3.5 on EMR / Trino / dbt-core</em>), and cron cadence (<code>0 */2 * * *</code>).',
+                'Document delivery SLAs (e.g. <em>06:00 UTC with max job duration 45 mins</em>) and PagerDuty escalation channels (<code>#dataops-alerts</code>).',
+                'Define data contract schema compatibility modes (e.g. <em>Schema v2.3 Strict Protobuf/Avro</em>) and streaming Kafka topics.'
+              ],
+              tip: 'Documenting schema compatibility modes upfront prevents breaking changes when upstream transactional feeds evolve.'
+            },
+            {
+              step: '02',
+              phase: 'Phase 2: Automated Ingestion',
+              title: 'Automate Lineage with dbt Artifacts & PDF Parsers',
+              icon: '📥',
+              location: 'Sidebar -> dbt Import / PDF Import',
+              actionTarget: 'pdf-import',
+              actionLabel: '📄 Open PDF Import',
+              items: [
+                'Drop dbt output artifacts (<code>manifest.json</code>, <code>run_results.json</code>, or <code>catalog.json</code>) into the <strong>dbt Import</strong> view.',
+                'The local parser automatically synthesizes model lineage, compiled SQL, materialization types, and test results into certified documentation.',
+                'Or drop legacy PDF architecture documents into <strong>PDF Import</strong> for automated heuristic text recognition.'
+              ],
+              tip: 'Synthesizing dbt artifacts saves hours of manual entry and guarantees 100% lineage accuracy.'
+            },
+            {
+              step: '03',
+              phase: 'Phase 3: Storage Architecture',
+              title: 'Document Lakehouse Storage & Partition Evolution',
+              icon: '🧊',
+              location: 'Editor -> Tab 2 (Source Mappings)',
+              actionTarget: 'editor',
+              actionLabel: '📋 Go to Source Mappings',
+              items: [
+                'Document storage table format: <strong>Apache Iceberg v2</strong> or <strong>Delta Lake</strong> with Z-Order clustering keys.',
+                'Specify partitioning schemes (e.g. <code>PARTITION BY date(event_timestamp)</code>), snapshot expiration, compaction cadences, and cold storage retention.',
+                'Use <strong>Quick Paste Columns</strong> to parse full DDL or catalog schemas in seconds.'
+              ],
+              tip: 'Documenting partition schemes prevents expensive full-table scans in downstream Trino/Spark queries.'
+            },
+            {
+              step: '04',
+              phase: 'Phase 4: Fault Tolerance & DLQ',
+              title: 'Configure Idempotency, DLQ Quarantines & Checkpoints',
+              icon: '🛠️',
+              location: 'Editor -> Tab 3 (SQL Workbench)',
+              actionTarget: 'sql-library',
+              actionLabel: '💾 Open SQL Library',
+              items: [
+                'Author idempotent <code>MERGE INTO</code> queries with CDC deduplication logic in Spark/Trino SQL.',
+                'Specify Dead-Letter Queue (DLQ) S3/GCS paths for unparseable JSON/Avro records.',
+                'Document streaming checkpoint locations, cluster worker sizing (vCPU/RAM), and failure retry limits with exponential backoff.'
+              ],
+              tip: 'Documenting quarantine paths ensures zero data loss during upstream schema breaks or malformed payloads.'
+            },
+            {
+              step: '05',
+              phase: 'Phase 5: Run Auditing',
+              title: 'Audit Pipeline Executions & Monitor Latency',
+              icon: '⏱️',
+              location: 'Sidebar -> Test Executions',
+              actionTarget: 'executions',
+              actionLabel: '⏱️ View Pipeline Runs',
+              items: [
+                'Log automated or manual pipeline runs capturing execution timestamps, processed volume, defect counts, and runtime duration.',
+                'Track SLA pass/fail statuses to catch pipeline latency degradation before downstream BI models are impacted.',
+                'Review aggregate pipeline health on the <strong>Quality Scorecards</strong> dashboard.'
+              ],
+              tip: 'Execution logs feed the quality scorecard pass rate metrics visible to engineering management.'
+            },
+            {
+              step: '06',
+              phase: 'Phase 6: Disaster Recovery & Backfill',
+              title: 'Document Disaster Recovery Runbook & Export Spec',
+              icon: '🔄',
+              location: 'Editor Header -> Export PDF / Settings',
+              actionTarget: 'settings',
+              actionLabel: '⚙️ Go to Settings',
+              items: [
+                'Document step-by-step shell commands for partition range backfills (e.g. <code>airflow backfill -s YYYY-MM-DD -e YYYY-MM-DD --reset-dagruns</code>).',
+                'Click <strong>Export PDF</strong> to generate an engineering handover runbook with author credentials.',
+                'Click <strong>Backup</strong> to download a complete workspace snapshot (<code>dqd-full-backup-*.json</code>) for offline safety.'
+              ],
+              tip: 'A clear backfill runbook reduces on-call mean time to recovery (MTTR) from hours to minutes during production outages.'
+            }
+          ]
+        },
+
+        data_modelling: {
+          icon: '📐',
+          name: 'Data Architecture & Modelling',
+          roleTitle: 'Data Architect / Enterprise Modeler / Analytics Architect',
+          editionTag: 'Modelling Edition',
+          themeColor: '#8B5CF6',
+          badgeClass: 'badge-secondary',
+          mission: 'Establishes enterprise data architecture, Kimball star schemas, Data Vault 2.0 structures, normalized 3NF models, and enterprise bus matrices. Standardizes grain, surrogate keys, SCD policies, and semantic measures.',
+          workflowSteps: [
+            {
+              step: '01',
+              phase: 'Phase 1: Paradigm & Grain',
+              title: 'Declare Architectural Paradigm & Atomic Grain',
+              icon: '⭐',
+              location: 'Editor -> Tab 1 (Metadata)',
+              actionTarget: 'editor',
+              actionLabel: '✏️ Open Document Editor',
+              items: [
+                'Select Subtype: <strong>Dimensional Star Schema</strong>, <strong>Data Vault 2.0</strong>, <strong>Logical & Relational (3NF)</strong>, or <strong>Semantic Layer & Bus Matrix</strong>.',
+                'Declare the atomic grain: e.g. <em>One row per transaction order line item (order_id, item_seq)</em>.',
+                'Classify entities: Transactional Fact, Periodic Snapshot, Accumulating Snapshot, or Hub/Link/Satellite in Data Vault.',
+                'Identify primary natural business keys and target domain classification.'
+              ],
+              tip: 'Golden Rule of Modelling: Never write physical DDL before declaring the exact business grain of the entity.'
+            },
+            {
+              step: '02',
+              phase: 'Phase 2: Schema Definition',
+              title: 'Bulk Ingest Schema via Quick-Paste Columns',
+              icon: '📋',
+              location: 'Editor -> Tab 2 (Source Mappings)',
+              actionTarget: 'editor',
+              actionLabel: '📋 Go to Source Mappings',
+              items: [
+                'In Tab 2, click <strong>Quick Paste Columns</strong> to paste 100+ column definitions directly from SQL DDL, Trino DESCRIBE, or Excel sheets.',
+                'The parser normalizes delimiters (commas, pipes, tabs, newlines) and auto-detects data types.',
+                'Document primary natural keys, foreign key relationships, and nullability constraints.'
+              ],
+              tip: 'Eliminates hours of manual data entry and ensures standardized column casing and type consistency.'
+            },
+            {
+              step: '03',
+              phase: 'Phase 3: Surrogate Keys & SCD',
+              title: 'Configure Surrogate Key & SCD Type 2 Strategy',
+              icon: '🔑',
+              location: 'Editor -> Tab 1 (Specialized Attributes)',
+              actionTarget: 'templates',
+              actionLabel: '📋 Browse Templates',
+              items: [
+                'Define surrogate key hashing strategy: e.g. <code>MD5(tenant_id || "-" || natural_key) AS customer_sk</code>.',
+                'Document Slowly Changing Dimension (SCD) policies, including <code>valid_from</code>, <code>valid_to</code>, and <code>is_current</code> timestamp flags for point-in-time historical reporting.',
+                'Define null foreign key handling standard: substitute NULL with <code>-1</code> (Unknown / Early Arriving member row).'
+              ],
+              tip: 'Surrogate keys decouple analytical models from changing source system operational keys.'
+            },
+            {
+              step: '04',
+              phase: 'Phase 4: Transformation Lineage',
+              title: 'Map Source-to-Target Column Transformations',
+              icon: '🔄',
+              location: 'Editor -> Tab 2 (Source-to-Target Table)',
+              actionTarget: 'documents',
+              actionLabel: '📑 Browse Documents',
+              items: [
+                'Use the interactive Column Mapping table to document field-level transformation logic: CASE statements, type casts, string trimmings, currency conversions, and masking policies for sensitive PII data.',
+                'Document relationship cardinalities: 1:1, 1:N, or M:N junction tables.'
+              ],
+              tip: 'Provides an unambiguous transformation blueprint for ETL and dbt engineers to build against.'
+            },
+            {
+              step: '05',
+              phase: 'Phase 5: Bus Matrix Integration',
+              title: 'Integrate Conformed Dimensions & Bus Matrix',
+              icon: '🌐',
+              location: 'Editor -> Tab 1 (Attributes) & Tab 4 (Rules)',
+              actionTarget: 'rules',
+              actionLabel: '🛡️ Open Rules Catalog',
+              items: [
+                'Map shared conformed dimensions (<code>dim_date</code>, <code>dim_customer</code>, <code>dim_product</code>, <code>dim_geography</code>) across enterprise business processes in the Enterprise Bus Matrix.',
+                'Document certified semantic layer measures and additive vs semi-additive aggregation rules.',
+                'Identify degenerate dimensions (order numbers without dimension tables) and junk dimensions.'
+              ],
+              tip: 'Conformed dimensions enable seamless drill-across queries across disparate business facts.'
+            },
+            {
+              step: '06',
+              phase: 'Phase 6: Architecture Sign-Off',
+              title: 'Store DDL Specification & Generate Review PDF',
+              icon: '📜',
+              location: 'Editor -> Tab 3 (SQL Workbench) & Export PDF',
+              actionTarget: 'settings',
+              actionLabel: '⚙️ Go to Settings',
+              items: [
+                'Store certified DDL statements in the SQL Workbench with dialect tags (PostgreSQL, Snowflake, BigQuery).',
+                'Click <strong>Export PDF</strong> to produce a formal architecture review specification with author attribution and digital sign-off blocks.',
+                'Export <code>.dldoc</code> to version control your model specifications in Git alongside your dbt schemas.'
+              ],
+              tip: 'Store .dldoc files in Git for automated architectural reviews and change control tracking.'
+            }
+          ]
+        }
+      };
+
+      const currentDiscipline = disciplineDetails[activeTab];
+      const isUniversalTab = activeTab === 'universal';
+
+      // Build HTML
+      let html = `
+        <div class="how-container">
+          <!-- Glassmorphism Hero Banner -->
+          <div class="how-hero">
+            <div class="how-hero-header">
+              <div>
+                <div class="how-hero-tag">📖 Multi-Discipline Engineering Manual</div>
+                <h1 class="how-hero-title">How To Use Data Workspace Documenter</h1>
+                <p class="how-hero-desc">
+                  This portable, zero-dependency suite dynamically adapts its forms, templates, metadata attributes, and validation rules to <strong>4 specialized engineering disciplines</strong>. Select your profile below for clear step-by-step workflows and best practices.
+                </p>
+              </div>
+
+              <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
+                <div class="how-active-pill" title="Currently Active Discipline in App Settings">
+                  <span class="how-active-dot"></span>
+                  <span>Active Workspace: <strong>${this.escapeHtml(profile.label || profile.name)}</strong></span>
+                </div>
+                <span style="font-size: 11px; color: var(--text-muted);">100% Offline • Windows Portable</span>
+              </div>
+            </div>
+
+            <div class="how-hero-controls">
+              <div class="how-search-box">
+                <span class="how-search-icon">🔍</span>
+                <input type="text" id="how-guide-search" placeholder="Filter workflow steps (e.g. dbt, Airflow, CAPA, Iceberg, formula, PDF)..." value="${this.escapeHtml(this._howToUseSearchQuery || '')}">
+              </div>
+
+              <div class="how-quick-links">
+                <span style="font-size: 12px; font-weight: 700; color: var(--text-muted); margin-right: 4px;">Quick Switch:</span>
+                <span class="how-quick-pill" data-target-tab="data_quality">🛡️ Quality</span>
+                <span class="how-quick-pill" data-target-tab="data_analysis">📈 Analysis</span>
+                <span class="how-quick-pill" data-target-tab="data_engineering">⚙️ Engineering</span>
+                <span class="how-quick-pill" data-target-tab="data_modelling">📐 Modelling</span>
+                <span class="how-quick-pill" data-target-tab="universal">🌐 Universal</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Interactive Discipline Tabs Bar -->
+          <div class="how-tabs-bar" role="tablist">
+            <button class="how-tab-btn ${activeTab === 'data_quality' ? 'active' : ''}" data-tab="data_quality">
+              <span>🛡️</span>
+              <span>Data Quality</span>
+              <span class="how-tab-badge">Quality Edition</span>
+            </button>
+            <button class="how-tab-btn ${activeTab === 'data_analysis' ? 'active' : ''}" data-tab="data_analysis">
+              <span>📈</span>
+              <span>Data Analysis</span>
+              <span class="how-tab-badge">Analytics Edition</span>
+            </button>
+            <button class="how-tab-btn ${activeTab === 'data_engineering' ? 'active' : ''}" data-tab="data_engineering">
+              <span>⚙️</span>
+              <span>Data Engineering</span>
+              <span class="how-tab-badge">DataOps Edition</span>
+            </button>
+            <button class="how-tab-btn ${activeTab === 'data_modelling' ? 'active' : ''}" data-tab="data_modelling">
+              <span>📐</span>
+              <span>Data Modelling</span>
+              <span class="how-tab-badge">Modelling Edition</span>
+            </button>
+            <button class="how-tab-btn ${activeTab === 'universal' ? 'active' : ''}" data-tab="universal">
+              <span>🌐</span>
+              <span>Universal Workflows</span>
+              <span class="how-tab-badge">Platform Core</span>
+            </button>
+          </div>
+      `;
+
+      if (!isUniversalTab && currentDiscipline) {
+        // PROFILE SPECIFIC VIEW
+        const subtypes = (activeProfileData.subtypes) || [];
+        const isCurrentActive = currentProfileKey === activeTab;
+
+        html += `
+          <!-- Discipline Banner -->
+          <div class="how-profile-banner profile-${activeTab}">
+            <div class="how-profile-meta">
+              <div class="how-profile-icon">${currentDiscipline.icon}</div>
+              <div>
+                <div class="how-profile-name">
+                  <span>${this.escapeHtml(currentDiscipline.name)}</span>
+                  <span class="badge ${currentDiscipline.badgeClass}">${this.escapeHtml(currentDiscipline.editionTag)}</span>
+                </div>
+                <div class="how-profile-role">Primary Role: <strong>${this.escapeHtml(currentDiscipline.roleTitle)}</strong></div>
+                <div style="font-size: 13px; color: var(--text-color); margin-top: 6px; max-width: 780px; line-height: 1.5;">
+                  ${this.escapeHtml(currentDiscipline.mission)}
+                </div>
+              </div>
+            </div>
+
+            <div class="how-profile-actions">
+              <button class="btn ${isCurrentActive ? 'btn-outline' : 'btn-primary'} btn-sm btn-how-switch-workspace" data-profile="${activeTab}">
+                <span>${isCurrentActive ? '✓ Currently Active Workspace' : '⚡ Switch Workspace to This Discipline'}</span>
+              </button>
+              <button class="btn btn-outline btn-sm btn-how-new-doc" data-profile="${activeTab}">
+                <span>➕ Create ${this.escapeHtml(currentDiscipline.name)} Document</span>
+              </button>
+              <button class="btn btn-outline btn-sm btn-how-view-templates" data-profile="${activeTab}">
+                <span>📋 Templates</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Document Subtypes for this profile -->
+          <div class="card">
+            <div class="card-header" style="justify-content: space-between;">
+              <span class="card-title">📑 Supported Document Subtypes (${subtypes.length})</span>
+              <span style="font-size: 11px; color: var(--text-muted);">Choose when creating a new specification</span>
+            </div>
+            <div class="card-body">
+              <div class="how-subtypes-grid">
+                ${subtypes.map(st => `
+                  <div class="how-subtype-card">
+                    <div class="how-subtype-header">
+                      <span class="how-subtype-icon">${st.icon || '📄'}</span>
+                      <span class="how-subtype-title">${this.escapeHtml(st.name || st.id)}</span>
+                    </div>
+                    <div class="how-subtype-desc">${this.escapeHtml(st.desc || '')}</div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+
+          <!-- Step-by-Step End-to-End Workflow (Enhanced Clear Design) -->
+          <div class="card">
+            <div class="card-header" style="justify-content: space-between;">
+              <div>
+                <span class="card-title">🚀 Step-by-Step End-to-End Workflow</span>
+                <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+                  Complete execution guide from blank specification to certified executive deliverable
+                </div>
+              </div>
+              <span class="badge badge-info" style="font-size: 11px;">6 Clear Execution Steps</span>
+            </div>
+            <div class="card-body">
+              <div class="how-workflow-stepper">
+                ${currentDiscipline.workflowSteps.map(ws => `
+                  <div class="how-step-card" style="--step-accent: ${currentDiscipline.themeColor};">
+                    <div class="how-step-top">
+                      <div class="how-step-identity">
+                        <div class="how-step-num">${ws.step}</div>
+                        <div class="how-step-meta">
+                          <span class="how-step-phase">${this.escapeHtml(ws.phase)}</span>
+                          <span class="how-step-title">
+                            <span>${ws.icon}</span>
+                            <span>${this.escapeHtml(ws.title)}</span>
+                          </span>
+                        </div>
+                      </div>
+
+                      <div class="how-step-location">
+                        <span>${this.escapeHtml(ws.location)}</span>
+                      </div>
+                    </div>
+
+                    <ul class="how-step-checklist">
+                      ${ws.items.map(item => `<li>${item}</li>`).join('')}
+                    </ul>
+
+                    <div class="how-step-footer">
+                      <div class="how-step-tip">
+                        <span>💡</span>
+                        <span><strong>Pro-Tip:</strong> ${this.escapeHtml(ws.tip)}</span>
+                      </div>
+
+                      <button class="btn btn-outline btn-sm btn-how-jump" data-target="${ws.actionTarget}">
+                        <span>${ws.actionLabel}</span>
+                      </button>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+        `;
+      } else {
+        // UNIVERSAL WORKFLOWS VIEW
+        html += `
+          <!-- Universal Core Architecture -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">🌐 Platform Core Architecture & Universal Capabilities</span>
+            </div>
+            <div class="card-body">
+              <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.6;">
+                Regardless of which engineering profile you use, Data Workspace Documenter provides unified, offline-first enterprise tooling for specifications, audits, file transfers, and reporting.
+              </p>
+
+              <div class="grid-cols-3" style="gap: 16px;">
+                <div class="how-subtype-card">
+                  <div class="how-subtype-header">
+                    <span class="how-subtype-icon">📦</span>
+                    <span class="how-subtype-title">Single-File .dldoc Format</span>
+                  </div>
+                  <div class="how-subtype-desc">
+                    Encapsulates complete specifications, lineage mappings, multi-dialect queries, 12-dimension rules, and audit history into a single Git-friendly JSON document (.dldoc). Full backward compatibility with legacy .dqdoc files.
+                  </div>
+                </div>
+
+                <div class="how-subtype-card">
+                  <div class="how-subtype-header">
+                    <span class="how-subtype-icon">🔒</span>
+                    <span class="how-subtype-title">100% Offline & Private</span>
+                  </div>
+                  <div class="how-subtype-desc">
+                    Zero server dependencies, zero external network telemetry, and zero cloud API keys required. All documents, queries, and audit logs reside strictly in your private local browser IndexedDB storage.
+                  </div>
+                </div>
+
+                <div class="how-subtype-card">
+                  <div class="how-subtype-header">
+                    <span class="how-subtype-icon">🔄</span>
+                    <span class="how-subtype-title">Flexible Draft/Publish</span>
+                  </div>
+                  <div class="how-subtype-desc">
+                    Supports non-blocking guidance: publish specifications even with incomplete fields during rapid prototyping. Track formal version numbers, revision notes, and digital sign-off approvals.
+                  </div>
+                </div>
+
+                <div class="how-subtype-card">
+                  <div class="how-subtype-header">
+                    <span class="how-subtype-icon">📑</span>
+                    <span class="how-subtype-title">Executive PDF Generator</span>
+                  </div>
+                  <div class="how-subtype-desc">
+                    Powered by bundled jsPDF and jsPDF-AutoTable. Generates multi-page, publication-ready PDF audit reports featuring anti-orphan headers, off-screen defect trend charts, and author contact cards.
+                  </div>
+                </div>
+
+                <div class="how-subtype-card">
+                  <div class="how-subtype-header">
+                    <span class="how-subtype-icon">🛡️</span>
+                    <span class="how-subtype-title">CSV & Excel Security</span>
+                  </div>
+                  <div class="how-subtype-desc">
+                    Powered by SheetJS with automated CSV Formula Injection Sanitization. Any fields starting with '=', '+', '-', '@', '\t', or '\r' are automatically apostrophe-prefixed to protect corporate spreadsheets.
+                  </div>
+                </div>
+
+                <div class="how-subtype-card">
+                  <div class="how-subtype-header">
+                    <span class="how-subtype-icon">💾</span>
+                    <span class="how-subtype-title">Multi-Dialect SQL Workbench</span>
+                  </div>
+                  <div class="how-subtype-desc">
+                    Dedicated workbench supporting Snowflake, Trino, PostgreSQL, MySQL, SQL Server, and ANSI SQL. Includes syntax tagging, line numbering, query copy, and a global SQL Library repository.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Ingestion & Parsers Suite -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">📥 Automated Ingestion & Local Parsers Suite</span>
+            </div>
+            <div class="card-body">
+              <div class="how-workflow-stepper">
+                <div class="how-step-card" style="--step-accent: #00A6A6;">
+                  <div class="how-step-top">
+                    <div class="how-step-identity">
+                      <div class="how-step-num">01</div>
+                      <div class="how-step-meta">
+                        <span class="how-step-phase">Local Parser</span>
+                        <span class="how-step-title">
+                          <span>🧩</span>
+                          <span>dbt Artifacts Local Parser (dbt-import)</span>
+                        </span>
+                      </div>
+                    </div>
+                    <div class="how-step-location">Sidebar -> dbt Import</div>
+                  </div>
+                  <ul class="how-step-checklist">
+                    <li>Drag-and-drop your dbt project output artifacts (<code>manifest.json</code>, <code>run_results.json</code>, or <code>catalog.json</code>).</li>
+                    <li>The parser automatically synthesizes model lineage, compiled SQL, materialization types, and test results into certified documentation in seconds.</li>
+                  </ul>
+                  <div class="how-step-footer">
+                    <div class="how-step-tip">
+                      <span>💡</span>
+                      <span><strong>Pro-Tip:</strong> Converts complex multi-model dbt DAGs into structured audit records in under 10 seconds.</span>
+                    </div>
+                    <button class="btn btn-outline btn-sm btn-how-jump" data-target="pdf-import"><span>📄 Open Ingestion</span></button>
+                  </div>
+                </div>
+
+                <div class="how-step-card" style="--step-accent: #4472C4;">
+                  <div class="how-step-top">
+                    <div class="how-step-identity">
+                      <div class="how-step-num">02</div>
+                      <div class="how-step-meta">
+                        <span class="how-step-phase">OCR & Text Recognition</span>
+                        <span class="how-step-title">
+                          <span>📄</span>
+                          <span>PDF Text Extraction & Heuristic Field Mapping</span>
+                        </span>
+                      </div>
+                    </div>
+                    <div class="how-step-location">Sidebar -> PDF Import</div>
+                  </div>
+                  <ul class="how-step-checklist">
+                    <li>Using 100% locally bundled PDF.js, drop legacy PDF specifications or architecture documents.</li>
+                    <li>The parser scans for domains, tables, SLAs, and SQL statements, automatically populating new document fields.</li>
+                  </ul>
+                  <div class="how-step-footer">
+                    <div class="how-step-tip">
+                      <span>💡</span>
+                      <span><strong>Pro-Tip:</strong> Zero cloud OCR dependencies—runs purely inside your Windows browser sandbox.</span>
+                    </div>
+                    <button class="btn btn-outline btn-sm btn-how-jump" data-target="pdf-import"><span>📄 Open PDF Import</span></button>
+                  </div>
+                </div>
+
+                <div class="how-step-card" style="--step-accent: #EA580C;">
+                  <div class="how-step-top">
+                    <div class="how-step-identity">
+                      <div class="how-step-num">03</div>
+                      <div class="how-step-meta">
+                        <span class="how-step-phase">Schema Accelerator</span>
+                        <span class="how-step-title">
+                          <span>📋</span>
+                          <span>Quick-Paste Column Bulk Ingestion</span>
+                        </span>
+                      </div>
+                    </div>
+                    <div class="how-step-location">Editor -> Tab 2 (Source Mappings)</div>
+                  </div>
+                  <ul class="how-step-checklist">
+                    <li>When defining schema columns, click <strong>Quick Paste Columns</strong> in the Source Mappings tab.</li>
+                    <li>Paste raw text from SQL DDL, Trino DESCRIBE, or spreadsheet columns. The engine normalizes commas, pipes, tabs, and spaces with automated type detection.</li>
+                  </ul>
+                  <div class="how-step-footer">
+                    <div class="how-step-tip">
+                      <span>💡</span>
+                      <span><strong>Pro-Tip:</strong> Saves hours of repetitive manual data entry when onboarding large enterprise tables.</span>
+                    </div>
+                    <button class="btn btn-outline btn-sm btn-how-jump" data-target="editor"><span>✏️ Open Editor</span></button>
+                  </div>
+                </div>
+
+                <div class="how-step-card" style="--step-accent: #8B5CF6;">
+                  <div class="how-step-top">
+                    <div class="how-step-identity">
+                      <div class="how-step-num">04</div>
+                      <div class="how-step-meta">
+                        <span class="how-step-phase">Backup & Portability</span>
+                        <span class="how-step-title">
+                          <span>💾</span>
+                          <span>Full Workspace Backup & Cross-PC Portability</span>
+                        </span>
+                      </div>
+                    </div>
+                    <div class="how-step-location">Topbar -> Backup / Settings</div>
+                  </div>
+                  <ul class="how-step-checklist">
+                    <li>To transfer your entire workspace to another Windows PC without a server: click <strong>Backup</strong> in the top navbar to download <code>dqd-full-backup-YYYY-MM-DD.json</code>.</li>
+                    <li>On the second machine, open Settings and click <strong>Restore Backup</strong>.</li>
+                  </ul>
+                  <div class="how-step-footer">
+                    <div class="how-step-tip">
+                      <span>💡</span>
+                      <span><strong>Pro-Tip:</strong> Settings can also be exported as a portable .env file for standardized team deployments.</span>
+                    </div>
+                    <button class="btn btn-outline btn-sm btn-how-jump" data-target="settings"><span>⚙️ Open Settings</span></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Keyboard Shortcuts & Power Tips -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">⌨️ Keyboard Shortcuts & Power-User Features</span>
+            </div>
+            <div class="card-body">
+              <div class="grid-cols-2" style="gap: 16px;">
+                <div class="table-responsive">
+                  <table class="table-custom">
+                    <thead>
+                      <tr>
+                        <th>Shortcut</th>
+                        <th>Action</th>
+                        <th>Description</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><code>Ctrl + B</code></td>
+                        <td>Toggle Sidebar</td>
+                        <td>Expands or collapses the left navigation drawer</td>
+                      </tr>
+                      <tr>
+                        <td><code>Navbar Search</code></td>
+                        <td>Unified Search</td>
+                        <td>Instant keyword search across documents, queries, columns, and team members</td>
+                      </tr>
+                      <tr>
+                        <td><code>Ctrl + S</code></td>
+                        <td>Save Document</td>
+                        <td>Triggers quick-save when actively authoring in the Editor</td>
+                      </tr>
+                      <tr>
+                        <td><code>Esc</code></td>
+                        <td>Close Modal</td>
+                        <td>Closes any active overlay dialog or search dropdown</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div>
+                  <div class="how-callout" style="margin-bottom: 12px;">
+                    <span class="how-callout-icon">📚</span>
+                    <div>
+                      <strong>Smart Autocomplete Dictionary (.txt)</strong><br>
+                      The app auto-learns unique terms (catalogs, schemas, domains, owners, transformation rules) and persists them to an editable dictionary (<code>autocomplete_vocabulary.txt</code>). Export or import it in Settings.
+                    </div>
+                  </div>
+
+                  <div class="how-callout">
+                    <span class="how-callout-icon">👤</span>
+                    <div>
+                      <strong>User Attribution & Directory</strong><br>
+                      Assign documents to multiple teammates. The <strong>User Directory</strong> view tracks contribution counts, active domains, and contact cards across the enterprise.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      html += `</div>`;
+      container.innerHTML = html;
+
+      // ====================================================================
+      // ATTACH EVENT LISTENERS FOR HOW TO USE PAGE
+      // ====================================================================
+
+      // Tab switcher clicks
+      container.querySelectorAll('.how-tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const tab = btn.dataset.tab;
+          this._howToUseActiveTab = tab;
+          this.renderHowToUse(container, { activeTab: tab });
+        });
+      });
+
+      // Quick links clicks in hero
+      container.querySelectorAll('.how-quick-pill').forEach(pill => {
+        pill.addEventListener('click', () => {
+          const targetTab = pill.dataset.targetTab;
+          this._howToUseActiveTab = targetTab;
+          this.renderHowToUse(container, { activeTab: targetTab });
+        });
+      });
+
+      // Search input handler
+      const searchInput = container.querySelector('#how-guide-search');
+      if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+          const val = e.target.value;
+          this._howToUseSearchQuery = val;
+          const query = val.toLowerCase().trim();
+
+          const stepCards = container.querySelectorAll('.how-step-card');
+          const subtypeCards = container.querySelectorAll('.how-subtype-card');
+
+          if (!query) {
+            stepCards.forEach(c => c.style.display = '');
+            subtypeCards.forEach(c => c.style.display = '');
+            return;
+          }
+
+          stepCards.forEach(c => {
+            const text = (c.textContent || '').toLowerCase();
+            c.style.display = text.includes(query) ? '' : 'none';
+          });
+
+          subtypeCards.forEach(c => {
+            const text = (c.textContent || '').toLowerCase();
+            c.style.display = text.includes(query) ? '' : 'none';
+          });
+        });
+      }
+
+      // Switch workspace action button
+      container.querySelectorAll('.btn-how-switch-workspace').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const profileKey = btn.dataset.profile;
+          if (profileKey) {
+            this.switchTeamProfile(profileKey, false);
+            this.renderHowToUse(container, { activeTab: profileKey });
+          }
+        });
+      });
+
+      // New document for profile button
+      container.querySelectorAll('.btn-how-new-doc').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const profileKey = btn.dataset.profile;
+          if (profileKey && profileKey !== this.getActiveProfileKey()) {
+            this.switchTeamProfile(profileKey, false);
+          }
+          this.currentDoc = null;
+          this.currentEditorTab = 'tab-meta';
+          this.navigateTo('editor');
+        });
+      });
+
+      // View templates for profile button
+      container.querySelectorAll('.btn-how-view-templates').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const profileKey = btn.dataset.profile;
+          this.activeTplProfileFilter = profileKey || 'all';
+          this.navigateTo('templates');
+        });
+      });
+
+      // Step jump buttons
+      container.querySelectorAll('.btn-how-jump').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const target = btn.dataset.target;
+          if (target) {
+            if (target === 'editor') {
+              this.currentDoc = null;
+              this.currentEditorTab = 'tab-meta';
+            }
+            this.navigateTo(target);
+          }
+        });
+      });
+    },
+
+    // ====================================================================
     // 20. VIEW: SETTINGS & PORTABILITY
     // ====================================================================
 
@@ -8675,15 +9801,15 @@ WHERE order_id IS NULL
             <div class="grid-cols-3">
               <div class="form-group">
                 <label class="form-label">Username / Author Name</label>
-                <input type="text" id="set-in-username" class="form-control" value="${this.escapeHtml(cfgUser.username || '')}" placeholder="e.g. jdoe or Jane Doe">
+                <input type="text" id="set-in-username" class="form-control" value="${this.escapeHtml(cfgUser.username || '')}" placeholder="e.g. alaa or Alaa Mohamed">
               </div>
               <div class="form-group">
                 <label class="form-label">User Email</label>
-                <input type="email" id="set-in-useremail" class="form-control" value="${this.escapeHtml(cfgUser.useremail || '')}" placeholder="e.g. jane.doe@company.com">
+                <input type="email" id="set-in-useremail" class="form-control" value="${this.escapeHtml(cfgUser.useremail || '')}" placeholder="e.g. alaa.mohamed@company.com">
               </div>
               <div class="form-group">
                 <label class="form-label">User Phone</label>
-                <input type="tel" id="set-in-userphone" class="form-control" value="${this.escapeHtml(cfgUser.userphone || '')}" placeholder="e.g. +1 (555) 019-2834">
+                <input type="tel" id="set-in-userphone" class="form-control" value="${this.escapeHtml(cfgUser.userphone || '')}" placeholder="e.g. +20 10 1234 5678">
               </div>
             </div>
             <div style="display: flex; gap: 10px; align-items: center; margin-top: 4px;">
@@ -9186,7 +10312,7 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
             'Impacted Downstream Systems & Reports',
             'Root Cause Category (5-Whys)',
             'Immediate Short-Term Containment',
-            'Corrective & Preventive Action (CAPA)',
+            'Remediation & Prevention Steps',
             'Incident Lead / Commander',
             'Target Resolution Date'
           ];

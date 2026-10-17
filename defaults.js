@@ -96,10 +96,10 @@ window.DQD_DEFAULT_VOCABULARY = {
   ],
   "usernames": [
     "alaam",
-    "sarah.smith",
-    "john.doe",
-    "david.kim",
-    "alex.miller"
+    "ahmed.hassan",
+    "tarek.mostafa",
+    "omar.farouk",
+    "youssef.mansour"
   ],
   "domains": [
     "Core Banking / Customer Intelligence",
@@ -111,20 +111,22 @@ window.DQD_DEFAULT_VOCABULARY = {
     "Data Governance & Operations"
   ],
   "owners": [
-    "Sarah Jenkins (Head of Data Governance)",
-    "Michael Chang (Lead Data Engineer)",
-    "Elena Rostova (Controller)",
-    "David Kim (Senior Analytics Engineer)",
-    "Marcus Vance",
-    "Sita Patel",
-    "Jessica Wong",
-    "Liam O'Connor"
+    "Ahmed Hassan (Head of Data Governance)",
+    "Tarek Mostafa (Lead Data Engineer)",
+    "Nour El-Din (Financial Controller)",
+    "Omar Farouk (Senior Analytics Engineer)",
+    "Youssef Mansour",
+    "Mahmoud El-Sayed",
+    "Fatima Zahra",
+    "Amr Khaled",
+    "Alaa Mohamed"
   ],
   "reviewers": [
-    "Sarah Smith",
-    "David Kim",
-    "Michael Chang",
-    "Elena Rostova"
+    "Ahmed Hassan",
+    "Omar Farouk",
+    "Tarek Mostafa",
+    "Nour El-Din",
+    "Mahmoud El-Sayed"
   ],
   "frequencies": [
     "Daily (Post-ETL 04:00 UTC)",
@@ -269,6 +271,24 @@ window.DQD_DEFAULT_SEARCH_KEYWORDS = [
       "type": "navigate",
       "target": "dashboard",
       "label": "Open Dashboard"
+    }
+  },
+  {
+    "id": "feat-how-to-use",
+    "title": "How To Use - Multi-Discipline Engineering Guide",
+    "category": "System Features",
+    "type": "feature",
+    "view": "how-to-use",
+    "description": "Comprehensive user guide and workflows tailored for Data Quality, Data Analysis, Data Engineering, and Data Modelling profiles.",
+    "keywords": [
+      "how to use", "guide", "user manual", "tutorial", "walkthrough", "profiles",
+      "disciplines", "getting started", "documentation", "help", "best practices",
+      "data analysis guide", "data engineering guide", "data modelling guide", "quality guide"
+    ],
+    "viewAction": {
+      "type": "navigate",
+      "target": "how-to-use",
+      "label": "Open How To Use Guide"
     }
   },
   {
