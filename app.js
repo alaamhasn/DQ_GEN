@@ -3540,7 +3540,7 @@
                       <th>Passed</th>
                       <th>Failed</th>
                       <th>Defect %</th>
-                      <th>Evidence / Query ID</th>
+                      <th>Execution Evidence / Query</th>
                     </tr>
                   </thead>
                   <tbody id="tbody-doc-executions">
@@ -3553,7 +3553,7 @@
                         <td style="color: var(--status-passed); font-weight: 600;">${(e.passedRecords || 0).toLocaleString()}</td>
                         <td style="color: ${e.failedRecords > 0 ? 'var(--status-failed)' : 'inherit'}; font-weight: 600;">${(e.failedRecords || 0).toLocaleString()}</td>
                         <td>${e.failurePercentage ? e.failurePercentage + '%' : '0.0%'}</td>
-                        <td><span style="font-family: monospace; font-size: 11px;">${this.escapeHtml(e.evidence || 'N/A')}</span></td>
+                        <td>${this.renderEvidenceCell(e.evidence)}</td>
                       </tr>
                     `).join('')}
                   </tbody>
@@ -5532,7 +5532,7 @@ ${q.query || '-- No SQL specified'}
             <td style="color: var(--status-passed); font-weight: 600;">${(e.passedRecords || 0).toLocaleString()}</td>
             <td style="color: ${e.failedRecords > 0 ? 'var(--status-failed)' : 'inherit'}; font-weight: 600;">${(e.failedRecords || 0).toLocaleString()}</td>
             <td>${e.failurePercentage ? e.failurePercentage + '%' : '0.0%'}</td>
-            <td><span style="font-family: monospace; font-size: 11px;">${this.escapeHtml(e.evidence || 'N/A')}</span></td>
+            <td>${this.renderEvidenceCell(e.evidence)}</td>
           </tr>
         `).join('');
       }
@@ -6974,14 +6974,18 @@ WHERE order_id IS NULL
           const type = e.target.value;
           if (!type) return;
 
-          const snippets = {
+          const baseSnippets = {
             null_check: `-- Completeness / Null Check Assertion\nSELECT\n  record_id,\n  column_name,\n  CURRENT_TIMESTAMP AS audit_timestamp\nFROM target_table\nWHERE column_name IS NULL;`,
             duplicate_check: `-- Uniqueness / Primary Key Duplicate Assertion\nSELECT\n  primary_key_column,\n  COUNT(*) AS duplicate_occurrences\nFROM target_table\nGROUP BY primary_key_column\nHAVING COUNT(*) > 1;`,
             range_check: `-- Validity / Range & Boundary Assertion\nSELECT\n  transaction_id,\n  transaction_amount\nFROM fact_orders\nWHERE transaction_amount < 0.00\n   OR transaction_amount > 100000.00;`,
             referential_check: `-- Referential Integrity / Orphan Record Assertion\nSELECT\n  child.child_id,\n  child.parent_fk\nFROM child_table child\nLEFT JOIN parent_table parent\n  ON child.parent_fk = parent.id\nWHERE parent.id IS NULL;`,
             date_freshness_check: `-- Freshness / Ingestion SLA Assertion\nSELECT\n  MAX(event_timestamp) AS latest_record_time,\n  DATE_DIFF('minute', MAX(event_timestamp), CURRENT_TIMESTAMP) AS lag_minutes\nFROM fact_stream_events\nHAVING DATE_DIFF('minute', MAX(event_timestamp), CURRENT_TIMESTAMP) > 60;`,
-            regex_format_check: `-- Pattern / Format Regex Validity Assertion\nSELECT\n  user_id,\n  email_address\nFROM dim_users\nWHERE NOT REGEXP_LIKE(email_address, '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$');`
+            regex_format_check: `-- Pattern / Format Regex Validity Assertion\nSELECT\n  user_id,\n  email_address\nFROM dim_users\nWHERE NOT REGEXP_LIKE(email_address, '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$');`,
+            exec_verify_query: `-- Test Execution Verification Query (0 Defects Expected)\nSELECT\n  record_id,\n  customer_id,\n  status,\n  CURRENT_TIMESTAMP AS audit_timestamp\nFROM analytics.fact_orders\nWHERE status IS NULL\n   OR amount < 0;`,
+            exec_defect_audit: `-- Volume & Defect Rate Audit Query\nSELECT\n  COUNT(*) AS total_records_evaluated,\n  COUNT_IF(status = 'FAILED') AS failed_records,\n  ROUND((COUNT_IF(status = 'FAILED') * 100.0) / NULLIF(COUNT(*), 0), 4) AS defect_pct\nFROM quality_audit_log\nWHERE audit_date = CURRENT_DATE();`,
+            exec_query_id_log: `-- Warehouse Query Execution Proof & Log Reference\nENGINE: Snowflake Enterprise Data Warehouse\nQUERY_ID: 01b4e5f6-789a-bcde-f012-3456789abcde\nWAREHOUSE: ANALYTICS_WH_XLARGE\nUSER: alaa.mohamed@enterprise.org\nDURATION: 1.42s\nROWS_PROCESSED: 100,000\nDEFECTS_FOUND: 0 (PASSED)`
           };
+          const snippets = Object.assign({}, baseSnippets, cfg.customSnippets || {});
 
           if (snippets[type]) {
             if (textarea.value.trim() && !confirm('Replace current editor content with template?')) {
@@ -7577,6 +7581,24 @@ WHERE order_id IS NULL
     // 12. VIEW: TEST EXECUTIONS
     // ====================================================================
 
+    renderEvidenceCell(evidence) {
+      if (!evidence || !String(evidence).trim()) {
+        return '<span style="color: var(--text-muted); font-size: 11px;">N/A</span>';
+      }
+      const clean = String(evidence).trim();
+      const isMultiLine = clean.includes('\n');
+      const firstLine = clean.split('\n')[0].trim();
+      const displaySnippet = firstLine.length > 55 ? firstLine.slice(0, 55) + '...' : firstLine;
+      const isSql = /^(SELECT|WITH|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|--|\/\*)/i.test(clean) || isMultiLine;
+
+      return `
+        <div style="display: flex; align-items: center; gap: 6px; max-width: 290px;" title="${this.escapeHtml(clean)}">
+          ${isSql ? '<span class="badge" style="background: rgba(14, 165, 233, 0.15); color: #0284C7; font-size: 9.5px; font-weight: 700; padding: 1px 5px; border-radius: 3px; font-family: monospace;">SQL</span>' : ''}
+          <span style="font-family: monospace; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 230px;">${this.escapeHtml(displaySnippet)}</span>
+        </div>
+      `;
+    },
+
     renderExecutions(container) {
       container.innerHTML = `
         <div class="card">
@@ -7599,7 +7621,7 @@ WHERE order_id IS NULL
                   <th>Passed</th>
                   <th>Failed</th>
                   <th>Defect Rate</th>
-                  <th>Evidence</th>
+                  <th>Execution Evidence / Query</th>
                 </tr>
               </thead>
               <tbody>
@@ -7613,7 +7635,7 @@ WHERE order_id IS NULL
                     <td style="color: var(--status-passed); font-weight: 600;">${(e.passedRecords || 0).toLocaleString()}</td>
                     <td style="color: ${e.failedRecords > 0 ? 'var(--status-failed)' : 'inherit'}; font-weight: 600;">${(e.failedRecords || 0).toLocaleString()}</td>
                     <td>${e.failurePercentage ? e.failurePercentage + '%' : '0.0%'}</td>
-                    <td><span style="font-family: monospace; font-size: 11px;">${this.escapeHtml(e.evidence || 'N/A')}</span></td>
+                    <td>${this.renderEvidenceCell(e.evidence)}</td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -7624,20 +7646,35 @@ WHERE order_id IS NULL
 
       document.getElementById('btn-log-execution-top').addEventListener('click', () => this.showLogExecutionModal());
       document.getElementById('btn-export-execs').addEventListener('click', () => {
-        let csv = 'timestamp,rule_id,environment,status,total_records,passed_records,failed_records,failure_percentage,evidence\n';
+        let csv = 'timestamp,rule_id,environment,status,total_records,passed_records,failed_records,failure_percentage,execution_evidence_query\n';
         this.executions.forEach(e => {
-          csv += `"${e.timestamp}","${e.ruleId || ''}","${e.environment || ''}","${e.status}","${e.totalRecords || 0}","${e.passedRecords || 0}","${e.failedRecords || 0}","${e.failurePercentage || 0}","${this.sanitizeCsv(e.evidence || '')}"\n`;
+          csv += `"${e.timestamp}","${e.ruleId || ''}","${e.environment || ''}","${e.status}","${e.totalRecords || 0}","${e.passedRecords || 0}","${e.failedRecords || 0}","${e.failurePercentage || 0}","${this.sanitizeCsv(e.evidence || '').replace(/"/g, '""')}"\n`;
         });
-        this.downloadBlob(new Blob([csv], { type: 'text/csv' }), 'dqd-executions.csv');
+        this.downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), 'dqd-executions.csv');
       });
     },
 
     showLogExecutionModal() {
+      const docDialect = this.currentDoc?.sqlDialect || (this.currentDoc?.sqlQueries && this.currentDoc.sqlQueries[0]?.dialect) || 'Snowflake';
+      
+      // Collect known rule IDs for quick autocomplete
+      const ruleOptions = new Set();
+      if (this.currentDoc && Array.isArray(this.currentDoc.rules)) {
+        this.currentDoc.rules.forEach(r => { if (r && r.id) ruleOptions.add(r.id); });
+      }
+      if (Array.isArray(this.rules)) {
+        this.rules.forEach(r => { if (r && r.id) ruleOptions.add(r.id); });
+      }
+      const allRuleOptionsHtml = Array.from(ruleOptions).map(rId => `<option value="${this.escapeHtml(rId)}"></option>`).join('');
+
       this.openModal('Log Test Execution', `
         <div class="grid-cols-2">
           <div class="form-group">
             <label class="form-label">Rule ID</label>
-            <input type="text" id="exec-in-rule" class="form-control" placeholder="e.g. RULE-COMP-001">
+            <input type="text" id="exec-in-rule" class="form-control" list="exec-rule-options" placeholder="e.g. RULE-COMP-001">
+            <datalist id="exec-rule-options">
+              ${allRuleOptionsHtml}
+            </datalist>
           </div>
           <div class="form-group">
             <label class="form-label">Environment</label>
@@ -7646,6 +7683,7 @@ WHERE order_id IS NULL
               <option value="UAT">UAT</option>
               <option value="QA">QA</option>
               <option value="DEV">DEV</option>
+              <option value="STAGING">STAGING</option>
             </select>
           </div>
         </div>
@@ -7668,9 +7706,51 @@ WHERE order_id IS NULL
             <input type="number" id="exec-in-failed" class="form-control" value="0">
           </div>
         </div>
-        <div class="form-group">
-          <label class="form-label">Execution Evidence / Query ID</label>
-          <input type="text" id="exec-in-evidence" class="form-control" placeholder="e.g. Snowflake Query ID: 01a2b3c4...">
+
+        <div class="form-group" style="margin-bottom: 0;">
+          <label class="form-label" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span style="font-weight: 700;">Execution Evidence / Query</span>
+            <span style="font-size: 11px; color: var(--text-muted); font-weight: 500;">SQL assertion query, defect audit query, or warehouse query ID proof</span>
+          </label>
+          <div class="sql-editor-container" style="border: 1px solid #1E293B; border-radius: 8px; overflow: hidden; background: #0F172A; box-shadow: 0 4px 14px rgba(0,0,0,0.35);">
+            <div class="sql-editor-toolbar" style="display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; background: #1E293B; border-bottom: 1px solid #334155; flex-wrap: wrap; gap: 8px;">
+              <div class="sql-toolbar-left" style="display: flex; align-items: center; gap: 8px; font-family: monospace; font-size: 11px; color: #94A3B8;">
+                <span class="terminal-dot red" style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#EF4444;"></span>
+                <span class="terminal-dot yellow" style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#F59E0B;"></span>
+                <span class="terminal-dot green" style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#10B981;"></span>
+                <span class="badge" id="exec-sql-dialect-badge" style="background: #334155; color: #38BDF8; font-weight: 600; padding: 2px 7px; border-radius: 4px; font-size: 10.5px;">${docDialect}</span>
+                <span id="exec-sql-stats" style="color: #CBD5E1;">1 line</span>
+              </div>
+              <div class="sql-toolbar-right" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                <select id="exec-sql-dialect" class="form-control form-control-sm" style="padding: 2px 8px; font-size: 11px; height: 26px; width: 125px; background: #334155 !important; color: #FFFFFF !important; border: 1px solid #64748B !important; font-weight: 500;">
+                  <option value="Snowflake" ${docDialect === 'Snowflake' ? 'selected' : ''}>Snowflake</option>
+                  <option value="Trino" ${docDialect === 'Trino' ? 'selected' : ''}>Trino</option>
+                  <option value="Databricks" ${docDialect === 'Databricks' ? 'selected' : ''}>Databricks</option>
+                  <option value="BigQuery" ${docDialect === 'BigQuery' ? 'selected' : ''}>BigQuery</option>
+                  <option value="PostgreSQL" ${docDialect === 'PostgreSQL' ? 'selected' : ''}>PostgreSQL</option>
+                  <option value="ANSI SQL" ${docDialect === 'ANSI SQL' ? 'selected' : ''}>ANSI SQL</option>
+                </select>
+                <select id="exec-sql-snippet-select" class="form-control form-control-sm" style="padding: 2px 8px; font-size: 11px; height: 26px; width: 180px; background: #334155 !important; color: #FFFFFF !important; border: 1px solid #64748B !important; font-weight: 500;">
+                  <option value="">⚡ Insert Evidence Template...</option>
+                  <option value="exec_verify_query">Verification Assertion Query</option>
+                  <option value="exec_defect_audit">Defect Rate & Volume Audit</option>
+                  <option value="exec_query_id_log">Query ID & Execution Log Proof</option>
+                  <option value="null_check">Null / Missing Value Check</option>
+                  <option value="duplicate_check">Duplicate Primary Key Check</option>
+                  <option value="range_check">Boundary & Range Check</option>
+                </select>
+                <button type="button" class="btn btn-sm sql-btn-format" id="btn-format-exec-sql" style="background: #0284C7 !important; color: #FFFFFF !important; border: 1px solid #38BDF8 !important; font-weight: 700 !important; padding: 2px 10px; font-size: 11px; height: 26px; box-shadow: 0 1px 3px rgba(2, 132, 199, 0.4);" title="Beautify SQL keywords">🎨 Format</button>
+                <button type="button" class="btn btn-sm sql-btn-syntax" id="btn-toggle-exec-syntax" style="background: #7C3AED !important; color: #FFFFFF !important; border: 1px solid #A78BFA !important; font-weight: 700 !important; padding: 2px 10px; font-size: 11px; height: 26px; box-shadow: 0 1px 3px rgba(124, 58, 237, 0.4);" title="Toggle syntax-highlighted preview">👁️ Syntax</button>
+                <button type="button" class="btn btn-sm sql-btn-copy" id="btn-copy-exec-sql" style="background: #059669 !important; color: #FFFFFF !important; border: 1px solid #34D399 !important; font-weight: 700 !important; padding: 2px 10px; font-size: 11px; height: 26px; box-shadow: 0 1px 3px rgba(5, 150, 105, 0.4);" title="Copy query to clipboard">📋 Copy</button>
+                <button type="button" class="btn btn-sm sql-btn-clear" id="btn-clear-exec-sql" style="background: #DC2626 !important; color: #FFFFFF !important; border: 1px solid #F87171 !important; font-weight: 700 !important; padding: 2px 10px; font-size: 11px; height: 26px; box-shadow: 0 1px 3px rgba(220, 38, 38, 0.4);" title="Clear editor content">🧹 Clear</button>
+              </div>
+            </div>
+            <div class="sql-editor-body" style="position: relative; display: flex; min-height: 180px; max-height: 280px; overflow: auto; background: #0F172A; font-family: 'Consolas', 'Fira Code', 'Courier New', monospace; font-size: 12.5px; line-height: 1.6;">
+              <div id="exec-sql-lines" class="sql-line-numbers" style="padding: 10px 8px; background: #090D16; color: #64748B; text-align: right; user-select: none; border-right: 1px solid #1E293B; min-width: 40px; white-space: pre-line; font-size: 12px;">1</div>
+              <textarea id="exec-in-evidence" class="sql-input-area" spellcheck="false" style="flex: 1; padding: 10px 12px; background: transparent; color: #F8FAFC; border: none; outline: none; font-family: inherit; font-size: inherit; line-height: inherit; resize: none; white-space: pre; overflow-wrap: normal; overflow-x: auto;" placeholder="-- Enter execution verification SQL query, defect audit query, or warehouse query ID proof...&#10;SELECT *&#10;FROM analytics.fact_orders&#10;WHERE total_amount < 0;&#10;-- Or: Snowflake Query ID: 01a2b3c4-0000-1234-0000-000012345678"></textarea>
+            </div>
+            <div id="exec-sql-preview" class="sql-syntax-preview" style="max-height: 220px; font-size: 12px; padding: 10px 14px;"></div>
+          </div>
         </div>
       `, [
         { label: 'Cancel', class: 'btn-outline', action: () => this.closeModal() },
@@ -7679,6 +7759,7 @@ WHERE order_id IS NULL
           const failed = parseInt(document.getElementById('exec-in-failed').value || 0, 10);
           const passed = Math.max(0, total - failed);
           const pct = total > 0 ? ((failed / total) * 100).toFixed(4) : 0;
+          const dialect = document.getElementById('exec-sql-dialect')?.value || docDialect;
 
           const rec = {
             id: 'EXEC-' + Date.now(),
@@ -7690,6 +7771,7 @@ WHERE order_id IS NULL
             failedRecords: failed,
             passedRecords: passed,
             failurePercentage: parseFloat(pct),
+            dialect,
             evidence: document.getElementById('exec-in-evidence').value.trim()
           };
 
@@ -7707,7 +7789,22 @@ WHERE order_id IS NULL
           }
           this.showToast('Test execution recorded', 'success');
         }}
-      ]);
+      ], { size: 'lg' });
+
+      // Initialize the modal SQL Editor controls
+      this.initModalSqlEditorControls({
+        textareaId: 'exec-in-evidence',
+        linesId: 'exec-sql-lines',
+        statsId: 'exec-sql-stats',
+        dialectSelectId: 'exec-sql-dialect',
+        dialectBadgeId: 'exec-sql-dialect-badge',
+        formatBtnId: 'btn-format-exec-sql',
+        syntaxBtnId: 'btn-toggle-exec-syntax',
+        copyBtnId: 'btn-copy-exec-sql',
+        clearBtnId: 'btn-clear-exec-sql',
+        previewId: 'exec-sql-preview',
+        snippetSelectId: 'exec-sql-snippet-select'
+      });
     },
 
     // ====================================================================
@@ -11632,6 +11729,18 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
               }
             }
 
+            // Sync executions if present
+            if (Array.isArray(doc.executions) && doc.executions.length > 0) {
+              for (const ex of doc.executions) {
+                if (ex && ex.id) {
+                  await this.dbPut('executions', ex);
+                  if (!this.executions.some(e => e.id === ex.id)) {
+                    this.executions.unshift(ex);
+                  }
+                }
+              }
+            }
+
             // Update in-memory documents list
             const existingIdx = this.documents.findIndex(d => d.id === doc.id);
             if (existingIdx >= 0) {
@@ -12680,26 +12789,42 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
           }
         }
 
-        const execData = executions.map(e => [
-          new Date(e.timestamp).toLocaleDateString(),
-          e.environment || 'PROD',
-          e.status || 'PASS',
-          (e.totalRecords || 0).toLocaleString(),
-          (e.failedRecords || 0).toLocaleString(),
-          e.failurePercentage ? e.failurePercentage + '%' : '0.0%',
-          e.evidence || 'Log artifact verified'
-        ]);
+        const execData = executions.map(e => {
+          const rawEv = (e.evidence && String(e.evidence).trim()) || 'Log artifact verified';
+          const lines = rawEv.split('\n');
+          const formattedEv = lines.length > 4 ? lines.slice(0, 4).join('\n') + '\n...' : rawEv;
+          return [
+            new Date(e.timestamp).toLocaleDateString(),
+            e.ruleId || 'RULE-DQ-001',
+            e.environment || 'PROD',
+            e.status || 'PASS',
+            (e.totalRecords || 0).toLocaleString(),
+            (e.failedRecords || 0).toLocaleString(),
+            e.failurePercentage ? e.failurePercentage + '%' : '0.0%',
+            formattedEv
+          ];
+        });
 
         pdf.autoTable({
           startY: y,
-          head: [['Audit Date', 'Env', 'Audit Status', 'Total Records', 'Defects', 'Defect %', 'Verification Evidence']],
+          head: [['Audit Date', 'Rule ID', 'Env', 'Audit Status', 'Total Records', 'Defects', 'Defect %', 'Execution Evidence / Query']],
           body: execData,
           theme: 'striped',
-          headStyles: { fillColor: primaryRgb, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
-          styles: { fontSize: 7.5, cellPadding: 4.5, textColor: bodySlate },
+          headStyles: { fillColor: primaryRgb, textColor: [255, 255, 255], fontSize: 7.8, fontStyle: 'bold' },
+          styles: { fontSize: 7.2, cellPadding: 4, textColor: bodySlate },
+          columnStyles: {
+            0: { cellWidth: 50 },
+            1: { cellWidth: 65, fontStyle: 'bold' },
+            2: { cellWidth: 32 },
+            3: { cellWidth: 48, halign: 'center' },
+            4: { cellWidth: 52, halign: 'right' },
+            5: { cellWidth: 40, halign: 'right' },
+            6: { cellWidth: 42, halign: 'right' },
+            7: { font: 'courier', fontSize: 6.5 }
+          },
           alternateRowStyles: { fillColor: cardBgSlate },
           didParseCell: (data) => {
-            if (data.section === 'body' && data.column.index === 2) {
+            if (data.section === 'body' && data.column.index === 3) {
               const st = String(data.cell.raw).toUpperCase();
               if (st === 'PASS' || st === 'PASSED') {
                 data.cell.styles.fillColor = [220, 252, 231];

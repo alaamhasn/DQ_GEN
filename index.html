@@ -1,29 +1,35 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>Data Quality Documenter - Portable Windows Edition</title>
-  <meta name="description" content="Offline standalone technical documentation and validation rule management suite for Data Quality Engineers.">
+  <title>Data Documenter</title>
+  <meta name="description"
+    content="Offline standalone technical documentation and validation rule management suite for Data Engineers.">
   <link rel="icon" id="app-favicon" href="assets/logo.png" type="image/png">
   <link rel="shortcut icon" href="favicon.ico">
   <link rel="stylesheet" href="styles.css?v=4.8">
 </head>
+
 <body>
   <div id="app-container">
     <!-- Sidebar Navigation -->
     <aside class="app-sidebar" id="sidebar">
       <div class="sidebar-header">
-        <img src="assets/logo.png" alt="DQD Logo" class="sidebar-logo" id="sidebar-logo-img" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'36\' height=\'36\' viewBox=\'0 0 36 36\'><rect width=\'36\' height=\'36\' rx=\'6\' fill=\'%231F4E79\'/><path d=\'M9 9h18v18H9z\' fill=\'none\' stroke=\'%23fff\' stroke-width=\'2\'/><path d=\'M15 18l3 3 6-6\' stroke=\'%2300A6A6\' stroke-width=\'2.5\' fill=\'none\' stroke-linecap=\'round\'/></svg>'">
+        <img src="assets/logo.png" alt="DQD Logo" class="sidebar-logo" id="sidebar-logo-img"
+          onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'36\' height=\'36\' viewBox=\'0 0 36 36\'><rect width=\'36\' height=\'36\' rx=\'6\' fill=\'%231F4E79\'/><path d=\'M9 9h18v18H9z\' fill=\'none\' stroke=\'%23fff\' stroke-width=\'2\'/><path d=\'M15 18l3 3 6-6\' stroke=\'%2300A6A6\' stroke-width=\'2.5\' fill=\'none\' stroke-linecap=\'round\'/></svg>'">
         <div class="sidebar-brand">
           <span class="sidebar-brand-name" id="sidebar-app-name">Data Quality Documenter</span>
           <span class="sidebar-brand-tag" id="sidebar-brand-tag">Data Quality Edition</span>
         </div>
-        <button class="sidebar-collapse-btn" id="btn-collapse-sidebar" title="Collapse Sidebar (Ctrl+B)" aria-label="Collapse Sidebar">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <button class="sidebar-collapse-btn" id="btn-collapse-sidebar" title="Collapse Sidebar (Ctrl+B)"
+          aria-label="Collapse Sidebar">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"
+            stroke-linecap="round" stroke-linejoin="round">
             <polyline points="15 18 9 12 15 6"></polyline>
           </svg>
         </button>
@@ -117,8 +123,10 @@
       <!-- Top Navbar -->
       <header class="top-navbar">
         <div class="navbar-left">
-          <button class="btn-sidebar-toggle" id="btn-toggle-sidebar" title="Toggle Sidebar (Ctrl+B)" aria-label="Toggle Navigation Sidebar">
-            <svg class="toggle-icon-svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <button class="btn-sidebar-toggle" id="btn-toggle-sidebar" title="Toggle Sidebar (Ctrl+B)"
+            aria-label="Toggle Navigation Sidebar">
+            <svg class="toggle-icon-svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="3" y1="12" x2="21" y2="12"></line>
               <line x1="3" y1="6" x2="21" y2="6"></line>
               <line x1="3" y1="18" x2="21" y2="18"></line>
@@ -132,7 +140,8 @@
 
         <div class="navbar-search" style="position: relative;">
           <span class="navbar-search-icon">🔍</span>
-          <input type="text" id="global-search-input" placeholder="Search documents, SQL Trino, columns, team..." autocomplete="off">
+          <input type="text" id="global-search-input" placeholder="Search documents, SQL Trino, columns, team..."
+            autocomplete="off">
           <div id="global-search-dropdown" class="search-dropdown-popover" style="display: none;"></div>
         </div>
 
@@ -198,4 +207,5 @@
   <script src="defaults.js?v=4.7"></script>
   <script src="app.js?v=4.7"></script>
 </body>
+
 </html>
