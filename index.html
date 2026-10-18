@@ -12,7 +12,7 @@
     content="Offline standalone technical documentation and validation rule management suite for Data Engineers.">
   <link rel="icon" id="app-favicon" href="assets/logo.png" type="image/png">
   <link rel="shortcut icon" href="favicon.ico">
-  <link rel="stylesheet" href="styles.css?v=4.8">
+  <link rel="stylesheet" href="styles.css?v=5.3">
 </head>
 
 <body>
@@ -36,75 +36,123 @@
       </div>
 
       <nav class="sidebar-nav" id="sidebar-nav-list">
-        <div class="nav-section-title">Core Operations</div>
-        <a class="nav-item active" data-view="dashboard" id="nav-dashboard" data-tooltip="Dashboard">
-          <span class="nav-icon">📊</span>
-          <span>Dashboard</span>
-        </a>
-        <a class="nav-item" data-view="documents" id="nav-documents" data-tooltip="Documents">
-          <span class="nav-icon">📑</span>
-          <span>Documents</span>
-          <span class="nav-badge" id="badge-doc-count">0</span>
-        </a>
-        <a class="nav-item" data-view="users" id="nav-users" data-tooltip="User Directory">
-          <span class="nav-icon">👥</span>
-          <span>User Directory</span>
-          <span class="nav-badge" id="badge-users-count">0</span>
-        </a>
-        <a class="nav-item" data-view="editor" id="nav-editor" data-tooltip="Create Document">
-          <span class="nav-icon">✏️</span>
-          <span>Create Document</span>
-        </a>
-        <a class="nav-item" data-view="templates" id="nav-templates" data-tooltip="Templates">
-          <span class="nav-icon">📋</span>
-          <span>Templates</span>
-        </a>
+        <!-- Section 1: Core Operations -->
+        <div class="nav-section-group" data-section-id="core">
+          <button type="button" class="nav-section-header" title="Toggle Core Operations">
+            <span class="nav-section-title">Core Operations</span>
+            <span class="nav-section-caret">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </span>
+          </button>
+          <div class="nav-section-items">
+            <a class="nav-item active" data-view="dashboard" id="nav-dashboard" data-tooltip="Dashboard">
+              <span class="nav-icon">📊</span>
+              <span>Dashboard</span>
+            </a>
+            <a class="nav-item" data-view="documents" id="nav-documents" data-tooltip="Documents">
+              <span class="nav-icon">📑</span>
+              <span>Documents</span>
+              <span class="nav-badge" id="badge-doc-count">0</span>
+            </a>
+            <a class="nav-item" data-view="users" id="nav-users" data-tooltip="User Directory">
+              <span class="nav-icon">👥</span>
+              <span>User Directory</span>
+              <span class="nav-badge" id="badge-users-count">0</span>
+            </a>
+            <a class="nav-item" data-view="editor" id="nav-editor" data-tooltip="Create Document">
+              <span class="nav-icon">✏️</span>
+              <span>Create Document</span>
+            </a>
+            <a class="nav-item" data-view="templates" id="nav-templates" data-tooltip="Templates">
+              <span class="nav-icon">📋</span>
+              <span>Templates</span>
+            </a>
+          </div>
+        </div>
 
-        <div class="nav-section-title">Rules & Data</div>
-        <a class="nav-item" data-view="rules" id="nav-rules" data-tooltip="Validation Rules">
-          <span class="nav-icon">🛡️</span>
-          <span>Validation Rules</span>
-          <span class="nav-badge" id="badge-rules-count">0</span>
-        </a>
-        <a class="nav-item" data-view="sql-library" id="nav-sql-library" data-tooltip="SQL Library">
-          <span class="nav-icon">💾</span>
-          <span>SQL Library</span>
-          <span class="nav-badge" id="badge-sql-library-count">0</span>
-        </a>
-        <a class="nav-item" data-view="executions" id="nav-executions" data-tooltip="Test Executions">
-          <span class="nav-icon">⏱️</span>
-          <span>Test Executions</span>
-        </a>
-        <a class="nav-item" data-view="issues" id="nav-issues" data-tooltip="Issues & Remediation">
-          <span class="nav-icon">⚠️</span>
-          <span>Issues & Remediation</span>
-          <span class="nav-badge" id="badge-issues-count">0</span>
-        </a>
+        <!-- Section 2: Rules & Data -->
+        <div class="nav-section-group collapsed" data-section-id="rules">
+          <button type="button" class="nav-section-header" title="Toggle Rules & Data">
+            <span class="nav-section-title">Rules & Data</span>
+            <span class="nav-section-caret">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </span>
+          </button>
+          <div class="nav-section-items">
+            <a class="nav-item" data-view="rules" id="nav-rules" data-tooltip="Validation Rules">
+              <span class="nav-icon">🛡️</span>
+              <span>Validation Rules</span>
+              <span class="nav-badge" id="badge-rules-count">0</span>
+            </a>
+            <a class="nav-item" data-view="sql-library" id="nav-sql-library" data-tooltip="SQL Library">
+              <span class="nav-icon">💾</span>
+              <span>SQL Library</span>
+              <span class="nav-badge" id="badge-sql-library-count">0</span>
+            </a>
+            <a class="nav-item" data-view="executions" id="nav-executions" data-tooltip="Test Executions">
+              <span class="nav-icon">⏱️</span>
+              <span>Test Executions</span>
+            </a>
+            <a class="nav-item" data-view="issues" id="nav-issues" data-tooltip="Issues & Remediation">
+              <span class="nav-icon">⚠️</span>
+              <span>Issues & Remediation</span>
+              <span class="nav-badge" id="badge-issues-count">0</span>
+            </a>
+          </div>
+        </div>
 
-        <div class="nav-section-title">Discovery & Integration</div>
-        <a class="nav-item" data-view="pdf-import" id="nav-pdf-import" data-tooltip="PDF Import">
-          <span class="nav-icon">📄</span>
-          <span>PDF Import</span>
-        </a>
+        <!-- Section 3: Discovery & Integration -->
+        <div class="nav-section-group collapsed" data-section-id="discovery">
+          <button type="button" class="nav-section-header" title="Toggle Discovery & Integration">
+            <span class="nav-section-title">Discovery & Integration</span>
+            <span class="nav-section-caret">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </span>
+          </button>
+          <div class="nav-section-items">
+            <a class="nav-item" data-view="pdf-import" id="nav-pdf-import" data-tooltip="PDF Import">
+              <span class="nav-icon">📄</span>
+              <span>PDF Import</span>
+            </a>
+          </div>
+        </div>
 
-        <div class="nav-section-title" id="nav-sec-governance">Governance & Settings</div>
-        <a class="nav-item" data-view="scorecards" id="nav-scorecards" data-tooltip="Scorecards">
-          <span class="nav-icon">📈</span>
-          <span>Scorecards</span>
-        </a>
-        <a class="nav-item" data-view="audit" id="nav-audit" data-tooltip="Audit History">
-          <span class="nav-icon">📜</span>
-          <span>Audit History</span>
-        </a>
-        <a class="nav-item" data-view="settings" id="nav-settings" data-tooltip="Settings">
-          <span class="nav-icon">⚙️</span>
-          <span>Settings</span>
-        </a>
-        <a class="nav-item" data-view="how-to-use" id="nav-how-to-use" data-tooltip="How To Use">
-          <span class="nav-icon">📖</span>
-          <span>How To Use</span>
-          <span class="nav-badge" style="background: var(--accent-color); color: #fff;">Guide</span>
-        </a>
+        <!-- Section 4: Governance & Settings -->
+        <div class="nav-section-group collapsed" data-section-id="governance">
+          <button type="button" class="nav-section-header" title="Toggle Governance & Settings">
+            <span class="nav-section-title" id="nav-sec-governance">Governance & Settings</span>
+            <span class="nav-section-caret">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </span>
+          </button>
+          <div class="nav-section-items">
+            <a class="nav-item" data-view="scorecards" id="nav-scorecards" data-tooltip="Scorecards">
+              <span class="nav-icon">📈</span>
+              <span>Scorecards</span>
+            </a>
+            <a class="nav-item" data-view="audit" id="nav-audit" data-tooltip="Audit History">
+              <span class="nav-icon">📜</span>
+              <span>Audit History</span>
+            </a>
+            <a class="nav-item" data-view="settings" id="nav-settings" data-tooltip="Settings">
+              <span class="nav-icon">⚙️</span>
+              <span>Settings</span>
+            </a>
+            <a class="nav-item" data-view="how-to-use" id="nav-how-to-use" data-tooltip="How To Use">
+              <span class="nav-icon">📖</span>
+              <span>How To Use</span>
+              <span class="nav-badge" style="background: var(--accent-color); color: #fff;">Guide</span>
+            </a>
+          </div>
+        </div>
       </nav>
 
       <div class="sidebar-footer">
@@ -112,6 +160,11 @@
           <span>Standalone Mode</span>
           <span style="font-size: 10px; opacity: 0.7;">Zero Server / 100% Offline</span>
         </div>
+        <button type="button" class="sidebar-rail-expand-btn" id="btn-expand-sidebar-rail" title="Expand Sidebar (Ctrl+B)">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+        </button>
       </div>
     </aside>
 
@@ -204,8 +257,8 @@
   <script src="lib/pdf.min.js"></script>
   <script src="lib/xlsx.full.min.js"></script>
   <script src="lib/chart.umd.min.js"></script>
-  <script src="defaults.js?v=4.7"></script>
-  <script src="app.js?v=4.7"></script>
+  <script src="defaults.js?v=5.0"></script>
+  <script src="app.js?v=5.3"></script>
 </body>
 
 </html>

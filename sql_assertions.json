@@ -1,17 +1,1 @@
-[
-    {
-        "id": "SQL-DOC-20261014-9179-Q-1",
-        "title": "Model Validation",
-        "documentTitle": "Model Validation",
-        "documentId": "DOC-20261014-9179",
-        "queryIndex": 1,
-        "queryTitle": "Primary Trino Validation Query",
-        "dialect": "Trino",
-        "sql": "gfdsfdsdsf\nsdfsdfsdf\n\ndsfd\n\n\nsdfd",
-        "notes": "",
-        "expectedResult": "",
-        "threshold": "0",
-        "createdAt": "2026-10-14T02:18:08.137Z",
-        "updatedAt": "2026-10-17T21:08:46.752Z"
-    }
-]
+[]

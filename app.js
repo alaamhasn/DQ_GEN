@@ -1116,9 +1116,19 @@
     navigateTo(viewName, params = {}) {
       this.currentView = viewName;
 
-      // Update sidebar active class
+      // Update sidebar active class & ensure parent section is expanded
       document.querySelectorAll('.nav-item').forEach(el => {
-        el.classList.toggle('active', el.dataset.view === viewName);
+        const isActive = el.dataset.view === viewName;
+        el.classList.toggle('active', isActive);
+        if (isActive) {
+          const parentSection = el.closest('.nav-section-group');
+          if (parentSection && parentSection.classList.contains('collapsed')) {
+            parentSection.classList.remove('collapsed');
+            if (typeof this.saveSidebarSectionStates === 'function') {
+              this.saveSidebarSectionStates();
+            }
+          }
+        }
       });
 
       // Update Topbar Title
@@ -1237,6 +1247,7 @@
     attachGlobalEvents() {
       // Sidebar Toggle & Collapse System
       this.initSidebarToggle();
+      this.initSidebarSectionCollapsing();
 
       // Sidebar navigation clicks
       document.querySelectorAll('.nav-item').forEach(el => {
@@ -1354,6 +1365,7 @@
     initSidebarToggle() {
       const btnToggle = document.getElementById('btn-toggle-sidebar');
       const btnCollapse = document.getElementById('btn-collapse-sidebar');
+      const btnExpandRail = document.getElementById('btn-expand-sidebar-rail');
       const backdrop = document.getElementById('sidebar-backdrop');
       const appContainer = document.getElementById('app-container');
       const sidebar = document.getElementById('sidebar');
@@ -1384,6 +1396,7 @@
 
       btnToggle?.addEventListener('click', handleToggle);
       btnCollapse?.addEventListener('click', handleToggle);
+      btnExpandRail?.addEventListener('click', handleToggle);
 
       // Close mobile drawer when clicking the backdrop
       backdrop?.addEventListener('click', () => {
@@ -1405,9 +1418,11 @@
     updateSidebarToggleTitles(isCollapsed) {
       const btnToggle = document.getElementById('btn-toggle-sidebar');
       const btnCollapse = document.getElementById('btn-collapse-sidebar');
+      const btnExpandRail = document.getElementById('btn-expand-sidebar-rail');
       const title = isCollapsed ? 'Expand Sidebar (Ctrl+B)' : 'Collapse Sidebar (Ctrl+B)';
       if (btnToggle) btnToggle.title = title;
       if (btnCollapse) btnCollapse.title = title;
+      if (btnExpandRail) btnExpandRail.title = title;
     },
 
     toggleSidebar() {
@@ -1427,6 +1442,61 @@
       }
     },
 
+    initSidebarSectionCollapsing() {
+      // Default: Only 'core' is opened; 'rules', 'discovery', and 'governance' are collapsed by default
+      const defaultCollapsed = ['rules', 'discovery', 'governance'];
+      let collapsedSections = null;
+      try {
+        const stored = localStorage.getItem('dqd_sidebar_sections_collapsed');
+        if (stored !== null) collapsedSections = JSON.parse(stored);
+      } catch (err) {
+        collapsedSections = null;
+      }
+
+      if (!Array.isArray(collapsedSections)) {
+        collapsedSections = defaultCollapsed;
+      }
+
+      const sectionGroups = document.querySelectorAll('.nav-section-group');
+      sectionGroups.forEach(group => {
+        const secId = group.dataset.sectionId;
+        const header = group.querySelector('.nav-section-header');
+
+        // Apply collapsed state (unless the active view lives within this section)
+        if (secId) {
+          const shouldCollapse = collapsedSections.includes(secId);
+          const hasActiveItem = group.querySelector('.nav-item.active');
+          if (shouldCollapse && !hasActiveItem) {
+            group.classList.add('collapsed');
+          } else {
+            group.classList.remove('collapsed');
+          }
+        }
+
+        if (header) {
+          header.addEventListener('click', (e) => {
+            e.preventDefault();
+            group.classList.toggle('collapsed');
+            this.saveSidebarSectionStates();
+          });
+        }
+      });
+    },
+
+    saveSidebarSectionStates() {
+      const collapsedIds = [];
+      document.querySelectorAll('.nav-section-group.collapsed').forEach(group => {
+        if (group.dataset.sectionId) {
+          collapsedIds.push(group.dataset.sectionId);
+        }
+      });
+      try {
+        localStorage.setItem('dqd_sidebar_sections_collapsed', JSON.stringify(collapsedIds));
+      } catch (err) {
+        console.warn('Could not save sidebar section states', err);
+      }
+    },
+
     // ====================================================================
     // 5. VIEW: DASHBOARD
     // ====================================================================
@@ -1440,190 +1510,624 @@
       const ruleCount = this.rules.length;
       const execCount = this.executions.length;
       const passedCount = this.executions.filter(e => e.status === 'PASSED').length;
+      const failedCount = this.executions.filter(e => e.status === 'FAILED').length;
+      const warningCount = this.executions.filter(e => e.status === 'WARNING').length;
       const passRate = execCount > 0 ? ((passedCount / execCount) * 100).toFixed(1) : '100.0';
       const openIssues = this.issues.filter(i => i.status !== 'Resolved' && i.status !== 'Closed').length;
       const criticalIssues = this.issues.filter(i => i.severity === 'Critical' && i.status !== 'Resolved' && i.status !== 'Closed').length;
 
-      container.innerHTML = `
-        <div class="grid-cols-4" style="margin-bottom: 24px;">
-          <div class="metric-tile" id="dash-tile-docs" style="cursor: pointer;" title="Click to view all documents">
-            <div class="metric-icon-box" style="background: rgba(31,78,121,0.1); color: var(--primary-color);">📑</div>
-            <div>
-              <div class="metric-value">${docCount}</div>
-              <div class="metric-label">Total Documents</div>
-            </div>
-          </div>
-          <div class="metric-tile" id="dash-tile-teams" style="cursor: pointer;" title="Click to view User & Team Directory">
-            <div class="metric-icon-box" style="background: rgba(16,185,129,0.1); color: var(--status-passed);">🏢</div>
-            <div>
-              <div class="metric-value">${teamCount}</div>
-              <div class="metric-label">Total Teams</div>
-            </div>
-          </div>
-          <div class="metric-tile" id="dash-tile-users" style="cursor: pointer; border: 2px solid rgba(68,114,196,0.35); background: rgba(68,114,196,0.03);" title="Click to open page to view all usernames & related documents">
-            <div class="metric-icon-box" style="background: rgba(68,114,196,0.15); color: var(--secondary-color);">👥</div>
-            <div>
-              <div class="metric-value" style="color: var(--secondary-color);">${userCount}</div>
-              <div class="metric-label" style="font-weight: 700; color: var(--secondary-color);">Total Usernames ↗</div>
-            </div>
-          </div>
-          <div class="metric-tile" id="dash-tile-rules" style="cursor: pointer;" title="Active Validation Rules Catalog">
-            <div class="metric-icon-box" style="background: rgba(245,158,11,0.1); color: #f59e0b;">🛡️</div>
-            <div>
-              <div class="metric-value">${ruleCount}</div>
-              <div class="metric-label">Rules (${passRate}% Pass)</div>
-            </div>
-          </div>
-        </div>
+      const approvedDocs = this.documents.filter(d => (d.status || '').toLowerCase() === 'approved').length;
+      const inReviewDocs = this.documents.filter(d => (d.status || '').toLowerCase() === 'in review' || (d.status || '').toLowerCase() === 'review').length;
+      const draftDocs = this.documents.filter(d => (d.status || '').toLowerCase() === 'draft' || !d.status).length;
 
-        <div class="grid-cols-2">
-          <!-- Recent Documents -->
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title">📑 Recent Data Quality Documents</span>
-              <button class="btn btn-outline btn-sm" id="dash-btn-view-all-docs">View All</button>
+      // Quality Health Score Calculation
+      let healthScore = 100;
+      if (execCount > 0) {
+        const baseRate = (passedCount / execCount) * 100;
+        const penalty = criticalIssues * 5;
+        healthScore = Math.max(0, Math.min(100, Math.round(baseRate - penalty)));
+      } else if (openIssues > 0) {
+        healthScore = Math.max(70, 100 - openIssues * 5);
+      }
+
+      // Dimension breakdown
+      const dimCounts = {};
+      this.rules.forEach(r => {
+        const d = r.dimension || 'Other';
+        dimCounts[d] = (dimCounts[d] || 0) + 1;
+      });
+
+      const profile = this.getActiveProfile();
+      const profileName = profile ? profile.name : 'Data Quality';
+
+      container.innerHTML = `
+        <div class="dash-container">
+          <!-- 1. Executive Workspace Hero Banner -->
+          <div class="dash-hero">
+            <div class="dash-hero-content">
+              <div class="dash-hero-badge">
+                <span class="dash-hero-badge-dot"></span>
+                <span>${this.escapeHtml(profileName)} Command Center</span>
+                <span style="opacity: 0.4;">•</span>
+                <span style="color: var(--text-muted); font-weight: 500;">Offline Engine Standalone</span>
+              </div>
+              <h1 class="dash-hero-title">Welcome to your ${this.escapeHtml(profileName)} Hub</h1>
+              <p class="dash-hero-desc">
+                Unified technical specifications, automated validation rules, SQL logic, and team governance — 100% offline and browser-native.
+              </p>
+            </div>
+            <div class="dash-hero-actions">
+              <div class="dash-hero-health-card">
+                <div class="dash-health-ring">${healthScore}%</div>
+                <div class="dash-health-info">
+                  <span class="dash-health-label">Quality Health Index</span>
+                  <span class="dash-health-val">${healthScore >= 90 ? '🟢 Optimal Health' : (healthScore >= 75 ? '🟡 Stable' : '🔴 Action Needed')}</span>
+                </div>
+              </div>
+              <button class="btn btn-primary" id="dash-hero-btn-new-doc" style="padding: 10px 18px; font-weight: 700;">
+                <span>➕</span> New Document
+              </button>
+            </div>
+          </div>
+
+          <!-- 2. Refined KPI Metric Cards (Grid of 4) -->
+          <div class="grid-cols-4">
+            <!-- Card 1: Documents -->
+            <div class="dash-metric-card" id="dash-tile-docs" title="Explore all specifications and documents">
+              <div class="dash-metric-header">
+                <div class="dash-metric-icon" style="background: rgba(31,78,121,0.12); color: var(--primary-color);">📑</div>
+                <span class="dash-metric-trend" style="background: rgba(31,78,121,0.08); color: var(--primary-color);">Specifications</span>
+              </div>
+              <div class="dash-metric-body">
+                <div class="dash-metric-number">${docCount}</div>
+                <div class="dash-metric-title">Total Documents</div>
+              </div>
+              <div class="dash-metric-footer">
+                <span style="color: var(--status-passed); font-weight: 700;">● ${approvedDocs}</span> Approved
+                <span style="opacity: 0.4;">•</span>
+                <span style="color: var(--status-warning); font-weight: 700;">● ${inReviewDocs}</span> In Review
+                <span style="opacity: 0.4;">•</span>
+                <span>${draftDocs} Drafts</span>
+              </div>
+            </div>
+
+            <!-- Card 2: Pass Rate & Executions -->
+            <div class="dash-metric-card" id="dash-tile-executions" title="View test executions and run history">
+              <div class="dash-metric-header">
+                <div class="dash-metric-icon" style="background: rgba(16,185,129,0.12); color: var(--status-passed);">⚡</div>
+                <span class="dash-metric-trend" style="background: var(--status-passed-bg); color: var(--status-passed);">${passedCount}/${execCount || 0} Passed</span>
+              </div>
+              <div class="dash-metric-body">
+                <div class="dash-metric-number" style="color: var(--status-passed);">${passRate}%</div>
+                <div class="dash-metric-title">Execution Pass Rate</div>
+              </div>
+              <div class="dash-metric-footer">
+                <span>${execCount} Total Runs Executed</span>
+                <span style="opacity: 0.4;">•</span>
+                <span style="color: ${failedCount > 0 ? 'var(--status-failed)' : 'var(--text-muted)'}; font-weight: 600;">${failedCount} Failed</span>
+              </div>
+            </div>
+
+            <!-- Card 3: Validation Rules -->
+            <div class="dash-metric-card" id="dash-tile-rules" title="Browse validation rules catalog">
+              <div class="dash-metric-header">
+                <div class="dash-metric-icon" style="background: rgba(245,158,11,0.12); color: #d97706;">🛡️</div>
+                <span class="dash-metric-trend" style="background: rgba(245,158,11,0.1); color: #b45309;">${Object.keys(dimCounts).length} Dimensions</span>
+              </div>
+              <div class="dash-metric-body">
+                <div class="dash-metric-number">${ruleCount}</div>
+                <div class="dash-metric-title">Active Rules Catalog</div>
+              </div>
+              <div class="dash-metric-footer">
+                <span>${this.rules.filter(r => r.severity === 'Critical' || r.severity === 'High').length} High/Critical</span>
+                <span style="opacity: 0.4;">•</span>
+                <span>${teamCount} Teams Covered</span>
+              </div>
+            </div>
+
+            <!-- Card 4: Issues & Remediation -->
+            <div class="dash-metric-card" id="dash-tile-issues" title="Triage issues and corrective actions">
+              <div class="dash-metric-header">
+                <div class="dash-metric-icon" style="background: ${criticalIssues > 0 ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.12)'}; color: ${criticalIssues > 0 ? 'var(--status-failed)' : 'var(--status-passed)'};">
+                  ${criticalIssues > 0 ? '🚨' : '✅'}
+                </div>
+                <span class="dash-metric-trend" style="background: ${criticalIssues > 0 ? 'var(--status-failed-bg)' : 'var(--status-passed-bg)'}; color: ${criticalIssues > 0 ? 'var(--status-failed)' : 'var(--status-passed)'};">
+                  ${criticalIssues > 0 ? `${criticalIssues} Critical` : 'All Clear'}
+                </span>
+              </div>
+              <div class="dash-metric-body">
+                <div class="dash-metric-number" style="${openIssues > 0 ? 'color: var(--status-warning);' : ''}">${openIssues}</div>
+                <div class="dash-metric-title">Open Remediation Items</div>
+              </div>
+              <div class="dash-metric-footer">
+                <span style="color: ${criticalIssues > 0 ? 'var(--status-failed)' : 'var(--status-passed)'}; font-weight: 600;">
+                  ${criticalIssues === 0 ? 'No Blockers Active' : `${criticalIssues} Critical CAPA Required`}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. Dual Visual Analytics Row (Charts) -->
+          <div class="grid-cols-2">
+            <!-- Chart A: Rules by Dimension -->
+            <div class="dash-chart-card">
+              <div class="card-header">
+                <div class="card-title">
+                  <span>📊</span> Validation Rules by Quality Dimension
+                </div>
+                <span class="badge badge-info" id="dash-badge-dim-count">${Object.keys(dimCounts).length} Dimensions</span>
+              </div>
+              <div class="dash-chart-body">
+                <div style="height: 190px; position: relative;">
+                  <canvas id="dash-chart-dimensions"></canvas>
+                </div>
+                <div class="dash-chart-legend" id="dash-dim-legend"></div>
+              </div>
+            </div>
+
+            <!-- Chart B: Execution Outcomes & Health Pipeline -->
+            <div class="dash-chart-card">
+              <div class="card-header">
+                <div class="card-title">
+                  <span>📈</span> Quality Execution Status & Run Outcomes
+                </div>
+                <span class="badge ${failedCount === 0 ? 'badge-success' : 'badge-danger'}">
+                  ${failedCount === 0 ? 'Healthy' : `${failedCount} Failed`}
+                </span>
+              </div>
+              <div class="dash-chart-body">
+                <div style="height: 190px; position: relative;">
+                  <canvas id="dash-chart-executions"></canvas>
+                </div>
+                <div class="dash-chart-legend">
+                  <span class="dash-legend-chip"><span class="dash-legend-chip-dot" style="background: #10B981;"></span> Passed: ${passedCount}</span>
+                  <span class="dash-legend-chip"><span class="dash-legend-chip-dot" style="background: #EF4444;"></span> Failed: ${failedCount}</span>
+                  <span class="dash-legend-chip"><span class="dash-legend-chip-dot" style="background: #F59E0B;"></span> Warnings: ${warningCount}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 4. Recent Specifications & Quality Contracts Table -->
+          <div class="card" style="box-shadow: var(--shadow-sm);">
+            <div class="card-header" style="flex-wrap: wrap; gap: 14px;">
+              <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <span class="card-title">📑 Recent Quality Specifications</span>
+                <div class="dash-filter-group" id="dash-doc-filter-group">
+                  <button type="button" class="dash-filter-pill active" data-filter="all">All (${docCount})</button>
+                  <button type="button" class="dash-filter-pill" data-filter="approved">Approved (${approvedDocs})</button>
+                  <button type="button" class="dash-filter-pill" data-filter="in review">In Review (${inReviewDocs})</button>
+                  <button type="button" class="dash-filter-pill" data-filter="draft">Draft (${draftDocs})</button>
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <input type="text" id="dash-doc-search" class="form-control form-control-sm" style="width: 200px;" placeholder="Filter recent documents...">
+                <button class="btn btn-outline btn-sm" id="dash-btn-view-all-docs">View All Library ↗</button>
+              </div>
             </div>
             <div class="card-body" style="padding: 0;">
-              ${this.documents.length === 0 ? '<div style="padding: 24px; text-align: center; color: var(--text-muted);">No documents created yet.</div>' : `
-                <div class="table-responsive">
-                  <table class="table-custom">
-                    <thead>
-                      <tr>
-                        <th>Document Title</th>
-                        <th>Domain</th>
-                        <th>Status</th>
-                        <th>Updated</th>
-                        <th style="text-align: right;">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      ${this.documents.slice(0, 5).map(doc => `
-                        <tr>
-                          <td>
-                            <strong>${this.escapeHtml(doc.title || 'Untitled Document')}</strong>
-                            <div style="font-size: 11px; color: var(--text-muted);">${doc.id} | v${doc.version || '1.0'}</div>
-                          </td>
-                          <td>${this.escapeHtml(doc.businessDomain || 'General')}</td>
-                          <td>${this.getStatusBadge(doc.status)}</td>
-                          <td>${doc.updatedAt ? new Date(doc.updatedAt).toLocaleDateString() : 'N/A'}</td>
-                          <td style="text-align: right; white-space: nowrap;">
-                            <button class="btn btn-outline btn-sm btn-action-edit-doc" data-id="${doc.id}" title="Edit Document">✏️ Edit</button>
-                            <button class="btn btn-danger btn-sm btn-action-delete-doc" data-id="${doc.id}" title="Delete Document">🗑️</button>
-                          </td>
-                        </tr>
-                      `).join('')}
-                    </tbody>
-                  </table>
-                </div>
-              `}
+              <div id="dash-docs-table-container"></div>
             </div>
           </div>
 
-          <!-- Quick Actions & Quality Dimensions -->
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title">⚡ Quick Operations</span>
-            </div>
-            <div class="card-body">
-              <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px;">
-                <button class="btn btn-outline" id="dash-quick-new" style="justify-content: flex-start; padding: 12px;">
-                  <span style="font-size: 20px; margin-right: 8px;">➕</span>
-                  <div style="text-align: left;">
-                    <strong>New Document</strong>
-                    <div style="font-size: 11px; color: var(--text-muted);">Start from blank</div>
-                  </div>
-                </button>
-                <button class="btn btn-outline" id="dash-quick-template" style="justify-content: flex-start; padding: 12px;">
-                  <span style="font-size: 20px; margin-right: 8px;">📋</span>
-                  <div style="text-align: left;">
-                    <strong>Use Template</strong>
-                    <div style="font-size: 11px; color: var(--text-muted);">9 standard formats</div>
-                  </div>
-                </button>
-                <button class="btn btn-outline" id="dash-quick-pdf" style="justify-content: flex-start; padding: 12px;">
-                  <span style="font-size: 20px; margin-right: 8px;">📄</span>
-                  <div style="text-align: left;">
-                    <strong>Import PDF</strong>
-                    <div style="font-size: 11px; color: var(--text-muted);">Extract & map fields</div>
-                  </div>
-                </button>
-                <button class="btn btn-outline" id="dash-quick-sql" style="justify-content: flex-start; padding: 12px;">
-                  <span style="font-size: 20px; margin-right: 8px;">💾</span>
-                  <div style="text-align: left;">
-                    <strong>SQL Library</strong>
-                    <div style="font-size: 11px; color: var(--text-muted);">Workbench & queries</div>
-                  </div>
-                </button>
-                <button class="btn btn-outline" id="dash-quick-users" style="justify-content: flex-start; padding: 12px;">
-                  <span style="font-size: 20px; margin-right: 8px;">👥</span>
-                  <div style="text-align: left;">
-                    <strong>User Directory</strong>
-                    <div style="font-size: 11px; color: var(--text-muted);">View usernames & docs</div>
-                  </div>
-                </button>
-                <button class="btn btn-outline" id="dash-quick-import-dldoc" style="justify-content: flex-start; padding: 12px;">
-                  <span style="font-size: 20px; margin-right: 8px;">📥</span>
-                  <div style="text-align: left;">
-                    <strong>Import .dldoc</strong>
-                    <div style="font-size: 11px; color: var(--text-muted);">Restore full document</div>
-                  </div>
-                </button>
+          <!-- 5. Lower Section: Quick Operations Launchpad + Recent Activity Stream -->
+          <div class="grid-cols-2">
+            <!-- Quick Operations Launchpad -->
+            <div class="card">
+              <div class="card-header">
+                <span class="card-title">⚡ Quick Launchpad & Workflows</span>
               </div>
-
-              <div style="padding: 14px; background: var(--surface-alt); border-radius: var(--border-radius-sm); border: 1px solid var(--surface-border);">
-                <div style="font-weight: 700; font-size: 12px; text-transform: uppercase; margin-bottom: 8px; color: var(--text-muted);">Supported Data Quality Dimensions</div>
-                <div style="display: flex; flex-wrap: wrap; gap: 6px;">
-                  <span class="badge badge-info">Completeness</span>
-                  <span class="badge badge-info">Uniqueness</span>
-                  <span class="badge badge-info">Validity</span>
-                  <span class="badge badge-info">Accuracy</span>
-                  <span class="badge badge-info">Consistency</span>
-                  <span class="badge badge-info">Timeliness</span>
-                  <span class="badge badge-info">Referential Integrity</span>
-                  <span class="badge badge-info">Reconciliation</span>
-                  <span class="badge badge-info">Freshness</span>
+              <div class="card-body">
+                <div class="dash-quick-grid">
+                  <div class="dash-quick-tile" id="dash-quick-new">
+                    <div class="dash-quick-tile-icon" style="background: rgba(31,78,121,0.1); color: var(--primary-color);">➕</div>
+                    <div>
+                      <div class="dash-quick-tile-title">New Document</div>
+                      <div class="dash-quick-tile-desc">Blank specification</div>
+                    </div>
+                  </div>
+                  <div class="dash-quick-tile" id="dash-quick-template">
+                    <div class="dash-quick-tile-icon" style="background: rgba(68,114,196,0.1); color: var(--secondary-color);">📋</div>
+                    <div>
+                      <div class="dash-quick-tile-title">Use Template</div>
+                      <div class="dash-quick-tile-desc">9 standard schemas</div>
+                    </div>
+                  </div>
+                  <div class="dash-quick-tile" id="dash-quick-pdf">
+                    <div class="dash-quick-tile-icon" style="background: rgba(220,38,38,0.1); color: #dc2626;">📄</div>
+                    <div>
+                      <div class="dash-quick-tile-title">Import PDF</div>
+                      <div class="dash-quick-tile-desc">Extract & map fields</div>
+                    </div>
+                  </div>
+                  <div class="dash-quick-tile" id="dash-quick-sql">
+                    <div class="dash-quick-tile-icon" style="background: rgba(245,158,11,0.1); color: #d97706;">💾</div>
+                    <div>
+                      <div class="dash-quick-tile-title">SQL Library</div>
+                      <div class="dash-quick-tile-desc">Query assertions</div>
+                    </div>
+                  </div>
+                  <div class="dash-quick-tile" id="dash-quick-users">
+                    <div class="dash-quick-tile-icon" style="background: rgba(16,185,129,0.1); color: var(--status-passed);">👥</div>
+                    <div>
+                      <div class="dash-quick-tile-title">User Directory</div>
+                      <div class="dash-quick-tile-desc">Attributions & teams</div>
+                    </div>
+                  </div>
+                  <div class="dash-quick-tile" id="dash-quick-import-dldoc">
+                    <div class="dash-quick-tile-icon" style="background: rgba(139,92,246,0.1); color: #8b5cf6;">📥</div>
+                    <div>
+                      <div class="dash-quick-tile-title">Import Backup</div>
+                      <div class="dash-quick-tile-desc">Restore .dldoc / JSON</div>
+                    </div>
+                  </div>
                 </div>
+              </div>
+            </div>
+
+            <!-- Live Workspace Activity Stream -->
+            <div class="card">
+              <div class="card-header">
+                <span class="card-title">📜 Workspace Activity & Audit Trail</span>
+                <button class="btn btn-outline btn-sm" id="dash-btn-view-audit">Audit History</button>
+              </div>
+              <div class="card-body" style="padding: 0;">
+                <div class="dash-activity-list" id="dash-activity-stream"></div>
               </div>
             </div>
           </div>
         </div>
       `;
 
-      // Tile click navigation
+      // Helper to render recent documents table with search & filter
+      let currentFilter = 'all';
+      let currentSearch = '';
+
+      const renderDocsTable = () => {
+        let filtered = [...this.documents];
+        if (currentFilter !== 'all') {
+          filtered = filtered.filter(d => (d.status || '').toLowerCase() === currentFilter.toLowerCase());
+        }
+        if (currentSearch) {
+          const q = currentSearch.toLowerCase();
+          filtered = filtered.filter(d => 
+            (d.title || '').toLowerCase().includes(q) ||
+            (d.id || '').toLowerCase().includes(q) ||
+            (d.businessDomain || '').toLowerCase().includes(q) ||
+            (d.author || '').toLowerCase().includes(q)
+          );
+        }
+
+        const tableContainer = document.getElementById('dash-docs-table-container');
+        if (!tableContainer) return;
+
+        if (filtered.length === 0) {
+          tableContainer.innerHTML = `
+            <div style="padding: 36px 20px; text-align: center; color: var(--text-muted);">
+              <div style="font-size: 28px; margin-bottom: 8px;">📑</div>
+              <div style="font-weight: 600; font-size: 14px; color: var(--text-color);">No documents match your filter.</div>
+              <div style="font-size: 12px; margin-top: 4px;">Try searching for another keyword or switch your status filter above.</div>
+            </div>
+          `;
+          return;
+        }
+
+        tableContainer.innerHTML = `
+          <div class="table-responsive">
+            <table class="table-custom">
+              <thead>
+                <tr>
+                  <th>Document Title & ID</th>
+                  <th>Domain</th>
+                  <th>Author / Context</th>
+                  <th>Status</th>
+                  <th>Last Updated</th>
+                  <th style="text-align: right;">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${filtered.slice(0, 6).map(doc => `
+                  <tr>
+                    <td>
+                      <div style="font-weight: 700; color: var(--text-color); cursor: pointer;" class="btn-dash-quick-view" data-id="${doc.id}">
+                        ${this.escapeHtml(doc.title || 'Untitled Document')}
+                      </div>
+                      <div style="font-size: 11px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; margin-top: 2px;">
+                        <span style="font-family: monospace; background: var(--surface-alt); padding: 1px 5px; border-radius: 3px; border: 1px solid var(--surface-border);">${doc.id}</span>
+                        <span>v${doc.version || '1.0'}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <span class="badge" style="background: rgba(31,78,121,0.08); color: var(--primary-color); font-weight: 600;">
+                        ${this.escapeHtml(doc.businessDomain || 'General')}
+                      </span>
+                    </td>
+                    <td>
+                      <div style="font-size: 12px; font-weight: 600; color: var(--text-color);">${this.escapeHtml(doc.author || 'Author')}</div>
+                      <div style="font-size: 11px; color: var(--text-muted);">${this.escapeHtml(doc.targetSchema || doc.sourceSystem || 'General Specification')}</div>
+                    </td>
+                    <td>${this.getStatusBadge(doc.status)}</td>
+                    <td style="font-size: 12px; color: var(--text-muted);">${doc.updatedAt ? new Date(doc.updatedAt).toLocaleDateString() : 'N/A'}</td>
+                    <td style="text-align: right; white-space: nowrap;">
+                      <button class="btn btn-outline btn-sm btn-dash-quick-view" data-id="${doc.id}" title="Quick Preview">👁️ View</button>
+                      <button class="btn btn-outline btn-sm btn-action-edit-doc" data-id="${doc.id}" title="Edit Document">✏️ Edit</button>
+                      <button class="btn btn-danger btn-sm btn-action-delete-doc" data-id="${doc.id}" title="Delete Document">🗑️</button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+
+        // Wire quick view modal buttons
+        tableContainer.querySelectorAll('.btn-dash-quick-view').forEach(btn => {
+          btn.addEventListener('click', () => {
+            this.showQuickDocModal(btn.dataset.id);
+          });
+        });
+
+        // Wire edit buttons
+        tableContainer.querySelectorAll('.btn-action-edit-doc').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const doc = this.documents.find(d => d.id === btn.dataset.id);
+            if (doc) {
+              this.currentDoc = JSON.parse(JSON.stringify(doc));
+              this.currentDoc._originalId = doc.id;
+              this.currentEditorTab = 'tab-meta';
+              this.navigateTo('editor');
+            }
+          });
+        });
+
+        // Wire delete buttons
+        tableContainer.querySelectorAll('.btn-action-delete-doc').forEach(btn => {
+          btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            await this.deleteDocument(btn.dataset.id);
+          });
+        });
+      };
+
+      // Initial table render
+      renderDocsTable();
+
+      // Search input handler
+      const searchInput = document.getElementById('dash-doc-search');
+      if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+          currentSearch = e.target.value.trim();
+          renderDocsTable();
+        });
+      }
+
+      // Filter tabs handler
+      const filterGroup = document.getElementById('dash-doc-filter-group');
+      if (filterGroup) {
+        filterGroup.querySelectorAll('.dash-filter-pill').forEach(pill => {
+          pill.addEventListener('click', () => {
+            filterGroup.querySelectorAll('.dash-filter-pill').forEach(p => p.classList.remove('active'));
+            pill.classList.add('active');
+            currentFilter = pill.dataset.filter;
+            renderDocsTable();
+          });
+        });
+      }
+
+      // Render Charts with Chart.js
+      if (window.Chart) {
+        if (this._dashCharts) {
+          if (this._dashCharts.dimChart) { try { this._dashCharts.dimChart.destroy(); } catch(e) {} }
+          if (this._dashCharts.execChart) { try { this._dashCharts.execChart.destroy(); } catch(e) {} }
+        }
+        this._dashCharts = {};
+
+        // 1. Dimensions Chart
+        const dimLabels = Object.keys(dimCounts).length > 0 ? Object.keys(dimCounts) : ['Completeness', 'Validity', 'Uniqueness', 'Accuracy', 'Consistency', 'Timeliness'];
+        const dimData = Object.keys(dimCounts).length > 0 ? Object.values(dimCounts) : [2, 1, 1, 1, 1, 0];
+        const dimColors = ['#1F4E79', '#4472C4', '#00A6A6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#64748B'];
+
+        const ctxDim = document.getElementById('dash-chart-dimensions');
+        if (ctxDim) {
+          this._dashCharts.dimChart = new Chart(ctxDim, {
+            type: 'doughnut',
+            data: {
+              labels: dimLabels,
+              datasets: [{
+                data: dimData,
+                backgroundColor: dimColors.slice(0, dimLabels.length),
+                borderWidth: 2,
+                borderColor: '#ffffff'
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { display: false },
+                tooltip: {
+                  callbacks: {
+                    label: (ctx) => ` ${ctx.label}: ${ctx.raw} rules`
+                  }
+                }
+              },
+              cutout: '65%'
+            }
+          });
+
+          // Render custom legend chips
+          const legendBox = document.getElementById('dash-dim-legend');
+          if (legendBox) {
+            legendBox.innerHTML = dimLabels.map((lbl, idx) => `
+              <span class="dash-legend-chip">
+                <span class="dash-legend-chip-dot" style="background: ${dimColors[idx % dimColors.length]};"></span>
+                ${this.escapeHtml(lbl)}: ${dimData[idx]}
+              </span>
+            `).join('');
+          }
+        }
+
+        // 2. Execution Chart
+        const ctxExec = document.getElementById('dash-chart-executions');
+        if (ctxExec) {
+          const passCount = passedCount > 0 || failedCount > 0 ? passedCount : (execCount === 0 ? 1 : 0);
+          const failCount = failedCount;
+          const warnCount = warningCount;
+          this._dashCharts.execChart = new Chart(ctxExec, {
+            type: 'doughnut',
+            data: {
+              labels: ['Passed', 'Failed', 'Warnings'],
+              datasets: [{
+                data: [passCount, failCount, warnCount],
+                backgroundColor: ['#10B981', '#EF4444', '#F59E0B'],
+                borderWidth: 2,
+                borderColor: '#ffffff'
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { display: false }
+              },
+              cutout: '65%'
+            }
+          });
+        }
+      }
+
+      // Render Activity Stream from Audit Logs
+      const activityBox = document.getElementById('dash-activity-stream');
+      if (activityBox) {
+        const logs = (this.auditLogs && this.auditLogs.length > 0) ? this.auditLogs.slice(0, 5) : [
+          { action: 'Workspace Loaded', details: 'All specifications & rules verified in local storage', actor: 'System', timestamp: new Date().toISOString() },
+          { action: 'Validation Engine Ready', details: 'Offline execution engine standby', actor: 'Engine', timestamp: new Date(Date.now() - 3600000).toISOString() }
+        ];
+
+        activityBox.innerHTML = logs.map(l => {
+          let icon = '📝';
+          let iconBg = 'rgba(68,114,196,0.1)';
+          let iconColor = 'var(--secondary-color)';
+          const act = (l.action || '').toLowerCase();
+          if (act.includes('delete')) { icon = '🗑️'; iconBg = 'rgba(239,68,68,0.1)'; iconColor = '#ef4444'; }
+          else if (act.includes('create') || act.includes('add')) { icon = '➕'; iconBg = 'rgba(16,185,129,0.1)'; iconColor = '#10b981'; }
+          else if (act.includes('exec') || act.includes('run')) { icon = '⚡'; iconBg = 'rgba(245,158,11,0.1)'; iconColor = '#f59e0b'; }
+          else if (act.includes('backup') || act.includes('export')) { icon = '💾'; iconBg = 'rgba(139,92,246,0.1)'; iconColor = '#8b5cf6'; }
+
+          const timeStr = l.timestamp ? new Date(l.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recent';
+
+          return `
+            <div class="dash-activity-item">
+              <div class="dash-activity-icon-box" style="background: ${iconBg}; color: ${iconColor};">
+                ${icon}
+              </div>
+              <div class="dash-activity-content">
+                <div class="dash-activity-title">${this.escapeHtml(l.action)}</div>
+                <div style="font-size: 11px; color: var(--text-color); margin-top: 1px;">${this.escapeHtml(l.details || '')}</div>
+                <div class="dash-activity-meta">
+                  <span>👤 ${this.escapeHtml(l.actor || 'User')}</span>
+                  <span>•</span>
+                  <span>🕒 ${timeStr}</span>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      // Wire Navigation & Tile Clicks
+      document.getElementById('dash-hero-btn-new-doc')?.addEventListener('click', () => {
+        this.currentDoc = null;
+        this.currentEditorTab = 'tab-meta';
+        this.navigateTo('editor');
+      });
       document.getElementById('dash-tile-docs')?.addEventListener('click', () => this.navigateTo('documents'));
-      document.getElementById('dash-tile-teams')?.addEventListener('click', () => this.navigateTo('users'));
-      document.getElementById('dash-tile-users')?.addEventListener('click', () => this.navigateTo('users'));
+      document.getElementById('dash-tile-executions')?.addEventListener('click', () => this.navigateTo('executions'));
       document.getElementById('dash-tile-rules')?.addEventListener('click', () => this.navigateTo('rules'));
+      document.getElementById('dash-tile-issues')?.addEventListener('click', () => this.navigateTo('issues'));
+
+      document.getElementById('dash-btn-view-all-docs')?.addEventListener('click', () => this.navigateTo('documents'));
+      document.getElementById('dash-btn-view-audit')?.addEventListener('click', () => this.navigateTo('audit'));
+
+      // Quick launchpad actions
+      document.getElementById('dash-quick-new')?.addEventListener('click', () => {
+        this.currentDoc = null;
+        this.currentEditorTab = 'tab-meta';
+        this.navigateTo('editor');
+      });
+      document.getElementById('dash-quick-template')?.addEventListener('click', () => this.navigateTo('templates'));
+      document.getElementById('dash-quick-pdf')?.addEventListener('click', () => this.navigateTo('pdf-import'));
+      document.getElementById('dash-quick-sql')?.addEventListener('click', () => this.navigateTo('sql-library'));
       document.getElementById('dash-quick-users')?.addEventListener('click', () => this.navigateTo('users'));
       (document.getElementById('dash-quick-import-dldoc') || document.getElementById('dash-quick-import-dqdoc'))?.addEventListener('click', () => {
         document.getElementById('input-quick-import-file')?.click();
       });
+    },
 
-      // Event handlers
-      document.getElementById('dash-btn-view-all-docs').addEventListener('click', () => this.navigateTo('documents'));
-      document.getElementById('dash-quick-new').addEventListener('click', () => { this.currentDoc = null; this.currentEditorTab = 'tab-meta'; this.navigateTo('editor'); });
-      document.getElementById('dash-quick-template').addEventListener('click', () => this.navigateTo('templates'));
-      document.getElementById('dash-quick-pdf').addEventListener('click', () => this.navigateTo('pdf-import'));
-      document.getElementById('dash-quick-sql')?.addEventListener('click', () => this.navigateTo('sql-library'));
+    showQuickDocModal(docId) {
+      const doc = this.documents.find(d => d.id === docId);
+      if (!doc) return;
 
-      container.querySelectorAll('.btn-action-edit-doc').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const doc = this.documents.find(d => d.id === btn.dataset.id);
-          if (doc) {
+      const mappingCount = doc.mappings ? doc.mappings.length : 0;
+      const ruleCount = doc.rules ? doc.rules.length : 0;
+      const statusBadge = this.getStatusBadge(doc.status);
+
+      const modalHtml = `
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--surface-border);">
+            <div>
+              <h3 style="font-size: 18px; font-weight: 800; color: var(--text-color); margin-bottom: 4px;">${this.escapeHtml(doc.title || 'Untitled Document')}</h3>
+              <div style="font-size: 12px; color: var(--text-muted); display: flex; gap: 8px;">
+                <span style="font-family: monospace; background: var(--surface-alt); padding: 1px 5px; border-radius: 3px;">${doc.id}</span>
+                <span>•</span>
+                <span>Version ${doc.version || '1.0'}</span>
+              </div>
+            </div>
+            <div>${statusBadge}</div>
+          </div>
+
+          <div class="grid-cols-3" style="gap: 12px;">
+            <div style="padding: 10px; background: var(--surface-alt); border-radius: var(--border-radius-sm); border: 1px solid var(--surface-border);">
+              <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Business Domain</div>
+              <div style="font-weight: 700; margin-top: 2px;">${this.escapeHtml(doc.businessDomain || 'General')}</div>
+            </div>
+            <div style="padding: 10px; background: var(--surface-alt); border-radius: var(--border-radius-sm); border: 1px solid var(--surface-border);">
+              <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Author</div>
+              <div style="font-weight: 700; margin-top: 2px;">${this.escapeHtml(doc.author || 'Unassigned')}</div>
+            </div>
+            <div style="padding: 10px; background: var(--surface-alt); border-radius: var(--border-radius-sm); border: 1px solid var(--surface-border);">
+              <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Complexity</div>
+              <div style="font-weight: 700; margin-top: 2px;">${mappingCount} Fields • ${ruleCount} Rules</div>
+            </div>
+          </div>
+
+          <div>
+            <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px;">Purpose & Description</div>
+            <div style="padding: 12px; background: var(--surface-alt); border-radius: var(--border-radius-sm); border: 1px solid var(--surface-border); font-size: 13px; color: var(--text-color); line-height: 1.5;">
+              ${this.escapeHtml(doc.description || 'No description provided for this specification.')}
+            </div>
+          </div>
+        </div>
+      `;
+
+      this.openModal(`Specification Quick View: ${doc.id}`, modalHtml, [
+        {
+          label: '✏️ Edit in Designer',
+          class: 'btn-primary',
+          action: () => {
+            this.closeModal();
             this.currentDoc = JSON.parse(JSON.stringify(doc));
             this.currentDoc._originalId = doc.id;
             this.currentEditorTab = 'tab-meta';
             this.navigateTo('editor');
           }
-        });
-      });
-
-      container.querySelectorAll('.btn-action-delete-doc').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          await this.deleteDocument(btn.dataset.id);
-        });
-      });
+        },
+        {
+          label: 'Close',
+          class: 'btn-outline',
+          action: () => this.closeModal()
+        }
+      ], { size: 'lg' });
     },
 
     // ====================================================================
@@ -2670,6 +3174,291 @@
       });
     },
 
+    getEditorTabsList(docProfileKey) {
+      return [
+        { key: 'tab-meta', num: 1, title: '1. Overview & Metadata', shortTitle: 'Overview', desc: 'Identity, taxonomy & domain', icon: '📄' },
+        { key: 'tab-sources', num: 2, title: '2. Data Sources & Mappings', shortTitle: 'Sources', desc: 'Catalogs, schemas & columns', icon: '🗄️' },
+        { 
+          key: 'tab-rules', 
+          num: 3, 
+          title: docProfileKey === 'data_analysis' ? '3. Metrics & Dimensions' : docProfileKey === 'data_engineering' ? '3. Pipeline Rules & SLAs' : docProfileKey === 'data_modelling' ? '3. Entities & Attributes' : '3. Validation Rules', 
+          shortTitle: 'Rules',
+          desc: 'Assertions, thresholds & criteria', 
+          icon: '🛡️' 
+        },
+        { 
+          key: 'tab-sql', 
+          num: 4, 
+          title: docProfileKey === 'data_analysis' ? '4. Analytical Queries' : docProfileKey === 'data_engineering' ? '4. Transformation SQL' : docProfileKey === 'data_modelling' ? '4. DDL & Schema Queries' : '4. SQL Query & Workbench', 
+          shortTitle: 'SQL Workbench',
+          desc: 'Query assertions & runtime notes', 
+          icon: '⚡' 
+        },
+        { key: 'tab-screenshots', num: 5, title: '5. Screenshots & Evidence', shortTitle: 'Evidence', desc: 'Execution proofs & captures', icon: '📷' },
+        { 
+          key: 'tab-executions', 
+          num: 6, 
+          title: docProfileKey === 'data_analysis' ? '6. Query Runs & Results' : docProfileKey === 'data_engineering' ? '6. Pipeline Runs & SLAs' : docProfileKey === 'data_modelling' ? '6. Schema Runs' : '6. Executions & Results', 
+          shortTitle: 'Executions',
+          desc: 'Execution logs & defect metrics', 
+          icon: '📊' 
+        },
+        { 
+          key: 'tab-issues', 
+          num: 7, 
+          title: docProfileKey === 'data_analysis' ? '7. Insights & Action Items' : docProfileKey === 'data_engineering' ? '7. Incidents & Runbooks' : docProfileKey === 'data_modelling' ? '7. Schema Drift' : '7. Remediation & Issues', 
+          shortTitle: 'Remediation',
+          desc: 'Defects, RCA & action plans', 
+          icon: '⚠️' 
+        },
+        { key: 'tab-governance', num: 8, title: '8. Versions & Approvals', shortTitle: 'Governance', desc: 'Peer sign-offs & audit history', icon: '✅' }
+      ];
+    },
+
+    getTabStatus(doc, tabKey) {
+      if (!doc) return { isComplete: false, isWarning: false, label: '' };
+      switch (tabKey) {
+        case 'tab-meta': {
+          const hasTitle = Boolean(doc.title && doc.title.trim());
+          const hasId = Boolean(doc.id && doc.id.trim());
+          if (hasTitle && hasId) return { isComplete: true, isWarning: false, label: 'Ready' };
+          return { isComplete: false, isWarning: true, label: !hasTitle ? 'Title needed' : 'ID needed' };
+        }
+        case 'tab-sources': {
+          const hasSys = Boolean(doc.dataSource?.system && doc.dataSource.system.trim());
+          const hasMaps = Array.isArray(doc.dataSource?.mappings) && doc.dataSource.mappings.length > 0;
+          if (hasSys || hasMaps) return { isComplete: true, isWarning: false, label: hasMaps ? `${doc.dataSource.mappings.length} cols` : 'Ready' };
+          return { isComplete: false, isWarning: false, label: 'Optional' };
+        }
+        case 'tab-rules': {
+          const ruleCount = (doc.rules?.length || 0) + (doc.catalogRules?.length || 0);
+          if (ruleCount > 0) return { isComplete: true, isWarning: false, label: `${ruleCount} rules` };
+          return { isComplete: false, isWarning: false, label: '0 rules' };
+        }
+        case 'tab-sql': {
+          const hasSql = Boolean(doc.sqlQuery && doc.sqlQuery.trim());
+          if (hasSql) return { isComplete: true, isWarning: false, label: doc.sqlDialect || 'Trino' };
+          return { isComplete: false, isWarning: false, label: 'No SQL' };
+        }
+        case 'tab-screenshots': {
+          const count = (doc.screenshots || []).length;
+          return { isComplete: count > 0, isWarning: false, label: count > 0 ? `${count} proofs` : 'None' };
+        }
+        case 'tab-executions': {
+          const count = (doc.executions || []).length;
+          return { isComplete: count > 0, isWarning: false, label: count > 0 ? `${count} runs` : 'No runs' };
+        }
+        case 'tab-issues': {
+          const count = (doc.issues || []).length;
+          return { isComplete: false, isWarning: count > 0, label: count > 0 ? `${count} open` : 'Clean' };
+        }
+        case 'tab-governance': {
+          const hasVersion = Boolean(doc.version);
+          return { isComplete: hasVersion, isWarning: false, label: `v${doc.version || '1.0'}` };
+        }
+        default:
+          return { isComplete: false, isWarning: false, label: '' };
+      }
+    },
+
+    renderEditorStepperRailHtml(doc, activeTab, docProfileKey) {
+      const tabs = this.getEditorTabsList(docProfileKey);
+      const isCollapsed = localStorage.getItem('dqd_editor_stepper_collapsed') === 'true';
+
+      let completedCount = 0;
+      tabs.forEach(t => {
+        const status = this.getTabStatus(doc, t.key);
+        if (status.isComplete) completedCount++;
+      });
+      const percent = Math.round((completedCount / tabs.length) * 100);
+
+      return `
+        <aside class="editor-stepper-rail ${isCollapsed ? 'collapsed' : ''}" id="editor-stepper-rail" aria-label="Specification Steps Rail">
+          <div class="editor-stepper-header">
+            <div class="editor-stepper-title-box">
+              <span class="stepper-title-icon">📋</span>
+              <div class="stepper-title-text">
+                <span class="stepper-title-heading">Specification Flow</span>
+                <span class="stepper-title-sub" id="stepper-completion-sub">${completedCount} of ${tabs.length} Ready</span>
+              </div>
+            </div>
+            <button type="button" class="btn-rail-collapse" id="btn-collapse-stepper-rail" title="${isCollapsed ? 'Expand Steps Rail' : 'Collapse Steps Rail'}" aria-label="Toggle Steps Rail">
+              <span class="rail-collapse-icon">◀</span>
+            </button>
+          </div>
+
+          <nav class="editor-stepper-nav" aria-label="Document Sections">
+            ${tabs.map(t => {
+              const isActive = t.key === activeTab;
+              const status = this.getTabStatus(doc, t.key);
+              const pKey = (doc && doc.teamProfile) || this.getActiveProfileKey() || 'data_quality';
+              const addons = this.getTabAddons(t.key, pKey);
+              const activeAddonsCount = addons.filter(a => this.isAddonActive(doc, a.id)).length;
+
+              let orbClass = '';
+              let orbContent = `${t.num}`;
+              if (status.isComplete) {
+                orbClass = 'is-complete';
+                orbContent = '✓';
+              } else if (status.isWarning) {
+                orbClass = 'is-warning';
+                orbContent = '!';
+              }
+
+              return `
+                <button type="button" class="stepper-step-item ${isActive ? 'active' : ''}" data-tab="${t.key}" title="${this.escapeHtml(t.title)} — ${this.escapeHtml(t.desc)}">
+                  <div class="stepper-step-orb ${orbClass}">
+                    ${orbContent}
+                  </div>
+                  <div class="stepper-step-info">
+                    <div class="stepper-step-label-row">
+                      <span class="stepper-step-label">${this.escapeHtml(t.title)}</span>
+                      <div class="stepper-step-pills">
+                        ${activeAddonsCount > 0 ? `<span class="stepper-addon-pill" title="${activeAddonsCount} active addons">🎡 ${activeAddonsCount}</span>` : ''}
+                        ${status.label ? `<span class="stepper-status-pill ${status.isComplete ? 'ready' : (status.isWarning ? 'warn' : '')}">${this.escapeHtml(status.label)}</span>` : ''}
+                      </div>
+                    </div>
+                    <span class="stepper-step-desc">${this.escapeHtml(t.desc)}</span>
+                  </div>
+                </button>
+              `;
+            }).join('')}
+          </nav>
+
+          <div class="editor-stepper-footer">
+            <div class="stepper-progress-bar-bg">
+              <div class="stepper-progress-bar-fill" id="stepper-progress-fill" style="width: ${percent}%;"></div>
+            </div>
+            <div class="stepper-progress-label">
+              <span class="stepper-progress-percent" id="stepper-progress-percent">${percent}% Ready</span>
+              <span>Draft Quality Score</span>
+            </div>
+          </div>
+        </aside>
+      `;
+    },
+
+    renderStepperPaneFooterHtml(currentTabKey, profileKey) {
+      const tabs = this.getEditorTabsList(profileKey);
+      const curIdx = tabs.findIndex(t => t.key === currentTabKey);
+      if (curIdx === -1) return '';
+
+      const prevTab = curIdx > 0 ? tabs[curIdx - 1] : null;
+      const nextTab = curIdx < tabs.length - 1 ? tabs[curIdx + 1] : null;
+
+      return `
+        <div class="stepper-pane-footer">
+          <div>
+            ${prevTab ? `
+              <button type="button" class="btn btn-outline btn-sm btn-stepper-nav-step" data-tab="${prevTab.key}">
+                <span>◀</span> Previous: ${this.escapeHtml(prevTab.shortTitle || prevTab.title)}
+              </button>
+            ` : `
+              <button type="button" class="btn btn-outline btn-sm" disabled style="opacity: 0.4;">
+                <span>◀</span> Previous
+              </button>
+            `}
+          </div>
+
+          <div class="stepper-nav-step-counter">
+            <span>Step <strong>${curIdx + 1}</strong> of <strong>${tabs.length}</strong></span>
+          </div>
+
+          <div style="display: flex; gap: 8px;">
+            ${nextTab ? `
+              <button type="button" class="btn btn-primary btn-sm btn-stepper-nav-step" data-tab="${nextTab.key}">
+                Next: ${this.escapeHtml(nextTab.shortTitle || nextTab.title)} <span>▶</span>
+              </button>
+            ` : `
+              <button type="button" class="btn btn-success btn-sm" id="btn-stepper-finish-save" style="background: #10B981; border-color: #10B981; color: #fff; font-weight: 700;">
+                <span>💾</span> Save & Finalize Document
+              </button>
+            `}
+          </div>
+        </div>
+      `;
+    },
+
+    updateStepperRailState() {
+      if (!this.currentDoc) return;
+      const docProfileKey = (this.currentDoc && this.currentDoc.teamProfile) || this.getActiveProfileKey() || 'data_quality';
+      const tabs = this.getEditorTabsList(docProfileKey);
+      let completeCount = 0;
+      tabs.forEach((tab, index) => {
+        const status = this.getTabStatus(this.currentDoc, tab.key);
+        if (status.isComplete) completeCount++;
+        const item = document.querySelector(`.stepper-step-item[data-tab="${tab.key}"]`);
+        if (item) {
+          const orb = item.querySelector('.stepper-step-orb');
+          if (orb) {
+            orb.className = `stepper-step-orb ${status.isComplete ? 'is-complete' : (status.isWarning ? 'is-warning' : '')}`;
+            orb.textContent = status.isComplete ? '✓' : (index + 1);
+          }
+          const statusPill = item.querySelector('.stepper-status-pill');
+          if (statusPill) {
+            statusPill.className = `stepper-status-pill ${status.isComplete ? 'is-complete' : (status.isWarning ? 'is-warning' : 'is-empty')}`;
+            statusPill.textContent = status.label;
+          }
+        }
+      });
+      const pct = Math.round((completeCount / tabs.length) * 100);
+      const countEl = document.getElementById('stepper-completion-sub');
+      if (countEl) countEl.textContent = `${completeCount} of ${tabs.length} Ready`;
+      const pctEl = document.getElementById('stepper-progress-percent');
+      if (pctEl) pctEl.textContent = `${pct}% Ready`;
+      const barEl = document.getElementById('stepper-progress-fill');
+      if (barEl) barEl.style.width = `${pct}%`;
+    },
+
+    switchEditorTab(tabKey) {
+      if (!tabKey) return;
+      this.syncDocFromForm();
+      this.currentEditorTab = tabKey;
+
+      // Update stepper items
+      document.querySelectorAll('.stepper-step-item').forEach(item => {
+        if (item.dataset.tab === tabKey) {
+          item.classList.add('active');
+        } else {
+          item.classList.remove('active');
+        }
+      });
+
+      // Update tab buttons (if present)
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        if (btn.dataset.tab === tabKey) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+
+      // Update tab panes
+      document.querySelectorAll('.tab-pane').forEach(pane => {
+        if (pane.id === tabKey) {
+          pane.classList.add('active');
+        } else {
+          pane.classList.remove('active');
+        }
+      });
+
+      // Refresh stepper completion indicators
+      this.updateStepperRailState();
+
+      // Scroll workspace content to top smoothly
+      const workspaceContent = document.getElementById('editor-workspace-content');
+      if (workspaceContent) {
+        workspaceContent.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      const layout = document.getElementById('editor-workspace-layout');
+      if (layout) {
+        const topOffset = layout.getBoundingClientRect().top;
+        if (topOffset < 20) {
+          window.scrollTo({ top: Math.max(0, window.scrollY + topOffset - 20), behavior: 'smooth' });
+        }
+      }
+    },
+
     // ====================================================================
     // 7. VIEW: DOCUMENT EDITOR (CREATE / EDIT)
     // ====================================================================
@@ -2794,6 +3583,9 @@
         if (!Array.isArray(this.currentDoc.usernames) || this.currentDoc.usernames.length === 0) {
           this.currentDoc.usernames = this.currentDoc.owner ? [this.currentDoc.owner] : (fallbackAuthor.username ? [fallbackAuthor.username] : []);
         }
+        if (!Array.isArray(this.currentDoc.activeSections)) {
+          this.currentDoc.activeSections = this.detectActiveSections(this.currentDoc);
+        }
         if (!Array.isArray(this.currentDoc.dynamicInputs)) this.currentDoc.dynamicInputs = [];
         if (!Array.isArray(this.currentDoc.validatedModels)) this.currentDoc.validatedModels = [];
         if (!Array.isArray(this.currentDoc.validatedTables)) this.currentDoc.validatedTables = [];
@@ -2817,10 +3609,11 @@
       // Status mode check
       const missingRequired = this.getMissingRequiredFields(doc);
       const isMissingFields = missingRequired.length > 0;
+      const isStepperCollapsed = localStorage.getItem('dqd_editor_stepper_collapsed') === 'true';
 
       container.innerHTML = `
         <!-- Action Header Bar -->
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; background: var(--surface-color); padding: 14px 20px; border-radius: var(--border-radius-md); border: 1px solid var(--surface-border); box-shadow: var(--shadow-sm); flex-wrap: wrap; gap: 12px;">
+        <div class="editor-action-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; background: var(--surface-color); padding: 14px 20px; border-radius: var(--border-radius-md); border: 1px solid var(--surface-border); box-shadow: var(--shadow-sm); flex-wrap: wrap; gap: 12px;">
           <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
             <div class="inline-doc-id-box" title="Click to edit Document ID inline (e.g. DOC-20261011-7927)">
               <label for="doc-input-id" style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--text-muted); margin: 0; user-select: none;">DOC ID:</label>
@@ -2833,7 +3626,7 @@
             <span class="badge ${doc.status === 'Approved' ? 'badge-passed' : 'badge-status-draft'}">${doc.status}</span>
             <span style="font-size: 12px; color: var(--text-muted);">Version ${doc.version}</span>
           </div>
-          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+          <div class="editor-action-btns" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
             <button class="btn btn-outline btn-sm" id="editor-btn-cancel">Discard / Back</button>
             <button class="btn btn-outline btn-sm" id="editor-btn-share-markdown" title="Export formatted Slack / Microsoft Teams / Email Markdown">💬 Share</button>
             <button class="btn btn-outline btn-sm" id="editor-btn-clone">📑 Clone</button>
@@ -2859,21 +3652,15 @@
           </div>
         ` : ''}
 
-        <!-- Tabs Header -->
-        <div class="tabs-header">
-          <button class="tab-btn ${activeTab === 'tab-meta' ? 'active' : ''}" data-tab="tab-meta">1. Overview & Metadata</button>
-          <button class="tab-btn ${activeTab === 'tab-sources' ? 'active' : ''}" data-tab="tab-sources">2. Data Sources & Mappings</button>
-          <button class="tab-btn ${activeTab === 'tab-rules' ? 'active' : ''}" data-tab="tab-rules">${docProfileKey === 'data_analysis' ? '3. Metrics & Dimensions' : docProfileKey === 'data_engineering' ? '3. Pipeline Rules & SLAs' : docProfileKey === 'data_modelling' ? '3. Entities & Attributes' : '3. Validation Rules'}</button>
-          <button class="tab-btn ${activeTab === 'tab-sql' ? 'active' : ''}" data-tab="tab-sql">${docProfileKey === 'data_analysis' ? '4. Analytical Queries' : docProfileKey === 'data_engineering' ? '4. Transformation SQL' : docProfileKey === 'data_modelling' ? '4. DDL & Schema Queries' : '4. SQL Query & Workbench'}</button>
-          <button class="tab-btn ${activeTab === 'tab-screenshots' ? 'active' : ''}" data-tab="tab-screenshots">5. Screenshots & Evidence <span class="badge badge-info" id="badge-tab-ss-count">${(doc.screenshots || []).length}</span></button>
-          <button class="tab-btn ${activeTab === 'tab-executions' ? 'active' : ''}" data-tab="tab-executions">${docProfileKey === 'data_analysis' ? '6. Query Runs & Metric Results' : docProfileKey === 'data_engineering' ? '6. Pipeline Runs & Performance' : docProfileKey === 'data_modelling' ? '6. Schema Validations & Runs' : '6. Executions & Results'}</button>
-          <button class="tab-btn ${activeTab === 'tab-issues' ? 'active' : ''}" data-tab="tab-issues">${docProfileKey === 'data_analysis' ? '7. Insights & Action Items' : docProfileKey === 'data_engineering' ? '7. Incidents & Runbooks' : docProfileKey === 'data_modelling' ? '7. Schema Drift & Issues' : '7. Remediation & Issues'}</button>
-          <button class="tab-btn ${activeTab === 'tab-governance' ? 'active' : ''}" data-tab="tab-governance">8. Versions & Approvals</button>
-        </div>
+        <!-- Stepper Rail & Main Content Layout -->
+        <div class="editor-workspace-layout ${isStepperCollapsed ? 'stepper-collapsed' : ''}" id="editor-workspace-layout">
+          ${this.renderEditorStepperRailHtml(doc, activeTab, docProfileKey)}
+          <main class="editor-workspace-content" id="editor-workspace-content">
 
         <!-- TAB 1: METADATA & SPECIFICATION -->
         <div class="tab-pane ${activeTab === 'tab-meta' ? 'active' : ''}" id="tab-meta">
-          
+          ${this.renderTabAddonsBarHtml('tab-meta', '1. Overview & Metadata', doc)}
+
           <!-- CARD 1: PRIMARY DOCUMENT IDENTITY & CORE GOVERNANCE -->
           <div class="card" style="margin-bottom: 20px; border-top: 4px solid var(--primary-color);">
             <div class="card-header" style="justify-content: space-between; align-items: center; background: var(--surface-alt); padding: 12px 20px;">
@@ -3007,353 +3794,445 @@
             </div>
           </div>
 
-          <!-- CARD 3: TEAM & MULTI-USER ATTRIBUTION -->
+          <!-- CARD 3: TEAM ATTRIBUTION (CORE & COLLABORATORS) -->
           <div class="card" style="margin-bottom: 20px;">
             <div class="card-header" style="justify-content: space-between; align-items: center; background: var(--surface-alt); padding: 12px 20px;">
               <div style="display: flex; align-items: center; gap: 10px;">
                 <span style="font-size: 18px;">👥</span>
                 <div>
-                  <span class="card-title" style="font-size: 15px; font-weight: 700; margin: 0;">3. Team Attribution & Assignees</span>
-                  <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Owners, collaborators, engineering squad, and governance peer reviewers</div>
+                  <span class="card-title" style="font-size: 15px; font-weight: 700; margin: 0;">3. Team Attribution & Ownership</span>
+                  <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Responsible squad, primary accountable lead author, and team ownership</div>
                 </div>
               </div>
+              ${this.isAddonActive(doc, 'collaborators') ? `
+                <button type="button" class="btn-remove-addon-card" data-tab="tab-meta" data-addon-id="collaborators" title="Remove collaborators and return to Addons Wheel">
+                  <span>🎡</span> Hide Collaborators
+                </button>
+              ` : ''}
             </div>
             <div class="card-body" style="padding: 20px;">
-              <div class="grid-cols-2" style="margin-bottom: 16px;">
-                <div class="form-group">
+              <div class="grid-cols-2" style="${this.isAddonActive(doc, 'collaborators') ? 'margin-bottom: 16px;' : 'margin-bottom: 0;'}">
+                <div class="form-group" style="margin-bottom: 0;">
                   <label for="doc-input-team" class="form-label required" style="font-weight: 600; font-size: 12px;">Responsible Squad / Team</label>
                   <input type="text" id="doc-input-team" class="form-control" list="dl-teams" value="${this.escapeHtml(doc.team || profile.name || '')}" placeholder="e.g. Analytics Engineering, Finance BI, Risk Data Platform">
                   <div class="form-text">Primary team or pod accountable for this specification.</div>
                 </div>
-                <div class="form-group">
-                  <label class="form-label required" style="font-weight: 600; font-size: 12px;">Multi-User Assignment & Collaborators</label>
-                  <div class="user-chips-container" id="doc-user-chips-box">
-                    ${(doc.usernames || []).map(u => `
-                      <span class="user-chip">
-                        <span>${this.escapeHtml(u)}</span>
-                        <button type="button" class="user-chip-remove" data-user="${this.escapeHtml(u)}">&times;</button>
-                      </span>
-                    `).join('')}
-                    <input type="text" class="user-chips-input" id="doc-input-new-user" list="dl-usernames" placeholder="Type username & hit Enter/comma...">
-                    <button type="button" class="btn btn-outline btn-sm" id="btn-add-doc-user" style="padding: 2px 8px; font-size: 11px;">+ Add</button>
-                  </div>
-                  <div class="form-text">Add multiple owners, engineers, or consumers. Type username and hit Enter.</div>
-                </div>
-              </div>
-
-              <div class="grid-cols-2">
                 <div class="form-group" style="margin-bottom: 0;">
                   <label for="doc-input-owner" class="form-label" style="font-weight: 600; font-size: 12px;">Lead Author / Data Steward</label>
                   <input type="text" id="doc-input-owner" class="form-control" list="dl-owners" value="${this.escapeHtml(doc.owner || docUser.username || '')}" placeholder="e.g. ${this.escapeHtml(docUser.username || 'Ahmed Hassan')}">
                   <div class="form-text">Primary individual author or accountable point of contact.</div>
                 </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                  <label for="doc-input-reviewer" class="form-label" style="font-weight: 600; font-size: 12px;">Designated Peer Reviewer</label>
-                  <input type="text" id="doc-input-reviewer" class="form-control" list="dl-reviewers" value="${this.escapeHtml(doc.reviewer || '')}" placeholder="e.g. Omar Farouk">
-                  <div class="form-text">Quality engineer or lead assigned to approve this specification.</div>
-                </div>
               </div>
-            </div>
-          </div>
 
-          <!-- CARD 4: EXECUTIVE SCOPE & OBJECTIVES -->
-          <div class="card" style="margin-bottom: 20px;">
-            <div class="card-header" style="justify-content: space-between; align-items: center; background: var(--surface-alt); padding: 12px 20px;">
-              <div style="display: flex; align-items: center; gap: 10px;">
-                <span style="font-size: 18px;">💡</span>
-                <div>
-                  <span class="card-title" style="font-size: 15px; font-weight: 700; margin: 0;">4. Executive Scope & Business Objective</span>
-                  <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">High-level business context, intent, operational impact, and regulatory justification</div>
-                </div>
-              </div>
-            </div>
-            <div class="card-body" style="padding: 20px;">
-              <div class="grid-cols-2" style="gap: 16px;">
-                <div class="form-group" style="margin-bottom: 0;">
-                  <label for="doc-input-summary" class="form-label" style="font-weight: 600; font-size: 12px;">Executive Summary</label>
-                  <textarea id="doc-input-summary" class="form-control" rows="3" placeholder="Brief summary describing the scope, business background, and intent of this quality document...">${this.escapeHtml(doc.executiveSummary || '')}</textarea>
-                  <div class="form-text">High-level narrative printed in executive briefings and report summaries.</div>
-                </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                  <label for="doc-input-objective" class="form-label" style="font-weight: 600; font-size: 12px;">Business Objective & Compliance Value</label>
-                  <textarea id="doc-input-objective" class="form-control" rows="3" placeholder="Why is this data quality check critical for business operations, financial reporting, and compliance?">${this.escapeHtml(doc.businessObjective || '')}</textarea>
-                  <div class="form-text">Explains financial, regulatory, or operational risk if validation fails.</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- CARD 5: DISCIPLINE TECHNICAL SPECIFICATION ATTRIBUTES -->
-          <div class="card" style="margin-bottom: 20px; border: 1px solid var(--surface-border-strong);">
-            <div class="card-header" style="background: var(--surface-alt); padding: 12px 20px; justify-content: space-between; align-items: center;">
-              <div style="display: flex; align-items: center; gap: 10px;">
-                <span style="font-size: 18px;">🛠️</span>
-                <div>
-                  <span class="card-title" style="font-size: 15px; font-weight: 700; color: var(--primary-color); margin: 0;">
-                    5. ${this.escapeHtml(profile.label)} — Technical Specification Attributes
-                  </span>
-                  <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">
-                    Specialized metadata fields specific to <strong>${this.escapeHtml(profile.label)}</strong>. Embedded into .dldoc files and printed in Section 2 of PDF reports.
-                  </div>
-                </div>
-              </div>
-              <span class="badge badge-info" style="font-size: 11px;">${profileAttrs.length} Attributes</span>
-            </div>
-            <div class="card-body" style="padding: 20px;">
-              <div class="grid-cols-2" style="gap: 16px;">
-                ${profileAttrs.map(attr => {
-                  const val = (doc.teamAttributes && doc.teamAttributes[attr.key] !== undefined) ? doc.teamAttributes[attr.key] : '';
-                  if (attr.type === 'textarea') {
-                    return `
-                      <div class="form-group" style="grid-column: 1 / -1; margin-bottom: 0;">
-                        <label class="form-label" style="font-weight: 600; font-size: 12px; color: var(--text-color);">${this.escapeHtml(attr.label)}</label>
-                        <textarea class="form-control team-profile-attr-input" data-attr-key="${attr.key}" rows="${attr.rows || 2}" placeholder="${this.escapeHtml(attr.placeholder || '')}">${this.escapeHtml(val)}</textarea>
-                      </div>
-                    `;
-                  }
-                  return `
-                    <div class="form-group" style="margin-bottom: 0;">
-                      <label class="form-label" style="font-weight: 600; font-size: 12px; color: var(--text-color);">${this.escapeHtml(attr.label)}</label>
-                      <input type="text" class="form-control team-profile-attr-input" data-attr-key="${attr.key}" value="${this.escapeHtml(val)}" placeholder="${this.escapeHtml(attr.placeholder || '')}">
+              ${this.isAddonActive(doc, 'collaborators') ? `
+                <div class="grid-cols-2" style="border-top: 1px dashed var(--surface-border-strong); padding-top: 16px; margin-top: 16px;">
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label" style="font-weight: 600; font-size: 12px;">Multi-User Assignment & Collaborators</label>
+                    <div class="user-chips-container" id="doc-user-chips-box">
+                      ${(doc.usernames || []).map(u => `
+                        <span class="user-chip">
+                          <span>${this.escapeHtml(u)}</span>
+                          <button type="button" class="user-chip-remove" data-user="${this.escapeHtml(u)}">&times;</button>
+                        </span>
+                      `).join('')}
+                      <input type="text" class="user-chips-input" id="doc-input-new-user" list="dl-usernames" placeholder="Type username & hit Enter/comma...">
+                      <button type="button" class="btn btn-outline btn-sm" id="btn-add-doc-user" style="padding: 2px 8px; font-size: 11px;">+ Add</button>
                     </div>
-                  `;
-                }).join('')}
-              </div>
-            </div>
-          </div>
-
-          <!-- CARD 6: DYNAMIC VALIDATION INPUTS -->
-          <div class="dynamic-fields-section" style="margin-bottom: 20px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
-              <div style="display: flex; align-items: center; gap: 10px;">
-                <span style="font-size: 18px;">⚡</span>
-                <div>
-                  <strong style="font-size: 14px; color: var(--primary-color);">6. Dynamic Inputs for <span id="lbl-dyn-val-type">${this.escapeHtml(doc.validationType || 'Specification')}</span></strong>
-                  <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Recommended dynamic attributes tailored for ${this.escapeHtml(profile.label)}</div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Suggested Quick-Add Pills based on active type -->
-            <div style="margin-bottom: 14px;" id="suggested-pills-container">
-              <span style="font-size: 11px; font-weight: 700; color: var(--text-muted); margin-right: 6px;">RECOMMENDED INPUTS:</span>
-              ${this.getSuggestedInputsForType(doc.validationType || (profile.subtypes && profile.subtypes[0] && profile.subtypes[0].name) || 'Specification').map(s => `
-                <button type="button" class="dynamic-field-pill btn-quick-add-field" data-name="${this.escapeHtml(s)}">+ ${this.escapeHtml(s)}</button>
-              `).join('')}
-            </div>
-
-            <!-- Search & Add Bar -->
-            <div style="display: flex; gap: 8px; margin-bottom: 14px;">
-              <input type="text" id="txt-search-add-field" class="form-control form-control-sm" placeholder="🔍 Search or type any custom field name to add (e.g. Warehouse Cluster, SLA, Grain)...">
-              <button type="button" class="btn btn-secondary btn-sm" id="btn-add-dynamic-field">➕ Add Input Field</button>
-            </div>
-
-            <!-- Container of Active Dynamic Fields -->
-            <div id="container-dynamic-fields">
-              ${(doc.dynamicInputs || []).map((f, fIdx) => `
-                <div class="dynamic-field-card" data-id="${f.id || `f-${fIdx}`}">
-                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                    <strong class="dynamic-field-label" style="font-size: 12px; color: var(--text-color);">${this.escapeHtml(f.label || 'Field')}</strong>
-                    <button type="button" class="btn btn-outline btn-sm btn-remove-dynamic-field" data-id="${f.id || `f-${fIdx}`}" style="color: #ef4444; padding: 1px 6px; font-size: 11px;" title="Remove field">&times;</button>
+                    <div class="form-text">Add multiple owners, engineers, or consumers. Type username and hit Enter.</div>
                   </div>
-                  <input type="text" class="form-control form-control-sm dynamic-field-input" value="${this.escapeHtml(f.value || '')}" placeholder="Enter ${this.escapeHtml(f.label)}...">
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="doc-input-reviewer" class="form-label" style="font-weight: 600; font-size: 12px;">Designated Peer Reviewer</label>
+                    <input type="text" id="doc-input-reviewer" class="form-control" list="dl-reviewers" value="${this.escapeHtml(doc.reviewer || '')}" placeholder="e.g. Omar Farouk">
+                    <div class="form-text">Quality engineer or lead assigned to approve this specification.</div>
+                  </div>
                 </div>
-              `).join('')}
-              ${(!doc.dynamicInputs || doc.dynamicInputs.length === 0) ? `
-                <div id="empty-dynamic-fields-note" style="font-size: 12px; color: var(--text-muted); font-style: italic; text-align: center; padding: 10px;">No dynamic inputs added yet. Click any recommended input above or type a custom field name to add.</div>
               ` : ''}
             </div>
           </div>
 
-          <!-- CARD 7A: COMPOSITE MULTI-VALIDATION (MODELS) -->
-          <div id="section-validated-models" style="${(doc.validationType === 'Model Validation' || doc.validationType === 'Model and Table Validation') ? '' : 'display: none;'} margin-bottom: 20px;">
-            <div class="card" style="border: 1px solid var(--surface-border-strong);">
-              <div class="card-header" style="background: var(--surface-alt); padding: 12px 20px; justify-content: space-between; align-items: center;">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <span style="font-size: 16px;">🧩</span>
-                  <span class="card-title" style="font-size: 14px; font-weight: 700;">7A. Validated Models (${(doc.validatedModels || []).length})</span>
+          <!-- CARD 4: EXECUTIVE SCOPE & OBJECTIVES (ADDON) -->
+          ${this.isAddonActive(doc, 'executive_scope') ? `
+            <div class="card addon-section-card" id="addon-card-executive_scope" style="margin-bottom: 20px;">
+              <div class="card-header" style="justify-content: space-between; align-items: center; background: var(--surface-alt); padding: 12px 20px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <span style="font-size: 18px;">💡</span>
+                  <div>
+                    <span class="card-title" style="font-size: 15px; font-weight: 700; margin: 0;">4. Executive Scope & Business Objective</span>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">High-level business context, intent, operational impact, and regulatory justification</div>
+                  </div>
                 </div>
-                <button type="button" class="btn btn-outline btn-sm" id="btn-add-validated-model">➕ Add Validated Model</button>
+                <button type="button" class="btn-remove-addon-card" data-tab="tab-meta" data-addon-id="executive_scope" title="Remove section and return to Addons Wheel">
+                  <span>🎡</span> Remove from Tab
+                </button>
               </div>
-              <div class="card-body" id="container-validated-models" style="padding: 16px;">
-                ${(doc.validatedModels || []).map((m, mIdx) => `
-                  <div class="card val-model-card" data-idx="${mIdx}" style="margin-bottom: 12px; padding: 14px; border: 1px solid var(--surface-border);">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px; align-items: center;">
-                      <strong>Model #${mIdx + 1}</strong>
-                      <button type="button" class="btn btn-outline btn-sm btn-delete-val-model" data-idx="${mIdx}" style="color: #ef4444; padding: 1px 8px;">&times; Remove</button>
-                    </div>
-                    <div class="grid-cols-3">
-                      <div>
-                        <label class="form-label" style="font-size: 11.5px; font-weight: 600;">Model Name</label>
-                        <input type="text" class="form-control form-control-sm val-model-name" value="${this.escapeHtml(m.modelName || '')}" placeholder="e.g. stg_orders / fct_monthly_sales">
-                      </div>
-                      <div>
-                        <label class="form-label" style="font-size: 11.5px; font-weight: 600;">Primary Key / Grain</label>
-                        <input type="text" class="form-control form-control-sm val-model-grain" value="${this.escapeHtml(m.grain || '')}" placeholder="e.g. order_id, line_item_id">
-                      </div>
-                      <div>
-                        <label class="form-label" style="font-size: 11.5px; font-weight: 600;">Materialization</label>
-                        <select class="form-control form-control-sm val-model-mat">
-                          <option value="Table" ${m.materialization === 'Table' ? 'selected' : ''}>Table</option>
-                          <option value="View" ${m.materialization === 'View' ? 'selected' : ''}>View</option>
-                          <option value="Incremental" ${m.materialization === 'Incremental' ? 'selected' : ''}>Incremental</option>
-                          <option value="Ephemeral" ${m.materialization === 'Ephemeral' ? 'selected' : ''}>Ephemeral</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div style="margin-top: 10px;">
-                      <label class="form-label" style="font-size: 11.5px; font-weight: 600;">Lineage & Upstream Sources</label>
-                      <input type="text" class="form-control form-control-sm val-model-sources" value="${this.escapeHtml(m.upstreamSources || '')}" placeholder="e.g. source('raw', 'orders'), ref('stg_customers')">
+              <div class="card-body" style="padding: 20px;">
+                <div class="grid-cols-2" style="gap: 16px;">
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="doc-input-summary" class="form-label" style="font-weight: 600; font-size: 12px;">Executive Summary</label>
+                    <textarea id="doc-input-summary" class="form-control" rows="3" placeholder="Brief summary describing the scope, business background, and intent of this quality document...">${this.escapeHtml(doc.executiveSummary || '')}</textarea>
+                    <div class="form-text">High-level narrative printed in executive briefings and report summaries.</div>
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="doc-input-objective" class="form-label" style="font-weight: 600; font-size: 12px;">Business Objective & Compliance Value</label>
+                    <textarea id="doc-input-objective" class="form-control" rows="3" placeholder="Why is this data quality check critical for business operations, financial reporting, and compliance?">${this.escapeHtml(doc.businessObjective || '')}</textarea>
+                    <div class="form-text">Explains financial, regulatory, or operational risk if validation fails.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ` : ''}
+
+          <!-- CARD 5: DISCIPLINE TECHNICAL SPECIFICATION ATTRIBUTES (ADDON) -->
+          ${this.isAddonActive(doc, 'discipline_attrs') ? `
+            <div class="card addon-section-card" id="addon-card-discipline_attrs" style="margin-bottom: 20px; border: 1px solid var(--surface-border-strong);">
+              <div class="card-header" style="background: var(--surface-alt); padding: 12px 20px; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <span style="font-size: 18px;">🛠️</span>
+                  <div>
+                    <span class="card-title" style="font-size: 15px; font-weight: 700; color: var(--primary-color); margin: 0;">
+                      5. ${this.escapeHtml(profile.label)} — Technical Specification Attributes
+                    </span>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">
+                      Specialized metadata fields specific to <strong>${this.escapeHtml(profile.label)}</strong>. Embedded into .dldoc files and printed in Section 2 of PDF reports.
                     </div>
                   </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span class="badge badge-info" style="font-size: 11px;">${profileAttrs.length} Attributes</span>
+                  <button type="button" class="btn-remove-addon-card" data-tab="tab-meta" data-addon-id="discipline_attrs" title="Remove section and return to Addons Wheel">
+                    <span>🎡</span> Remove from Tab
+                  </button>
+                </div>
+              </div>
+              <div class="card-body" style="padding: 20px;">
+                <div class="grid-cols-2" style="gap: 16px;">
+                  ${profileAttrs.map(attr => {
+                    const val = (doc.teamAttributes && doc.teamAttributes[attr.key] !== undefined) ? doc.teamAttributes[attr.key] : '';
+                    if (attr.type === 'textarea') {
+                      return `
+                        <div class="form-group" style="grid-column: 1 / -1; margin-bottom: 0;">
+                          <label class="form-label" style="font-weight: 600; font-size: 12px; color: var(--text-color);">${this.escapeHtml(attr.label)}</label>
+                          <textarea class="form-control team-profile-attr-input" data-attr-key="${attr.key}" rows="${attr.rows || 2}" placeholder="${this.escapeHtml(attr.placeholder || '')}">${this.escapeHtml(val)}</textarea>
+                        </div>
+                      `;
+                    }
+                    return `
+                      <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label" style="font-weight: 600; font-size: 12px; color: var(--text-color);">${this.escapeHtml(attr.label)}</label>
+                        <input type="text" class="form-control team-profile-attr-input" data-attr-key="${attr.key}" value="${this.escapeHtml(val)}" placeholder="${this.escapeHtml(attr.placeholder || '')}">
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+              </div>
+            </div>
+          ` : ''}
+
+          <!-- CARD 6: DYNAMIC VALIDATION INPUTS (ADDON) -->
+          ${this.isAddonActive(doc, 'dynamic_inputs') ? `
+            <div class="dynamic-fields-section addon-section-card" id="addon-card-dynamic_inputs" style="margin-bottom: 20px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <span style="font-size: 18px;">⚡</span>
+                  <div>
+                    <strong style="font-size: 14px; color: var(--primary-color);">6. Dynamic Inputs for <span id="lbl-dyn-val-type">${this.escapeHtml(doc.validationType || 'Specification')}</span></strong>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Recommended dynamic attributes tailored for ${this.escapeHtml(profile.label)}</div>
+                  </div>
+                </div>
+                <button type="button" class="btn-remove-addon-card" data-tab="tab-meta" data-addon-id="dynamic_inputs" title="Remove section and return to Addons Wheel">
+                  <span>🎡</span> Remove from Tab
+                </button>
+              </div>
+
+              <!-- Suggested Quick-Add Pills based on active type -->
+              <div style="margin-bottom: 14px;" id="suggested-pills-container">
+                <span style="font-size: 11px; font-weight: 700; color: var(--text-muted); margin-right: 6px;">RECOMMENDED INPUTS:</span>
+                ${this.getSuggestedInputsForType(doc.validationType || (profile.subtypes && profile.subtypes[0] && profile.subtypes[0].name) || 'Specification').map(s => `
+                  <button type="button" class="dynamic-field-pill btn-quick-add-field" data-name="${this.escapeHtml(s)}">+ ${this.escapeHtml(s)}</button>
                 `).join('')}
-                ${(!doc.validatedModels || doc.validatedModels.length === 0) ? `
-                  <div style="font-size: 12px; color: var(--text-muted); font-style: italic; text-align: center; padding: 12px;">No multiple models added yet. Click "+ Add Validated Model" to audit multiple models in this single document.</div>
+              </div>
+
+              <!-- Search & Add Bar -->
+              <div style="display: flex; gap: 8px; margin-bottom: 14px;">
+                <input type="text" id="txt-search-add-field" class="form-control form-control-sm" placeholder="🔍 Search or type any custom field name to add (e.g. Warehouse Cluster, SLA, Grain)...">
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-add-dynamic-field">➕ Add Input Field</button>
+              </div>
+
+              <!-- Container of Active Dynamic Fields -->
+              <div id="container-dynamic-fields">
+                ${(doc.dynamicInputs || []).map((f, fIdx) => `
+                  <div class="dynamic-field-card" data-id="${f.id || `f-${fIdx}`}">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                      <strong class="dynamic-field-label" style="font-size: 12px; color: var(--text-color);">${this.escapeHtml(f.label || 'Field')}</strong>
+                      <button type="button" class="btn btn-outline btn-sm btn-remove-dynamic-field" data-id="${f.id || `f-${fIdx}`}" style="color: #ef4444; padding: 1px 6px; font-size: 11px;" title="Remove field">&times;</button>
+                    </div>
+                    <input type="text" class="form-control form-control-sm dynamic-field-input" value="${this.escapeHtml(f.value || '')}" placeholder="Enter ${this.escapeHtml(f.label)}...">
+                  </div>
+                `).join('')}
+                ${(!doc.dynamicInputs || doc.dynamicInputs.length === 0) ? `
+                  <div id="empty-dynamic-fields-note" style="font-size: 12px; color: var(--text-muted); font-style: italic; text-align: center; padding: 10px;">No dynamic inputs added yet. Click any recommended input above or type a custom field name to add.</div>
                 ` : ''}
               </div>
             </div>
-          </div>
+          ` : ''}
 
-          <!-- CARD 7B: COMPOSITE MULTI-VALIDATION (PHYSICAL TABLES) -->
-          <div id="section-validated-tables" style="${(doc.validationType === 'Table Validation' || doc.validationType === 'Model and Table Validation') ? '' : 'display: none;'} margin-bottom: 20px;">
-            <div class="card" style="border: 1px solid var(--surface-border-strong);">
-              <div class="card-header" style="background: var(--surface-alt); padding: 12px 20px; justify-content: space-between; align-items: center;">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <span style="font-size: 16px;">🗄️</span>
-                  <span class="card-title" style="font-size: 14px; font-weight: 700;">7B. Validated Physical Tables (${(doc.validatedTables || []).length})</span>
-                </div>
-                <button type="button" class="btn btn-outline btn-sm" id="btn-add-validated-table">➕ Add Validated Table</button>
-              </div>
-              <div class="card-body" id="container-validated-tables" style="padding: 16px;">
-                ${(doc.validatedTables || []).map((t, tIdx) => `
-                  <div class="card val-table-card" data-idx="${tIdx}" style="margin-bottom: 12px; padding: 14px; border: 1px solid var(--surface-border);">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px; align-items: center;">
-                      <strong>Physical Table #${tIdx + 1}</strong>
-                      <button type="button" class="btn btn-outline btn-sm btn-delete-val-table" data-idx="${tIdx}" style="color: #ef4444; padding: 1px 8px;">&times; Remove</button>
-                    </div>
-                    <div class="grid-cols-3">
-                      <div>
-                        <label class="form-label" style="font-size: 11.5px; font-weight: 600;">Table / View Name</label>
-                        <input type="text" class="form-control form-control-sm val-table-name" value="${this.escapeHtml(t.tableName || '')}" placeholder="e.g. prod_dwh.fact_transactions">
-                      </div>
-                      <div>
-                        <label class="form-label" style="font-size: 11.5px; font-weight: 600;">Catalog & Schema</label>
-                        <input type="text" class="form-control form-control-sm val-table-schema" value="${this.escapeHtml(t.schema || '')}" placeholder="e.g. iceberg_prod.finance">
-                      </div>
-                      <div>
-                        <label class="form-label" style="font-size: 11.5px; font-weight: 600;">Storage Format</label>
-                        <select class="form-control form-control-sm val-table-format">
-                          <option value="Parquet" ${t.storageFormat === 'Parquet' ? 'selected' : ''}>Parquet</option>
-                          <option value="Iceberg" ${t.storageFormat === 'Iceberg' ? 'selected' : ''}>Iceberg</option>
-                          <option value="Delta Lake" ${t.storageFormat === 'Delta Lake' ? 'selected' : ''}>Delta Lake</option>
-                          <option value="ORC" ${t.storageFormat === 'ORC' ? 'selected' : ''}>ORC</option>
-                          <option value="CSV / Text" ${t.storageFormat === 'CSV / Text' ? 'selected' : ''}>CSV / Text</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div class="grid-cols-2" style="margin-top: 10px;">
-                      <div>
-                        <label class="form-label" style="font-size: 11.5px; font-weight: 600;">Partitioning & Cluster Keys</label>
-                        <input type="text" class="form-control form-control-sm val-table-partitions" value="${this.escapeHtml(t.partitionKeys || '')}" placeholder="e.g. partition by day(event_date), cluster by country">
-                      </div>
-                      <div>
-                        <label class="form-label" style="font-size: 11.5px; font-weight: 600;">Volume / Row Count</label>
-                        <input type="text" class="form-control form-control-sm val-table-volume" value="${this.escapeHtml(t.volume || '')}" placeholder="e.g. ~45,000,000 rows (daily +200k)">
-                      </div>
-                    </div>
+          <!-- CARD 7A: COMPOSITE MULTI-VALIDATION (MODELS) (ADDON) -->
+          ${this.isAddonActive(doc, 'validated_models') ? `
+            <div id="section-validated-models" class="addon-section-card" style="${(doc.validationType === 'Model Validation' || doc.validationType === 'Model and Table Validation') ? '' : 'display: none;'} margin-bottom: 20px;">
+              <div class="card" style="border: 1px solid var(--surface-border-strong);">
+                <div class="card-header" style="background: var(--surface-alt); padding: 12px 20px; justify-content: space-between; align-items: center;">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 16px;">🧩</span>
+                    <span class="card-title" style="font-size: 14px; font-weight: 700;">7A. Validated Models (${(doc.validatedModels || []).length})</span>
                   </div>
-                `).join('')}
-                ${(!doc.validatedTables || doc.validatedTables.length === 0) ? `
-                  <div style="font-size: 12px; color: var(--text-muted); font-style: italic; text-align: center; padding: 12px;">No multiple tables added yet. Click "+ Add Validated Table" to validate multiple tables in this document.</div>
-                ` : ''}
+                  <div style="display: flex; gap: 8px; align-items: center;">
+                    <button type="button" class="btn btn-outline btn-sm" id="btn-add-validated-model">➕ Add Validated Model</button>
+                    <button type="button" class="btn-remove-addon-card" data-tab="tab-meta" data-addon-id="validated_models" title="Remove section and return to Addons Wheel"><span>🎡</span> Remove</button>
+                  </div>
+                </div>
+                <div class="card-body" id="container-validated-models" style="padding: 16px;">
+                  ${(doc.validatedModels || []).map((m, mIdx) => `
+                    <div class="card val-model-card" data-idx="${mIdx}" style="margin-bottom: 12px; padding: 14px; border: 1px solid var(--surface-border);">
+                      <div style="display: flex; justify-content: space-between; margin-bottom: 10px; align-items: center;">
+                        <strong>Model #${mIdx + 1}</strong>
+                        <button type="button" class="btn btn-outline btn-sm btn-delete-val-model" data-idx="${mIdx}" style="color: #ef4444; padding: 1px 8px;">&times; Remove</button>
+                      </div>
+                      <div class="grid-cols-3">
+                        <div>
+                          <label class="form-label" style="font-size: 11.5px; font-weight: 600;">Model Name</label>
+                          <input type="text" class="form-control form-control-sm val-model-name" value="${this.escapeHtml(m.modelName || '')}" placeholder="e.g. stg_orders / fct_monthly_sales">
+                        </div>
+                        <div>
+                          <label class="form-label" style="font-size: 11.5px; font-weight: 600;">Primary Key / Grain</label>
+                          <input type="text" class="form-control form-control-sm val-model-grain" value="${this.escapeHtml(m.grain || '')}" placeholder="e.g. order_id, line_item_id">
+                        </div>
+                        <div>
+                          <label class="form-label" style="font-size: 11.5px; font-weight: 600;">Materialization</label>
+                          <select class="form-control form-control-sm val-model-mat">
+                            <option value="Table" ${m.materialization === 'Table' ? 'selected' : ''}>Table</option>
+                            <option value="View" ${m.materialization === 'View' ? 'selected' : ''}>View</option>
+                            <option value="Incremental" ${m.materialization === 'Incremental' ? 'selected' : ''}>Incremental</option>
+                            <option value="Ephemeral" ${m.materialization === 'Ephemeral' ? 'selected' : ''}>Ephemeral</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div style="margin-top: 10px;">
+                        <label class="form-label" style="font-size: 11.5px; font-weight: 600;">Lineage & Upstream Sources</label>
+                        <input type="text" class="form-control form-control-sm val-model-sources" value="${this.escapeHtml(m.upstreamSources || '')}" placeholder="e.g. source('raw', 'orders'), ref('stg_customers')">
+                      </div>
+                    </div>
+                  `).join('')}
+                  ${(!doc.validatedModels || doc.validatedModels.length === 0) ? `
+                    <div style="font-size: 12px; color: var(--text-muted); font-style: italic; text-align: center; padding: 12px;">No multiple models added yet. Click "+ Add Validated Model" to audit multiple models in this single document.</div>
+                  ` : ''}
+                </div>
               </div>
             </div>
-          </div>
+          ` : ''}
 
-          <!-- CARD 8: AUTHOR CONTACT CREDENTIALS (FROM CONFIG.JS) -->
-          <div class="card" style="margin-bottom: 20px; border: 1px dashed var(--surface-border-strong); background: var(--surface-alt);">
-            <div class="card-header" style="padding: 12px 20px; justify-content: space-between; align-items: center; background: transparent; border-bottom: 1px dashed var(--surface-border-strong);">
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <span style="font-size: 16px;">👤</span>
-                <span class="card-title" style="font-size: 13px; font-weight: 700; color: var(--primary-color);">8. Document Author & Contact Info (${docUser.username ? 'Author: ' + this.escapeHtml(docUser.username) : 'Optional'})</span>
+          <!-- CARD 7B: COMPOSITE MULTI-VALIDATION (PHYSICAL TABLES) (ADDON) -->
+          ${this.isAddonActive(doc, 'validated_tables') ? `
+            <div id="section-validated-tables" class="addon-section-card" style="${(doc.validationType === 'Table Validation' || doc.validationType === 'Model and Table Validation') ? '' : 'display: none;'} margin-bottom: 20px;">
+              <div class="card" style="border: 1px solid var(--surface-border-strong);">
+                <div class="card-header" style="background: var(--surface-alt); padding: 12px 20px; justify-content: space-between; align-items: center;">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 16px;">🗄️</span>
+                    <span class="card-title" style="font-size: 14px; font-weight: 700;">7B. Validated Physical Tables (${(doc.validatedTables || []).length})</span>
+                  </div>
+                  <div style="display: flex; gap: 8px; align-items: center;">
+                    <button type="button" class="btn btn-outline btn-sm" id="btn-add-validated-table">➕ Add Validated Table</button>
+                    <button type="button" class="btn-remove-addon-card" data-tab="tab-meta" data-addon-id="validated_tables" title="Remove section and return to Addons Wheel"><span>🎡</span> Remove</button>
+                  </div>
+                </div>
+                <div class="card-body" id="container-validated-tables" style="padding: 16px;">
+                  ${(doc.validatedTables || []).map((t, tIdx) => `
+                    <div class="card val-table-card" data-idx="${tIdx}" style="margin-bottom: 12px; padding: 14px; border: 1px solid var(--surface-border);">
+                      <div style="display: flex; justify-content: space-between; margin-bottom: 10px; align-items: center;">
+                        <strong>Physical Table #${tIdx + 1}</strong>
+                        <button type="button" class="btn btn-outline btn-sm btn-delete-val-table" data-idx="${tIdx}" style="color: #ef4444; padding: 1px 8px;">&times; Remove</button>
+                      </div>
+                      <div class="grid-cols-3">
+                        <div>
+                          <label class="form-label" style="font-size: 11.5px; font-weight: 600;">Table / View Name</label>
+                          <input type="text" class="form-control form-control-sm val-table-name" value="${this.escapeHtml(t.tableName || '')}" placeholder="e.g. prod_dwh.fact_transactions">
+                        </div>
+                        <div>
+                          <label class="form-label" style="font-size: 11.5px; font-weight: 600;">Catalog & Schema</label>
+                          <input type="text" class="form-control form-control-sm val-table-schema" value="${this.escapeHtml(t.schema || '')}" placeholder="e.g. iceberg_prod.finance">
+                        </div>
+                        <div>
+                          <label class="form-label" style="font-size: 11.5px; font-weight: 600;">Storage Format</label>
+                          <select class="form-control form-control-sm val-table-format">
+                            <option value="Parquet" ${t.storageFormat === 'Parquet' ? 'selected' : ''}>Parquet</option>
+                            <option value="Iceberg" ${t.storageFormat === 'Iceberg' ? 'selected' : ''}>Iceberg</option>
+                            <option value="Delta Lake" ${t.storageFormat === 'Delta Lake' ? 'selected' : ''}>Delta Lake</option>
+                            <option value="ORC" ${t.storageFormat === 'ORC' ? 'selected' : ''}>ORC</option>
+                            <option value="CSV / Text" ${t.storageFormat === 'CSV / Text' ? 'selected' : ''}>CSV / Text</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div class="grid-cols-2" style="margin-top: 10px;">
+                        <div>
+                          <label class="form-label" style="font-size: 11.5px; font-weight: 600;">Partitioning & Cluster Keys</label>
+                          <input type="text" class="form-control form-control-sm val-table-partitions" value="${this.escapeHtml(t.partitionKeys || '')}" placeholder="e.g. partition by day(event_date), cluster by country">
+                        </div>
+                        <div>
+                          <label class="form-label" style="font-size: 11.5px; font-weight: 600;">Volume / Row Count</label>
+                          <input type="text" class="form-control form-control-sm val-table-volume" value="${this.escapeHtml(t.volume || '')}" placeholder="e.g. ~45,000,000 rows (daily +200k)">
+                        </div>
+                      </div>
+                    </div>
+                  `).join('')}
+                  ${(!doc.validatedTables || doc.validatedTables.length === 0) ? `
+                    <div style="font-size: 12px; color: var(--text-muted); font-style: italic; text-align: center; padding: 12px;">No multiple tables added yet. Click "+ Add Validated Table" to validate multiple tables in this document.</div>
+                  ` : ''}
+                </div>
               </div>
-              <span style="font-size: 11px; color: var(--text-muted);">Configured in config.js (Author Attribution & Sign-Off Details). Displayed in generated PDF & saved in .dldoc.</span>
             </div>
-            <div class="card-body" style="padding: 16px 20px;">
-              <div class="grid-cols-3">
-                <div class="form-group" style="margin-bottom: 0;">
-                  <label for="doc-input-username" class="form-label" style="font-size: 11.5px; font-weight: 600;">Author Username / Name</label>
-                  <input type="text" id="doc-input-username" class="form-control form-control-sm" value="${this.escapeHtml(docUser.username || '')}" placeholder="e.g. ${this.escapeHtml(docUser.username || 'Alaa Mohamed')}">
+          ` : ''}
+
+          <!-- CARD 8: AUTHOR CONTACT CREDENTIALS (ADDON) -->
+          ${this.isAddonActive(doc, 'author_contact') ? `
+            <div class="card addon-section-card" id="addon-card-author_contact" style="margin-bottom: 20px; border: 1px dashed var(--surface-border-strong); background: var(--surface-alt);">
+              <div class="card-header" style="padding: 12px 20px; justify-content: space-between; align-items: center; background: transparent; border-bottom: 1px dashed var(--surface-border-strong);">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span style="font-size: 16px;">👤</span>
+                  <span class="card-title" style="font-size: 13px; font-weight: 700; color: var(--primary-color);">8. Document Author & Contact Info (${docUser.username ? 'Author: ' + this.escapeHtml(docUser.username) : 'Optional'})</span>
                 </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                  <label for="doc-input-useremail" class="form-label" style="font-size: 11.5px; font-weight: 600;">Author Corporate Email</label>
-                  <input type="email" id="doc-input-useremail" class="form-control form-control-sm" value="${this.escapeHtml(docUser.useremail || '')}" placeholder="e.g. ${this.escapeHtml(docUser.useremail || 'alaa.mohamed@company.com')}">
-                </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                  <label for="doc-input-userphone" class="form-label" style="font-size: 11.5px; font-weight: 600;">Author Phone / Contact</label>
-                  <input type="tel" id="doc-input-userphone" class="form-control form-control-sm" value="${this.escapeHtml(docUser.userphone || '')}" placeholder="e.g. +20 10 1234 5678">
+                <button type="button" class="btn-remove-addon-card" data-tab="tab-meta" data-addon-id="author_contact" title="Remove section and return to Addons Wheel">
+                  <span>🎡</span> Remove
+                </button>
+              </div>
+              <div class="card-body" style="padding: 16px 20px;">
+                <div class="grid-cols-3">
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="doc-input-username" class="form-label" style="font-size: 11.5px; font-weight: 600;">Author Username / Name</label>
+                    <input type="text" id="doc-input-username" class="form-control form-control-sm" value="${this.escapeHtml(docUser.username || '')}" placeholder="e.g. ${this.escapeHtml(docUser.username || 'Alaa Mohamed')}">
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="doc-input-useremail" class="form-label" style="font-size: 11.5px; font-weight: 600;">Author Corporate Email</label>
+                    <input type="email" id="doc-input-useremail" class="form-control form-control-sm" value="${this.escapeHtml(docUser.useremail || '')}" placeholder="e.g. ${this.escapeHtml(docUser.useremail || 'alaa.mohamed@company.com')}">
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="doc-input-userphone" class="form-label" style="font-size: 11.5px; font-weight: 600;">Author Phone / Contact</label>
+                    <input type="tel" id="doc-input-userphone" class="form-control form-control-sm" value="${this.escapeHtml(docUser.userphone || '')}" placeholder="e.g. +20 10 1234 5678">
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          ` : ''}
+          ${this.renderStepperPaneFooterHtml('tab-meta', docProfileKey)}
         </div>
 
         <!-- TAB 2: DATA SOURCES & MAPPINGS -->
         <div class="tab-pane ${activeTab === 'tab-sources' ? 'active' : ''}" id="tab-sources">
-          <div class="card">
-            <div class="card-header"><span class="card-title">Data Source Specification</span></div>
+          ${this.renderTabAddonsBarHtml('tab-sources', '2. Data Sources & Mappings', doc)}
+          
+          <div class="card" style="margin-bottom: 20px;">
+            <div class="card-header" style="justify-content: space-between; align-items: center; background: var(--surface-alt); padding: 12px 20px;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 18px;">🗄️</span>
+                <div>
+                  <span class="card-title" style="font-size: 15px; font-weight: 700; margin: 0;">1. Data Source Specification</span>
+                  <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Primary origin platform and target physical assets</div>
+                </div>
+              </div>
+            </div>
             <div class="card-body">
-              <div class="grid-cols-3">
-                <div class="form-group">
+              <div class="grid-cols-2">
+                <div class="form-group" style="margin-bottom: 0;">
                   <label class="form-label required">Source System</label>
                   <input type="text" id="doc-input-src-system" class="form-control" list="dl-systems" value="${this.escapeHtml(doc.dataSource?.system || '')}" placeholder="e.g. Snowflake EDW / Salesforce CRM">
                 </div>
-                <div class="form-group">
-                  <label class="form-label">Database / Catalog</label>
-                  <input type="text" id="doc-input-src-catalog" class="form-control" list="dl-catalogs" value="${this.escapeHtml(doc.dataSource?.catalog || '')}" placeholder="e.g. EDW_PROD">
-                </div>
-                <div class="form-group">
-                  <label class="form-label">Schema</label>
-                  <input type="text" id="doc-input-src-schema" class="form-control" list="dl-schemas" value="${this.escapeHtml(doc.dataSource?.schema || '')}" placeholder="e.g. CUSTOMER">
-                </div>
-              </div>
-
-              <div class="grid-cols-2">
-                <div class="form-group">
+                <div class="form-group" style="margin-bottom: 0;">
                   <label class="form-label required">Target Tables / Views</label>
                   <input type="text" id="doc-input-src-tables" class="form-control" list="dl-tables" value="${this.escapeHtml((doc.dataSource?.tables || []).join(', '))}" placeholder="e.g. DIM_CUSTOMER, FACT_EVENTS (comma separated)">
                 </div>
-                <div class="form-group">
-                  <label class="form-label">Pipeline Dependencies</label>
-                  <input type="text" id="doc-input-src-dependencies" class="form-control" value="${this.escapeHtml(doc.dataSource?.dependencies || '')}" placeholder="e.g. Airflow DAG: etl_customer_sync">
-                </div>
               </div>
+
+              ${this.isAddonActive(doc, 'catalog_schema') ? `
+                <div class="addon-section-card" id="addon-card-catalog_schema" style="margin-top: 14px; background: var(--surface-alt); border: 1px dashed var(--accent-color); border-radius: var(--border-radius-sm); padding: 12px 16px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--accent-color);">
+                      <span>🏢</span>
+                      <span>Database / Catalog & Schema Scope</span>
+                    </div>
+                    <button type="button" class="btn-remove-addon-card" data-tab="tab-sources" data-addon-id="catalog_schema" title="Remove and return to Addons Wheel">
+                      <span>🎡</span> Remove
+                    </button>
+                  </div>
+                  <div class="grid-cols-2">
+                    <div class="form-group" style="margin-bottom: 0;">
+                      <label class="form-label">Database / Catalog</label>
+                      <input type="text" id="doc-input-src-catalog" class="form-control" list="dl-catalogs" value="${this.escapeHtml(doc.dataSource?.catalog || '')}" placeholder="e.g. EDW_PROD">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                      <label class="form-label">Schema</label>
+                      <input type="text" id="doc-input-src-schema" class="form-control" list="dl-schemas" value="${this.escapeHtml(doc.dataSource?.schema || '')}" placeholder="e.g. CUSTOMER">
+                    </div>
+                  </div>
+                </div>
+              ` : ''}
+
+              ${this.isAddonActive(doc, 'pipeline_dependencies') ? `
+                <div class="addon-section-card" id="addon-card-pipeline_dependencies" style="margin-top: 14px; background: var(--surface-alt); border: 1px dashed var(--accent-color); border-radius: var(--border-radius-sm); padding: 12px 16px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--accent-color);">
+                      <span>🔄</span>
+                      <span>Upstream Pipeline & Orchestration Dependencies</span>
+                    </div>
+                    <button type="button" class="btn-remove-addon-card" data-tab="tab-sources" data-addon-id="pipeline_dependencies" title="Remove and return to Addons Wheel">
+                      <span>🎡</span> Remove
+                    </button>
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label">Pipeline Dependencies</label>
+                    <input type="text" id="doc-input-src-dependencies" class="form-control" value="${this.escapeHtml(doc.dataSource?.dependencies || '')}" placeholder="e.g. Airflow DAG: etl_customer_sync">
+                  </div>
+                </div>
+              ` : ''}
             </div>
           </div>
 
           <!-- Mappings Table -->
           <div class="card">
-            <div class="card-header" style="flex-wrap: wrap; gap: 8px;">
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <span class="card-title">Source-to-Target Column Mappings</span>
-                <span style="font-size: 12px; color: var(--text-muted);" id="mappings-row-count-badge">(${(doc.dataSource?.mappings || []).length} mapped)</span>
+            <div class="card-header" style="flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; background: var(--surface-alt); padding: 12px 20px;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 18px;">📋</span>
+                <div>
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="card-title" style="font-size: 15px; font-weight: 700; margin: 0;">2. Source-to-Target Column Mappings</span>
+                    <span style="font-size: 12px; color: var(--text-muted);" id="mappings-row-count-badge">(${(doc.dataSource?.mappings || []).length} mapped)</span>
+                  </div>
+                  <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Data lineage schema field mappings and type specifications</div>
+                </div>
               </div>
               <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                <button class="btn btn-outline btn-sm" id="btn-show-mapping-structure" title="View expected format structure & download sample templates">📋 Expected Structure</button>
-                <button class="btn btn-primary btn-sm" id="btn-quick-paste-columns" title="Paste columns separated by commas, pipes, spaces, or tabs">📋 Quick Paste Columns</button>
-                <button class="btn btn-outline btn-sm" id="btn-import-mappings" title="Upload JSON, Excel (.xlsx/.xls) or CSV">📥 Upload JSON / Excel</button>
-                <button class="btn btn-outline btn-sm" id="btn-export-mappings-xlsx" title="Export current mappings to Excel">📊 Export Excel</button>
+                ${this.isAddonActive(doc, 'bulk_import') ? `
+                  <button class="btn btn-outline btn-sm" id="btn-show-mapping-structure" title="View expected format structure & download sample templates">📋 Template</button>
+                  <button class="btn btn-outline btn-sm" id="btn-import-mappings" title="Upload JSON, Excel (.xlsx/.xls) or CSV">📥 Upload</button>
+                  <button class="btn btn-outline btn-sm" id="btn-export-mappings-xlsx" title="Export current mappings to Excel">📊 Export</button>
+                ` : ''}
+                <button class="btn btn-primary btn-sm" id="btn-quick-paste-columns" title="Paste columns separated by commas, pipes, spaces, or tabs">📋 Quick Paste</button>
                 <button class="btn btn-primary btn-sm" id="btn-add-mapping-row">➕ Add Row</button>
               </div>
             </div>
-            <div style="background: var(--surface-alt); padding: 8px 16px; border-bottom: 1px solid var(--surface-border); display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--text-muted); flex-wrap: wrap; gap: 8px;">
-              <div>
-                💡 Bulk import column mappings via <strong>JSON</strong> or <strong>Excel</strong> (<code>.xlsx</code> / <code>.csv</code>). Required headers: <code>Source Column</code>, <code>Target Column</code>, <code>Data Type</code>, <code>Transformation Logic</code>, <code>Nullable?</code>, <code>Description</code>.
+
+            ${this.isAddonActive(doc, 'bulk_import') ? `
+              <div class="addon-section-card" id="addon-card-bulk_import" style="background: var(--surface-alt); padding: 8px 16px; border-bottom: 1px solid var(--surface-border); display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--text-muted); flex-wrap: wrap; gap: 8px;">
+                <div>
+                  💡 Bulk import column mappings via <strong>JSON</strong> or <strong>Excel</strong> (<code>.xlsx</code> / <code>.csv</code>). Required headers: <code>Source Column</code>, <code>Target Column</code>, <code>Data Type</code>, <code>Transformation Logic</code>, <code>Nullable?</code>, <code>Description</code>.
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <a href="javascript:void(0)" id="link-show-structure-inline" style="color: var(--secondary-color); font-weight: 600; text-decoration: underline;">View Structure & Templates</a>
+                  <button type="button" class="btn-remove-addon-card" data-tab="tab-sources" data-addon-id="bulk_import" title="Hide bulk import tools"><span>🎡</span> Remove</button>
+                </div>
               </div>
-              <a href="javascript:void(0)" id="link-show-structure-inline" style="color: var(--secondary-color); font-weight: 600; text-decoration: underline;">View Structure & Download Templates</a>
-            </div>
-            <div style="padding: 10px 16px 0 16px;">
-                <div class="quick-types-bar" id="quick-types-bar">
+            ` : ''}
+
+            ${this.isAddonActive(doc, 'quick_types') ? `
+              <div class="addon-section-card" id="addon-card-quick_types" style="padding: 10px 16px 0 16px; display: flex; justify-content: space-between; align-items: center;">
+                <div class="quick-types-bar" id="quick-types-bar" style="margin: 0;">
                   <span style="font-size: 11px; font-weight: 700; color: var(--text-muted); margin-right: 4px;">⚡ Quick Trino Types:</span>
                   <button type="button" class="btn-type-pill" data-type="VARCHAR(255)">VARCHAR</button>
                   <button type="button" class="btn-type-pill" data-type="BIGINT">BIGINT</button>
@@ -3365,18 +4244,25 @@
                   <button type="button" class="btn-type-pill" data-type="JSON">JSON</button>
                   <button type="button" class="btn-type-pill" data-type="ARRAY(VARCHAR)">ARRAY</button>
                 </div>
+                <button type="button" class="btn-remove-addon-card" data-tab="tab-sources" data-addon-id="quick_types" title="Hide Quick Types Bar" style="font-size: 10px; padding: 2px 6px;"><span>🎡</span> Remove</button>
               </div>
-              <div class="card-body" style="padding: 0;">
-                <div class="table-responsive">
-                  <table class="table-custom" id="table-source-mappings">
+            ` : ''}
+
+            <div class="card-body" style="padding: 0;">
+              <div class="table-responsive">
+                <table class="table-custom" id="table-source-mappings">
                   <thead>
                     <tr>
                       <th>Source Column</th>
                       <th>Target Column</th>
                       <th>Data Type</th>
-                      <th>Transformation Logic</th>
-                      <th>Nullable?</th>
-                      <th>Description</th>
+                      ${this.isAddonActive(doc, 'transform_rules') ? `
+                        <th>Transformation Logic</th>
+                        <th>Nullable?</th>
+                      ` : ''}
+                      ${this.isAddonActive(doc, 'column_descriptions') ? `
+                        <th>Description</th>
+                      ` : ''}
                       <th></th>
                     </tr>
                   </thead>
@@ -3386,14 +4272,18 @@
                         <td><input type="text" class="form-control form-control-sm map-src-col" value="${this.escapeHtml(m.sourceCol || '')}"></td>
                         <td><input type="text" class="form-control form-control-sm map-tgt-col" value="${this.escapeHtml(m.targetCol || '')}"></td>
                         <td><input type="text" class="form-control form-control-sm map-data-type" list="dl-data-types" value="${this.escapeHtml(m.dataType || '')}"></td>
-                        <td><input type="text" class="form-control form-control-sm map-rule" list="dl-transform-rules" value="${this.escapeHtml(m.rule || '')}"></td>
-                        <td>
-                          <select class="form-control form-control-sm map-nullable">
-                            <option value="NO" ${m.nullable === 'NO' ? 'selected' : ''}>NO</option>
-                            <option value="YES" ${m.nullable === 'YES' ? 'selected' : ''}>YES</option>
-                          </select>
-                        </td>
-                        <td><input type="text" class="form-control form-control-sm map-desc" value="${this.escapeHtml(m.description || '')}"></td>
+                        ${this.isAddonActive(doc, 'transform_rules') ? `
+                          <td><input type="text" class="form-control form-control-sm map-rule" list="dl-transform-rules" value="${this.escapeHtml(m.rule || '')}"></td>
+                          <td>
+                            <select class="form-control form-control-sm map-nullable">
+                              <option value="NO" ${m.nullable === 'NO' ? 'selected' : ''}>NO</option>
+                              <option value="YES" ${m.nullable === 'YES' ? 'selected' : ''}>YES</option>
+                            </select>
+                          </td>
+                        ` : ''}
+                        ${this.isAddonActive(doc, 'column_descriptions') ? `
+                          <td><input type="text" class="form-control form-control-sm map-desc" value="${this.escapeHtml(m.description || '')}"></td>
+                        ` : ''}
                         <td><button class="btn btn-outline btn-sm btn-delete-mapping-row" style="color: red;">&times;</button></td>
                       </tr>
                     `).join('')}
@@ -3402,16 +4292,29 @@
               </div>
             </div>
           </div>
+          ${this.renderStepperPaneFooterHtml('tab-sources', docProfileKey)}
         </div>
 
         <!-- TAB 3: VALIDATION RULES -->
         <div class="tab-pane ${activeTab === 'tab-rules' ? 'active' : ''}" id="tab-rules">
+          ${this.renderTabAddonsBarHtml('tab-rules', docProfileKey === 'data_analysis' ? '3. Metrics & Dimensions' : docProfileKey === 'data_engineering' ? '3. Pipeline Rules & SLAs' : docProfileKey === 'data_modelling' ? '3. Entities & Attributes' : '3. Validation Rules', doc)}
+          
           <div class="card">
-            <div class="card-header">
-              <span class="card-title">${docProfileKey === 'data_analysis' ? 'Associated Metrics & Analytical Rules' : docProfileKey === 'data_engineering' ? 'Associated Pipeline Rules & SLAs' : docProfileKey === 'data_modelling' ? 'Associated Data Architecture & Entity Rules' : 'Associated Validation Rules'}</span>
-              <div style="display: flex; gap: 8px;">
-                <button class="btn btn-outline btn-sm" id="btn-doc-pick-rule-catalog">🛡️ Add from Rule Catalog</button>
-                <button class="btn btn-primary btn-sm" id="btn-doc-add-custom-rule">➕ Add Custom Rule</button>
+            <div class="card-header" style="justify-content: space-between; align-items: center; background: var(--surface-alt); padding: 12px 20px; flex-wrap: wrap; gap: 10px;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 18px;">🛡️</span>
+                <div>
+                  <span class="card-title" style="font-size: 15px; font-weight: 700; margin: 0;">${docProfileKey === 'data_analysis' ? 'Associated Metrics & Analytical Rules' : docProfileKey === 'data_engineering' ? 'Associated Pipeline Rules & SLAs' : docProfileKey === 'data_modelling' ? 'Associated Data Architecture & Entity Rules' : 'Associated Validation Rules'}</span>
+                  <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Verification assertions and quality dimension thresholds</div>
+                </div>
+              </div>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                ${this.isAddonActive(doc, 'catalog_picker') ? `
+                  <button class="btn btn-outline btn-sm" id="btn-doc-pick-rule-catalog">🛡️ Add from Rule Catalog</button>
+                ` : ''}
+                ${this.isAddonActive(doc, 'custom_rule_builder') ? `
+                  <button class="btn btn-primary btn-sm" id="btn-doc-add-custom-rule">➕ Add Custom Rule</button>
+                ` : ''}
               </div>
             </div>
             <div class="card-body" style="padding: 0;">
@@ -3429,7 +4332,7 @@
                     </tr>
                   </thead>
                   <tbody id="tbody-doc-rules">
-                    ${(doc.rules || []).length === 0 ? '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 24px;">No validation rules attached yet.</td></tr>' : (doc.rules || []).map((r, idx) => `
+                    ${(doc.rules || []).length === 0 ? '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 24px;">No validation rules attached yet. Use the catalog or custom builder above to add verification rules.</td></tr>' : (doc.rules || []).map((r, idx) => `
                       <tr>
                         <td><strong>${this.escapeHtml(r.id)}</strong></td>
                         <td>${this.escapeHtml(r.name)}</td>
@@ -3447,18 +4350,23 @@
               </div>
             </div>
           </div>
+          ${this.renderStepperPaneFooterHtml('tab-rules', docProfileKey)}
         </div>
 
         <!-- TAB 4: SQL QUERY & WORKBENCH -->
         <div class="tab-pane ${activeTab === 'tab-sql' ? 'active' : ''}" id="tab-sql">
+          ${this.renderTabAddonsBarHtml('tab-sql', docProfileKey === 'data_analysis' ? '4. Analytical Queries' : docProfileKey === 'data_engineering' ? '4. Transformation SQL' : docProfileKey === 'data_modelling' ? '4. DDL & Schema Queries' : '4. SQL Query & Workbench', doc)}
+          
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
             <div style="display: flex; align-items: center; gap: 10px;">
               <span class="card-title" style="margin: 0; font-size: 16px; font-weight: 700; color: var(--primary-color);">${docProfileKey === 'data_analysis' ? 'Analytical Queries & Business Computations' : docProfileKey === 'data_engineering' ? 'Transformation, Ingestion & Operational SQL' : docProfileKey === 'data_modelling' ? 'DDL, Schema Definitions & Modeling Queries' : 'SQL Assertions & Verification Queries'}</span>
               <span class="badge badge-info" id="badge-sql-query-count">${(doc.sqlQueries || []).length} ${(doc.sqlQueries || []).length === 1 ? 'Query' : 'Queries'}</span>
             </div>
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-              <button class="btn btn-outline btn-sm" id="btn-copy-all-sql-queries" title="Copy all SQL queries combined into clipboard">📑 Copy All Queries</button>
-              <button class="btn btn-primary btn-sm" id="btn-add-new-sql-query" title="Add another SQL query to this document">➕ Add SQL Query</button>
+              ${this.isAddonActive(doc, 'secondary_queries') ? `
+                <button class="btn btn-outline btn-sm" id="btn-copy-all-sql-queries" title="Copy all SQL queries combined into clipboard">📑 Copy All Queries</button>
+                <button class="btn btn-primary btn-sm" id="btn-add-new-sql-query" title="Add another SQL query to this document">➕ Add SQL Query</button>
+              ` : ''}
             </div>
           </div>
 
@@ -3474,40 +4382,73 @@
                   <label class="form-label required">Expected Assertion Result</label>
                   <input type="text" id="doc-input-expected-result" class="form-control" list="dl-expected-results" value="${this.escapeHtml(doc.expectedResult || '')}" placeholder="e.g. 0 rows returned (Zero defect records)">
                 </div>
-                <div class="form-group">
+                <div class="form-group" style="${!this.isAddonActive(doc, 'actual_result') ? 'margin-bottom: 0;' : ''}">
                   <label class="form-label">Acceptable Defect Threshold</label>
                   <input type="text" id="doc-input-threshold" class="form-control" list="dl-thresholds" value="${this.escapeHtml(doc.threshold || '0')}" placeholder="e.g. 0 or < 0.01%">
                 </div>
-                <div class="form-group">
-                  <label class="form-label">Actual Test Result (Latest Execution)</label>
-                  <input type="text" id="doc-input-actual-result" class="form-control" value="${this.escapeHtml(doc.actualResult || '')}" placeholder="e.g. 0 defects detected (100% pass)">
-                </div>
+                ${this.isAddonActive(doc, 'actual_result') ? `
+                  <div class="addon-section-card" id="addon-card-actual_result" style="margin-top: 14px; background: var(--surface-alt); border: 1px dashed var(--accent-color); border-radius: var(--border-radius-sm); padding: 10px 14px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                      <span style="font-size: 12px; font-weight: 700; color: var(--accent-color);">📊 Actual Test Result (Latest Execution)</span>
+                      <button type="button" class="btn-remove-addon-card" data-tab="tab-sql" data-addon-id="actual_result" title="Remove and return to Addons Wheel"><span>🎡</span> Remove</button>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                      <input type="text" id="doc-input-actual-result" class="form-control" value="${this.escapeHtml(doc.actualResult || '')}" placeholder="e.g. 0 defects detected (100% pass)">
+                    </div>
+                  </div>
+                ` : ''}
               </div>
             </div>
 
-            <div class="card">
-              <div class="card-header"><span class="card-title">Explanatory Notes & Comments</span></div>
-              <div class="card-body">
-                <div class="form-group">
-                  <label class="form-label">SQL Execution Notes</label>
-                  <textarea id="doc-input-sql-notes" class="form-control" rows="3" placeholder="Context on execution filters, index requirements, or runtime constraints...">${this.escapeHtml(doc.sqlNotes || '')}</textarea>
+            ${(this.isAddonActive(doc, 'sql_notes') || this.isAddonActive(doc, 'remediation_protocol')) ? `
+              <div class="card addon-section-card" id="addon-card-notes_remediation">
+                <div class="card-header" style="justify-content: space-between; background: var(--surface-alt); padding: 12px 20px;">
+                  <span class="card-title">Runtime Notes & Remediation SOP</span>
                 </div>
-                <div class="form-group">
-                  <label class="form-label">Remediation Protocol</label>
-                  <textarea id="doc-input-remediation" class="form-control" rows="2" placeholder="Actionable steps when this check fails...">${this.escapeHtml(doc.remediation || '')}</textarea>
+                <div class="card-body">
+                  ${this.isAddonActive(doc, 'sql_notes') ? `
+                    <div class="form-group">
+                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                        <label class="form-label" style="margin-bottom: 0;">SQL Execution Notes</label>
+                        <button type="button" class="btn-remove-addon-card" data-tab="tab-sql" data-addon-id="sql_notes" title="Remove notes"><span>🎡</span> Remove</button>
+                      </div>
+                      <textarea id="doc-input-sql-notes" class="form-control" rows="3" placeholder="Context on execution filters, index requirements, or runtime constraints...">${this.escapeHtml(doc.sqlNotes || '')}</textarea>
+                    </div>
+                  ` : ''}
+                  ${this.isAddonActive(doc, 'remediation_protocol') ? `
+                    <div class="form-group" style="margin-bottom: 0;">
+                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                        <label class="form-label" style="margin-bottom: 0;">Remediation Protocol</label>
+                        <button type="button" class="btn-remove-addon-card" data-tab="tab-sql" data-addon-id="remediation_protocol" title="Remove remediation"><span>🎡</span> Remove</button>
+                      </div>
+                      <textarea id="doc-input-remediation" class="form-control" rows="2" placeholder="Actionable steps when this check fails...">${this.escapeHtml(doc.remediation || '')}</textarea>
+                    </div>
+                  ` : ''}
                 </div>
               </div>
-            </div>
+            ` : `
+              <div class="card" style="border: 2px dashed var(--surface-border); background: var(--surface); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px;">
+                <div style="font-size: 28px; margin-bottom: 8px;">🎡</div>
+                <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px; color: var(--text-color);">Optional SQL Addons Available</div>
+                <div style="font-size: 12px; color: var(--text-muted); max-width: 280px; margin-bottom: 12px;">Add Runtime Notes, Incident Remediation SOP, or Recorded Test Results anytime.</div>
+                <button type="button" class="btn btn-outline btn-sm btn-addons-wheel-trigger" data-tab="tab-sql">
+                  <span class="wheel-icon-spin">🎡</span> Open Addons Wheel
+                </button>
+              </div>
+            `}
           </div>
+          ${this.renderStepperPaneFooterHtml('tab-sql', docProfileKey)}
         </div>
 
         <!-- TAB 5: SCREENSHOTS & EVIDENCE -->
         <div class="tab-pane ${activeTab === 'tab-screenshots' ? 'active' : ''}" id="tab-screenshots">
+          ${this.renderTabAddonsBarHtml('tab-screenshots', '5. Screenshots & Evidence', doc)}
+          
           <div class="card">
-            <div class="card-header" style="justify-content: space-between;">
+            <div class="card-header" style="justify-content: space-between; align-items: center; background: var(--surface-alt); padding: 12px 20px;">
               <div>
                 <span class="card-title">📸 Screenshot Images & Evidence</span>
-                <span style="font-size: 12px; color: var(--text-muted); margin-left: 8px;">Attach terminal execution outputs, query proof, or validation charts with drag-and-drop placement</span>
+                <span style="font-size: 12px; color: var(--text-muted); margin-left: 8px;">Attach terminal execution outputs, query proof, or validation charts</span>
               </div>
               <span class="badge badge-info" id="badge-tab-ss-count-header">${(doc.screenshots || []).length} Screenshot(s)</span>
             </div>
@@ -3527,14 +4468,19 @@
               </div>
             </div>
           </div>
+          ${this.renderStepperPaneFooterHtml('tab-screenshots', docProfileKey)}
         </div>
 
         <!-- TAB 6: EXECUTIONS & RESULTS -->
         <div class="tab-pane ${activeTab === 'tab-executions' ? 'active' : ''}" id="tab-executions">
-          <div class="card">
-            <div class="card-header">
+          ${this.renderTabAddonsBarHtml('tab-executions', docProfileKey === 'data_analysis' ? '6. Query Runs & Metric Results' : docProfileKey === 'data_engineering' ? '6. Pipeline Runs & Performance' : docProfileKey === 'data_modelling' ? '6. Schema Validations & Runs' : '6. Executions & Results', doc)}
+          
+          <div class="card" id="card-tab-executions">
+            <div class="card-header" style="justify-content: space-between; align-items: center; background: var(--surface-alt); padding: 12px 20px;">
               <span class="card-title">${docProfileKey === 'data_analysis' ? 'Query Executions & Metric History' : docProfileKey === 'data_engineering' ? 'Pipeline Runs & Execution History' : docProfileKey === 'data_modelling' ? 'Schema Validations & DDL Execution History' : 'Test Execution History'}</span>
-              <button class="btn btn-primary btn-sm" id="btn-add-doc-execution">➕ Log Execution Record</button>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <button class="btn btn-primary btn-sm" id="btn-add-doc-execution">➕ Log Execution Record</button>
+              </div>
             </div>
             <div class="card-body" style="padding: 0;">
               <div class="table-responsive">
@@ -3552,7 +4498,7 @@
                     </tr>
                   </thead>
                   <tbody id="tbody-doc-executions">
-                    ${(doc.executions || []).length === 0 ? '<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 24px;">No executions logged yet.</td></tr>' : (doc.executions || []).map(e => `
+                    ${(doc.executions || []).length === 0 ? '<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 24px;">No executions logged yet. Use the button above to log a new execution run.</td></tr>' : (doc.executions || []).map(e => `
                       <tr>
                         <td>${new Date(e.timestamp).toLocaleString()}</td>
                         <td><span class="badge badge-info">${e.environment || 'PROD'}</span></td>
@@ -3569,14 +4515,19 @@
               </div>
             </div>
           </div>
+          ${this.renderStepperPaneFooterHtml('tab-executions', docProfileKey)}
         </div>
 
         <!-- TAB 7: REMEDIATION & ISSUES -->
         <div class="tab-pane ${activeTab === 'tab-issues' ? 'active' : ''}" id="tab-issues">
-          <div class="card">
-            <div class="card-header">
+          ${this.renderTabAddonsBarHtml('tab-issues', docProfileKey === 'data_analysis' ? '7. Insights & Action Items' : docProfileKey === 'data_engineering' ? '7. Incidents & Runbooks' : docProfileKey === 'data_modelling' ? '7. Schema Drift & Issues' : '7. Remediation & Issues', doc)}
+          
+          <div class="card" id="card-tab-issues">
+            <div class="card-header" style="justify-content: space-between; align-items: center; background: var(--surface-alt); padding: 12px 20px;">
               <span class="card-title">${docProfileKey === 'data_analysis' ? 'Analytical Insights, Action Items & Issue Triage' : docProfileKey === 'data_engineering' ? 'Pipeline Incidents & Operational Runbooks' : docProfileKey === 'data_modelling' ? 'Schema Drift, Structural Gaps & Model Issues' : 'Linked Data Quality Issues & Corrective Actions'}</span>
-              <button class="btn btn-primary btn-sm" id="btn-add-doc-issue">➕ Log Issue / Action</button>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <button class="btn btn-primary btn-sm" id="btn-add-doc-issue">➕ Log Issue / Action</button>
+              </div>
             </div>
             <div class="card-body" style="padding: 0;">
               <div class="table-responsive">
@@ -3594,7 +4545,7 @@
                     </tr>
                   </thead>
                   <tbody id="tbody-doc-issues">
-                    ${(doc.issues || []).length === 0 ? '<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 24px;">No linked issues found.</td></tr>' : (doc.issues || []).map(iss => `
+                    ${(doc.issues || []).length === 0 ? '<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 24px;">No linked issues found. Use the button above to log a new defect, incident or CAPA action.</td></tr>' : (doc.issues || []).map(iss => `
                       <tr>
                         <td><strong>${iss.id}</strong></td>
                         <td>${this.escapeHtml(iss.title)}</td>
@@ -3620,62 +4571,149 @@
               </div>
             </div>
           </div>
+          ${this.renderStepperPaneFooterHtml('tab-issues', docProfileKey)}
         </div>
 
-        <!-- TAB 7: GOVERNANCE & APPROVALS -->
+        <!-- TAB 8: GOVERNANCE & APPROVALS -->
         <div class="tab-pane ${activeTab === 'tab-governance' ? 'active' : ''}" id="tab-governance">
+          ${this.renderTabAddonsBarHtml('tab-governance', '8. Versions & Approvals', doc)}
+          
           <div class="grid-cols-2">
-            <div class="card">
-              <div class="card-header">
-                <span class="card-title">Document Revision History</span>
-                <button class="btn btn-outline btn-sm" id="btn-add-version-snapshot">Create Version Snapshot</button>
-              </div>
-              <div class="card-body" id="container-doc-version-history">
-                ${(doc.versionHistory || []).map(v => `
-                  <div style="border-left: 3px solid var(--secondary-color); padding-left: 12px; margin-bottom: 16px;">
-                    <div style="display: flex; justify-content: space-between;">
-                      <strong>Version ${v.version}</strong>
-                      <span style="font-size: 11px; color: var(--text-muted);">${new Date(v.createdAt).toLocaleDateString()} by ${this.escapeHtml(v.author || 'Author')}</span>
-                    </div>
-                    <div style="font-size: 13px; margin-top: 4px;">${this.escapeHtml(v.summary || 'No summary entered.')}</div>
+            ${this.isAddonActive(doc, 'version_snapshotting') ? `
+              <div class="card addon-section-card" id="addon-card-version_snapshotting">
+                <div class="card-header" style="justify-content: space-between; align-items: center; background: var(--surface-alt); padding: 12px 20px;">
+                  <span class="card-title">Document Revision History</span>
+                  <div style="display: flex; gap: 8px; align-items: center;">
+                    <button class="btn btn-outline btn-sm" id="btn-add-version-snapshot">Create Version Snapshot</button>
+                    <button type="button" class="btn-remove-addon-card" data-tab="tab-governance" data-addon-id="version_snapshotting" title="Remove and return to Addons Wheel"><span>🎡</span> Remove</button>
                   </div>
-                `).join('')}
+                </div>
+                <div class="card-body" id="container-doc-version-history">
+                  ${(doc.versionHistory || []).map(v => `
+                    <div style="border-left: 3px solid var(--secondary-color); padding-left: 12px; margin-bottom: 16px;">
+                      <div style="display: flex; justify-content: space-between;">
+                        <strong>Version ${v.version}</strong>
+                        <span style="font-size: 11px; color: var(--text-muted);">${new Date(v.createdAt).toLocaleDateString()} by ${this.escapeHtml(v.author || 'Author')}</span>
+                      </div>
+                      <div style="font-size: 13px; margin-top: 4px;">${this.escapeHtml(v.summary || 'No summary entered.')}</div>
+                    </div>
+                  `).join('')}
+                </div>
               </div>
-            </div>
+            ` : `
+              <div class="card" style="border: 2px dashed var(--surface-border); background: var(--surface); text-align: center; padding: 24px;">
+                <div style="font-size: 28px; margin-bottom: 8px;">📌</div>
+                <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">Revision History Addon Available</div>
+                <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">Track immutable version snapshots and author changelog summaries.</div>
+                <button type="button" class="btn btn-outline btn-sm btn-addons-wheel-trigger" data-tab="tab-governance">
+                  <span class="wheel-icon-spin">🎡</span> Open Addons Wheel
+                </button>
+              </div>
+            `}
 
-            <div class="card">
-              <div class="card-header">
-                <span class="card-title">Governance Sign-Offs</span>
-                <button class="btn btn-primary btn-sm" id="btn-add-approval-record">✅ Record Sign-Off</button>
-              </div>
-              <div class="card-body" id="container-doc-approvals">
-                ${(doc.approvals || []).length === 0 ? '<div style="color: var(--text-muted);">No formal sign-offs recorded yet.</div>' : (doc.approvals || []).map(app => `
-                  <div style="background: var(--surface-alt); padding: 12px; border-radius: var(--border-radius-sm); margin-bottom: 12px; border: 1px solid var(--surface-border);">
-                    <div style="display: flex; justify-content: space-between;">
-                      <strong>${this.escapeHtml(app.reviewer || 'Reviewer')}</strong>
-                      <span class="badge ${app.status === 'Approved' ? 'badge-passed' : 'badge-status-in-review'}">${app.status}</span>
-                    </div>
-                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">${new Date(app.timestamp).toLocaleString()}</div>
-                    <div style="font-size: 13px; margin-top: 6px;">${this.escapeHtml(app.comments || '')}</div>
+            ${this.isAddonActive(doc, 'formal_signoffs') ? `
+              <div class="card addon-section-card" id="addon-card-formal_signoffs">
+                <div class="card-header" style="justify-content: space-between; align-items: center; background: var(--surface-alt); padding: 12px 20px;">
+                  <span class="card-title">Governance Sign-Offs</span>
+                  <div style="display: flex; gap: 8px; align-items: center;">
+                    <button class="btn btn-primary btn-sm" id="btn-add-approval-record">✅ Record Sign-Off</button>
+                    <button type="button" class="btn-remove-addon-card" data-tab="tab-governance" data-addon-id="formal_signoffs" title="Remove and return to Addons Wheel"><span>🎡</span> Remove</button>
                   </div>
-                `).join('')}
+                </div>
+                <div class="card-body" id="container-doc-approvals">
+                  ${(doc.approvals || []).length === 0 ? '<div style="color: var(--text-muted);">No formal sign-offs recorded yet.</div>' : (doc.approvals || []).map(app => `
+                    <div style="background: var(--surface-alt); padding: 12px; border-radius: var(--border-radius-sm); margin-bottom: 12px; border: 1px solid var(--surface-border);">
+                      <div style="display: flex; justify-content: space-between;">
+                        <strong>${this.escapeHtml(app.reviewer || 'Reviewer')}</strong>
+                        <span class="badge ${app.status === 'Approved' ? 'badge-passed' : 'badge-status-in-review'}">${app.status}</span>
+                      </div>
+                      <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">${new Date(app.timestamp).toLocaleString()}</div>
+                      <div style="font-size: 13px; margin-top: 6px;">${this.escapeHtml(app.comments || '')}</div>
+                    </div>
+                  `).join('')}
+                </div>
               </div>
-            </div>
+            ` : `
+              <div class="card" style="border: 2px dashed var(--surface-border); background: var(--surface); text-align: center; padding: 24px;">
+                <div style="font-size: 28px; margin-bottom: 8px;">✅</div>
+                <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">Formal Sign-Offs Addon Available</div>
+                <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">Capture multi-stakeholder peer reviews, audit approvals, and sign-offs.</div>
+                <button type="button" class="btn btn-outline btn-sm btn-addons-wheel-trigger" data-tab="tab-governance">
+                  <span class="wheel-icon-spin">🎡</span> Open Addons Wheel
+                </button>
+              </div>
+            `}
           </div>
+          ${this.renderStepperPaneFooterHtml('tab-governance', docProfileKey)}
         </div>
-      `;
+      </main>
+    </div>
+  `;
 
-      // Attach Editor Tab Switching
-      container.querySelectorAll('.tab-btn').forEach(btn => {
+      // Stepper Rail Step Clicking
+      container.querySelectorAll('.stepper-step-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+          const tabKey = item.dataset.tab;
+          if (tabKey) {
+            this.switchEditorTab(tabKey);
+          }
+        });
+      });
+
+      // Stepper Pane Footer Previous / Next Navigation
+      container.querySelectorAll('.btn-stepper-nav-step').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const targetTab = btn.dataset.targetTab || btn.dataset.tab;
+          if (targetTab) {
+            this.switchEditorTab(targetTab);
+          }
+        });
+      });
+
+      // Stepper Pane Finish & Save Button
+      container.querySelectorAll('#btn-stepper-finish-save').forEach(btn => {
         btn.addEventListener('click', () => {
           this.syncDocFromForm();
-          this.currentEditorTab = btn.dataset.tab;
-          container.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-          container.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-          btn.classList.add('active');
-          const target = document.getElementById(btn.dataset.tab);
-          if (target) target.classList.add('active');
+          const saveBtn = document.getElementById('editor-btn-save');
+          if (saveBtn) {
+            saveBtn.click();
+          } else {
+            this.saveCurrentDocument();
+          }
         });
+      });
+
+      // Stepper Rail Collapse / Expand Toggle
+      const collapseBtn = document.getElementById('btn-collapse-stepper-rail');
+      if (collapseBtn) {
+        collapseBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const layout = document.getElementById('editor-workspace-layout');
+          const rail = document.getElementById('editor-stepper-rail');
+          if (layout && rail) {
+            const willCollapse = !rail.classList.contains('collapsed');
+            rail.classList.toggle('collapsed', willCollapse);
+            layout.classList.toggle('stepper-collapsed', willCollapse);
+            collapseBtn.title = willCollapse ? 'Expand Stepper Rail' : 'Collapse Stepper Rail';
+            localStorage.setItem('dqd_editor_stepper_collapsed', willCollapse ? 'true' : 'false');
+          }
+        });
+      }
+
+      // Attach Legacy / Standalone Tab Buttons
+      container.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const tabKey = btn.dataset.tab;
+          if (tabKey) {
+            this.switchEditorTab(tabKey);
+          }
+        });
+      });
+
+      // Live updates to stepper completion state on form inputs
+      container.addEventListener('change', () => {
+        this.syncDocFromForm();
+        this.updateStepperRailState();
       });
 
       // SQL Queries Management
@@ -3753,11 +4791,11 @@
       document.getElementById('btn-export-mappings-xlsx')?.addEventListener('click', () => this.exportMappingsToExcel());
 
       // Rule picking from catalog & custom rules
-      document.getElementById('btn-doc-pick-rule-catalog').addEventListener('click', () => {
+      document.getElementById('btn-doc-pick-rule-catalog')?.addEventListener('click', () => {
         this.syncDocFromForm();
         this.showRulePickerModal();
       });
-      document.getElementById('btn-doc-add-custom-rule').addEventListener('click', () => {
+      document.getElementById('btn-doc-add-custom-rule')?.addEventListener('click', () => {
         this.syncDocFromForm();
         this.showAddCustomRuleModal();
       });
@@ -3911,6 +4949,7 @@
       };
 
       const bindUserChipsEvents = () => {
+        if (!chipsBox) return;
         chipsBox.querySelectorAll('.user-chip-remove').forEach(b => {
           b.onclick = (e) => {
             e.stopPropagation();
@@ -3983,6 +5022,7 @@
       };
 
       const bindDynamicFieldsEvents = () => {
+        if (!dynFieldsContainer) return;
         dynFieldsContainer.querySelectorAll('.btn-remove-dynamic-field').forEach(b => {
           b.onclick = (e) => {
             const fId = e.currentTarget.dataset.id;
@@ -4202,19 +5242,19 @@
       }
 
       // Governance Buttons
-      document.getElementById('btn-add-version-snapshot').addEventListener('click', () => {
+      document.getElementById('btn-add-version-snapshot')?.addEventListener('click', () => {
         this.syncDocFromForm();
         this.promptCreateVersionSnapshot();
       });
-      document.getElementById('btn-add-approval-record').addEventListener('click', () => {
+      document.getElementById('btn-add-approval-record')?.addEventListener('click', () => {
         this.syncDocFromForm();
         this.showApprovalModal();
       });
-      document.getElementById('btn-add-doc-execution').addEventListener('click', () => {
+      document.getElementById('btn-add-doc-execution')?.addEventListener('click', () => {
         this.syncDocFromForm();
         this.showLogExecutionModal();
       });
-      document.getElementById('btn-add-doc-issue').addEventListener('click', () => {
+      document.getElementById('btn-add-doc-issue')?.addEventListener('click', () => {
         this.syncDocFromForm();
         this.showAddIssueModal();
       });
@@ -4242,6 +5282,36 @@
           }
         });
       }
+
+      // Addons Wheel trigger buttons (header bar in each tab & empty state cards)
+      container.querySelectorAll('.btn-addons-wheel-trigger').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          const tabKey = btn.dataset.tab;
+          if (tabKey) {
+            this.showAddonsWheelModal(tabKey);
+          }
+        });
+      });
+
+      // Remove addon section buttons (cards header)
+      container.querySelectorAll('.btn-remove-addon-card').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const tabKey = btn.dataset.tab;
+          const addonId = btn.dataset.addonId;
+          const card = btn.closest('.addon-section-card') || btn.closest('.card');
+          if (card) {
+            card.classList.add('addon-section-exit');
+            setTimeout(() => {
+              this.toggleAddonSection(tabKey, addonId, false);
+            }, 250);
+          } else {
+            this.toggleAddonSection(tabKey, addonId, false);
+          }
+        });
+      });
     },
 
     // Synchronize form values to this.currentDoc
@@ -4337,25 +5407,25 @@
         });
       }
 
-      doc.title = document.getElementById('doc-input-title')?.value || '';
-      doc.documentType = document.getElementById('doc-input-type')?.value || '';
-      doc.businessDomain = document.getElementById('doc-input-domain')?.value || '';
-      doc.owner = document.getElementById('doc-input-owner')?.value || '';
-      doc.reviewer = document.getElementById('doc-input-reviewer')?.value || '';
-      doc.status = document.getElementById('doc-input-status')?.value || 'Draft';
-      doc.priority = document.getElementById('doc-input-priority')?.value || 'Medium';
-      doc.executionFrequency = document.getElementById('doc-input-frequency')?.value || '';
-      doc.executiveSummary = document.getElementById('doc-input-summary')?.value || '';
-      doc.businessObjective = document.getElementById('doc-input-objective')?.value || '';
+      if (document.getElementById('doc-input-title')) doc.title = document.getElementById('doc-input-title').value;
+      if (document.getElementById('doc-input-type')) doc.documentType = document.getElementById('doc-input-type').value;
+      if (document.getElementById('doc-input-domain')) doc.businessDomain = document.getElementById('doc-input-domain').value;
+      if (document.getElementById('doc-input-owner')) doc.owner = document.getElementById('doc-input-owner').value;
+      if (document.getElementById('doc-input-reviewer')) doc.reviewer = document.getElementById('doc-input-reviewer').value;
+      if (document.getElementById('doc-input-status')) doc.status = document.getElementById('doc-input-status').value;
+      if (document.getElementById('doc-input-priority')) doc.priority = document.getElementById('doc-input-priority').value;
+      if (document.getElementById('doc-input-frequency')) doc.executionFrequency = document.getElementById('doc-input-frequency').value;
+      if (document.getElementById('doc-input-summary')) doc.executiveSummary = document.getElementById('doc-input-summary').value;
+      if (document.getElementById('doc-input-objective')) doc.businessObjective = document.getElementById('doc-input-objective').value;
 
       // Author / User contact details (can be null or string)
       const uNameEl = document.getElementById('doc-input-username');
       const uEmailEl = document.getElementById('doc-input-useremail');
       const uPhoneEl = document.getElementById('doc-input-userphone');
       if (uNameEl || uEmailEl || uPhoneEl) {
-        const uName = uNameEl ? uNameEl.value.trim() : '';
-        const uEmail = uEmailEl ? uEmailEl.value.trim() : '';
-        const uPhone = uPhoneEl ? uPhoneEl.value.trim() : '';
+        const uName = uNameEl ? uNameEl.value.trim() : (doc.userInfo?.username || '');
+        const uEmail = uEmailEl ? uEmailEl.value.trim() : (doc.userInfo?.useremail || '');
+        const uPhone = uPhoneEl ? uPhoneEl.value.trim() : (doc.userInfo?.userphone || '');
         doc.userInfo = {
           username: uName || null,
           useremail: uEmail || null,
@@ -4367,31 +5437,35 @@
       }
 
       doc.dataSource = doc.dataSource || {};
-      doc.dataSource.system = document.getElementById('doc-input-src-system')?.value || '';
-      doc.dataSource.catalog = document.getElementById('doc-input-src-catalog')?.value || '';
-      doc.dataSource.schema = document.getElementById('doc-input-src-schema')?.value || '';
-      const tablesRaw = document.getElementById('doc-input-src-tables')?.value || '';
-      doc.dataSource.tables = tablesRaw.split(',').map(s => s.trim()).filter(Boolean);
-      doc.dataSource.dependencies = document.getElementById('doc-input-src-dependencies')?.value || '';
+      if (document.getElementById('doc-input-src-system')) doc.dataSource.system = document.getElementById('doc-input-src-system').value;
+      if (document.getElementById('doc-input-src-catalog')) doc.dataSource.catalog = document.getElementById('doc-input-src-catalog').value;
+      if (document.getElementById('doc-input-src-schema')) doc.dataSource.schema = document.getElementById('doc-input-src-schema').value;
+      if (document.getElementById('doc-input-src-tables')) {
+        const tablesRaw = document.getElementById('doc-input-src-tables').value;
+        doc.dataSource.tables = tablesRaw.split(',').map(s => s.trim()).filter(Boolean);
+      }
+      if (document.getElementById('doc-input-src-dependencies')) doc.dataSource.dependencies = document.getElementById('doc-input-src-dependencies').value;
 
       // Mappings
       const mappingRows = document.querySelectorAll('#tbody-source-mappings tr');
-      doc.dataSource.mappings = [];
-      mappingRows.forEach(row => {
-        doc.dataSource.mappings.push({
-          sourceCol: row.querySelector('.map-src-col')?.value || '',
-          targetCol: row.querySelector('.map-tgt-col')?.value || '',
-          dataType: row.querySelector('.map-data-type')?.value || '',
-          rule: row.querySelector('.map-rule')?.value || '',
-          nullable: row.querySelector('.map-nullable')?.value || 'NO',
-          description: row.querySelector('.map-desc')?.value || ''
+      if (mappingRows && mappingRows.length > 0) {
+        doc.dataSource.mappings = [];
+        mappingRows.forEach(row => {
+          doc.dataSource.mappings.push({
+            sourceCol: row.querySelector('.map-src-col')?.value || '',
+            targetCol: row.querySelector('.map-tgt-col')?.value || '',
+            dataType: row.querySelector('.map-data-type')?.value || '',
+            rule: row.querySelector('.map-rule')?.value || '',
+            nullable: row.querySelector('.map-nullable')?.value || 'NO',
+            description: row.querySelector('.map-desc')?.value || ''
+          });
         });
-      });
+      }
 
       // SQL Queries (Multiple Queries Supported)
       const oldQuery = doc.sqlQuery;
       const queryCards = document.querySelectorAll('.sql-query-card');
-      if (queryCards.length > 0) {
+      if (queryCards && queryCards.length > 0) {
         doc.sqlQueries = [];
         queryCards.forEach((card, idx) => {
           const title = card.querySelector('.sql-q-title')?.value || `Query ${idx + 1}`;
@@ -4411,10 +5485,10 @@
         doc.sqlNotes = doc.sqlQueries[0]?.notes || '';
       }
 
-      doc.expectedResult = document.getElementById('doc-input-expected-result')?.value || '';
-      doc.actualResult = document.getElementById('doc-input-actual-result')?.value || '';
-      doc.threshold = document.getElementById('doc-input-threshold')?.value || '0';
-      doc.remediation = document.getElementById('doc-input-remediation')?.value || '';
+      if (document.getElementById('doc-input-expected-result')) doc.expectedResult = document.getElementById('doc-input-expected-result').value;
+      if (document.getElementById('doc-input-actual-result')) doc.actualResult = document.getElementById('doc-input-actual-result').value;
+      if (document.getElementById('doc-input-threshold')) doc.threshold = document.getElementById('doc-input-threshold').value;
+      if (document.getElementById('doc-input-remediation')) doc.remediation = document.getElementById('doc-input-remediation').value;
 
       // Auto-reapproval check: If document was Approved and user altered SQL query, revert to Draft
       if (doc.status === 'Approved' && oldQuery && oldQuery !== doc.sqlQuery) {
@@ -4496,6 +5570,781 @@
       this.learnUniqueValuesFromDoc(doc);
 
       this.showToast('Document saved successfully!', 'success');
+    },
+
+    // ====================================================================
+    // ADDONS WHEEL & MINIMUM INPUTS ENGINE
+    // ====================================================================
+
+    detectActiveSections(doc) {
+      if (!doc) return [];
+      if (Array.isArray(doc.activeSections)) return doc.activeSections;
+      const active = [];
+      // Smart detection for existing documents with populated fields
+      if (doc.executiveSummary || doc.businessObjective) active.push('executive_scope');
+      if (doc.teamAttributes && Object.keys(doc.teamAttributes).some(k => doc.teamAttributes[k])) active.push('discipline_attrs');
+      if ((doc.usernames && doc.usernames.length > 1) || (doc.reviewer && doc.reviewer.trim())) active.push('collaborators');
+      if (Array.isArray(doc.dynamicInputs) && doc.dynamicInputs.length > 0) active.push('dynamic_inputs');
+      if (Array.isArray(doc.validatedModels) && doc.validatedModels.length > 0) active.push('validated_models');
+      if (Array.isArray(doc.validatedTables) && doc.validatedTables.length > 0) active.push('validated_tables');
+      if (doc.userphone || (doc.userInfo && doc.userInfo.userphone)) active.push('author_contact');
+
+      // Tab 2
+      if (doc.dataSource?.catalog || doc.dataSource?.schema) active.push('catalog_schema');
+      if (doc.dataSource?.dependencies) active.push('pipeline_dependencies');
+      if (doc.dataSource?.mappings && doc.dataSource.mappings.some(m => m.rule || m.nullable === 'YES')) active.push('transform_rules');
+      if (doc.dataSource?.mappings && doc.dataSource.mappings.some(m => m.description)) active.push('column_descriptions');
+      active.push('quick_types');
+      active.push('bulk_import');
+
+      // Tab 3
+      active.push('catalog_picker');
+      active.push('custom_rule_builder');
+
+      // Tab 4
+      if (doc.sqlQueries && doc.sqlQueries.length > 1) active.push('secondary_queries');
+      if (doc.actualResult) active.push('actual_result');
+      if (doc.sqlNotes) active.push('sql_notes');
+      if (doc.remediation) active.push('remediation_protocol');
+
+      // Tab 5
+      if (doc.screenshots && doc.screenshots.some(s => s.caption)) active.push('technical_captions');
+      if (doc.screenshots && doc.screenshots.some(s => s.placement && s.placement !== 'under_query')) active.push('placement_config');
+
+      // Tab 6
+      if (doc.executions && doc.executions.length > 0) active.push('detailed_run_log');
+
+      // Tab 7
+      if (doc.issues && doc.issues.length > 0) active.push('rca_deepdive');
+
+      // Tab 8
+      if (doc.versionHistory && doc.versionHistory.length > 1) active.push('version_snapshotting');
+      if (doc.approvals && doc.approvals.length > 0) active.push('formal_signoffs');
+
+      return active;
+    },
+
+    isAddonActive(doc, addonId) {
+      if (!doc) return false;
+      if (!Array.isArray(doc.activeSections)) {
+        doc.activeSections = this.detectActiveSections(doc);
+      }
+      return doc.activeSections.includes(addonId);
+    },
+
+    getTabAddons(tabKey, docProfileKey) {
+      const pKey = docProfileKey || this.getActiveProfileKey() || 'data_quality';
+      const profile = (this.config && this.config.teamProfiles && this.config.teamProfiles[pKey]) || this.getActiveProfile();
+      const profileLabel = profile ? (profile.label || profile.name) : 'Discipline';
+
+      const registry = {
+        'tab-meta': [
+          {
+            id: 'executive_scope',
+            title: '4. Executive Scope & Business Objective',
+            shortTitle: 'Executive Scope',
+            icon: '💡',
+            category: 'Governance & Value',
+            badge: 'Strategic Context',
+            desc: 'Executive summary, operational background, business intent, and compliance justification'
+          },
+          {
+            id: 'discipline_attrs',
+            title: `5. ${profileLabel} — Technical Specification Attributes`,
+            shortTitle: 'Technical Attributes',
+            icon: '🛠️',
+            category: 'Technical Architecture',
+            badge: `${profileLabel} Specific`,
+            desc: `Specialized metadata fields and discipline architecture attributes for ${profileLabel}`
+          },
+          {
+            id: 'collaborators',
+            title: 'Multi-User Assignment & Designated Reviewer',
+            shortTitle: 'Collaborators & Reviewer',
+            icon: '👥',
+            category: 'Attribution & Review',
+            badge: 'Governance Pod',
+            desc: 'Multi-user assignment chips, collaborators, and designated governance peer reviewer'
+          },
+          {
+            id: 'dynamic_inputs',
+            title: '6. Dynamic Validation Inputs & Quick Pills',
+            shortTitle: 'Dynamic Inputs',
+            icon: '⚡',
+            category: 'Custom Metadata',
+            badge: 'Recommended & Custom',
+            desc: 'Recommended quick-add input pills and flexible custom specification attributes'
+          },
+          {
+            id: 'validated_models',
+            title: '7A. Validated Models Specification Matrix',
+            shortTitle: 'Validated Models',
+            icon: '🧩',
+            category: 'Model Lineage',
+            badge: 'Composite Models',
+            desc: 'Audit multiple dbt or SQL models (grains, materialization, and upstream lineage)'
+          },
+          {
+            id: 'validated_tables',
+            title: '7B. Validated Physical Storage Tables Matrix',
+            shortTitle: 'Physical Tables',
+            icon: '🗄️',
+            category: 'Storage Engineering',
+            badge: 'Composite Tables',
+            desc: 'Physical storage tables, catalogs, schemas, partitions, formats, and row volumes'
+          },
+          {
+            id: 'author_contact',
+            title: '8. Document Author Corporate Contact Info',
+            shortTitle: 'Author Sign-Off',
+            icon: '👤',
+            category: 'Attribution & Audit',
+            badge: 'Author Sign-Off',
+            desc: 'Author corporate email, phone, and sign-off contact credentials for official exports'
+          }
+        ],
+        'tab-sources': [
+          {
+            id: 'catalog_schema',
+            title: 'Database / Catalog & Schema Scope',
+            shortTitle: 'Catalog & Schema',
+            icon: '🏢',
+            category: 'Storage Location',
+            badge: 'Schema Scope',
+            desc: 'Specific database catalog (e.g. EDW_PROD) and schema isolation parameters'
+          },
+          {
+            id: 'pipeline_dependencies',
+            title: 'Upstream Pipeline & Orchestration Dependencies',
+            shortTitle: 'Pipeline Dependencies',
+            icon: '🔄',
+            category: 'DataOps & Lineage',
+            badge: 'DAG & Lineage',
+            desc: 'Airflow DAG, Kafka streaming topic, dbt pipeline, or CDC ingestion connector'
+          },
+          {
+            id: 'quick_types',
+            title: 'Quick Trino & SQL Data Types Injector Bar',
+            shortTitle: 'Quick Types Bar',
+            icon: '⚡',
+            category: 'Productivity Tools',
+            badge: 'One-Click Injector',
+            desc: 'One-click quick buttons to inject Trino data types (VARCHAR, BIGINT, TIMESTAMP, etc.)'
+          },
+          {
+            id: 'bulk_import',
+            title: 'Bulk Excel / JSON Import & Template Tools',
+            shortTitle: 'Bulk File Importer',
+            icon: '📥',
+            category: 'Import & Export',
+            badge: 'Excel / JSON',
+            desc: 'Bulk import column mappings via Excel (.xlsx/.csv) or JSON with sample templates'
+          },
+          {
+            id: 'transform_rules',
+            title: 'Transformation Logic & Nullability Constraints',
+            shortTitle: 'Transform Rules',
+            icon: '📋',
+            category: 'Transformation',
+            badge: 'ETL Expressions',
+            desc: 'Source-to-target SQL expression rules and strict NOT NULL column validation'
+          },
+          {
+            id: 'column_descriptions',
+            title: 'Data Dictionary Column Descriptions',
+            shortTitle: 'Descriptions',
+            icon: '📝',
+            category: 'Governance & Catalog',
+            badge: 'Data Dictionary',
+            desc: 'Business definitions and technical descriptions documented for every mapped column'
+          }
+        ],
+        'tab-rules': [
+          {
+            id: 'catalog_picker',
+            title: 'Enterprise Rule Catalog Browser',
+            shortTitle: 'Rule Catalog',
+            icon: '🛡️',
+            category: 'Rule Library',
+            badge: 'Predefined Assertions',
+            desc: 'Search, filter, and attach predefined verification rules from the enterprise catalog'
+          },
+          {
+            id: 'custom_rule_builder',
+            title: 'Custom Validation Rule Builder',
+            shortTitle: 'Custom Rule Builder',
+            icon: '➕',
+            category: 'Rule Engineering',
+            badge: 'Ad-Hoc Builder',
+            desc: 'Build custom validation rules specifying dimensions, severities, thresholds, and SQL'
+          }
+        ],
+        'tab-sql': [
+          {
+            id: 'secondary_queries',
+            title: 'Secondary & Multi-Query Assertions',
+            shortTitle: 'Multi-Query',
+            icon: '➕',
+            category: 'Advanced SQL',
+            badge: 'Multiple Queries',
+            desc: 'Add Query 2, Query 3, and composite SQL assertions in a single quality document'
+          },
+          {
+            id: 'actual_result',
+            title: 'Actual Test Result Tracker',
+            shortTitle: 'Actual Test Result',
+            icon: '📊',
+            category: 'Execution Auditing',
+            badge: 'Verification Proof',
+            desc: 'Track latest recorded actual test result and scanned volume from workbench executions'
+          },
+          {
+            id: 'sql_notes',
+            title: 'SQL Execution Runtime Notes',
+            shortTitle: 'Runtime Notes',
+            icon: '📝',
+            category: 'Runbook & Tuning',
+            badge: 'Execution Hints',
+            desc: 'Execution filters, index requirements, cluster sizing, and runtime constraints'
+          },
+          {
+            id: 'remediation_protocol',
+            title: 'Remediation Protocol & Runbook Guide',
+            shortTitle: 'Remediation SOP',
+            icon: '🚨',
+            category: 'Incident Response',
+            badge: 'Runbook Action',
+            desc: 'Actionable standard operating procedures and mitigation runbook when this check fails'
+          }
+        ],
+        'tab-screenshots': [
+          {
+            id: 'placement_config',
+            title: 'Evidence Placement & PDF Layout Config',
+            shortTitle: 'Layout & Placement',
+            icon: '🏷️',
+            category: 'Report Layout',
+            badge: 'PDF Layout',
+            desc: 'Configure screenshot placement (Under query, Appendix, or Full-page exhibit)'
+          },
+          {
+            id: 'technical_captions',
+            title: 'Technical Captions & Audit Notes',
+            shortTitle: 'Captions & Notes',
+            icon: '✍️',
+            category: 'Evidence Context',
+            badge: 'Captions',
+            desc: 'Attach technical captions and terminal output notes for each screenshot evidence'
+          }
+        ],
+        'tab-executions': [],
+        'tab-issues': [],
+        'tab-governance': [
+          {
+            id: 'version_snapshotting',
+            title: 'Document Revision History & Version Snapshots',
+            shortTitle: 'Version Snapshots',
+            icon: '📌',
+            category: 'Version Control',
+            badge: 'Revisions',
+            desc: 'Create immutable version snapshots with detailed author changelog summaries'
+          },
+          {
+            id: 'formal_signoffs',
+            title: 'Governance Sign-Offs & Formal Approvals',
+            shortTitle: 'Sign-Off Records',
+            icon: '✅',
+            category: 'Audit Compliance',
+            badge: 'Sign-Offs',
+            desc: 'Formal peer reviews, sign-off status, and stakeholder approval timestamps'
+          }
+        ]
+      };
+
+      return registry[tabKey] || [];
+    },
+
+    renderTabAddonsBarHtml(tabKey, tabTitle, doc) {
+      const pKey = (doc && doc.teamProfile) || this.getActiveProfileKey() || 'data_quality';
+      const addons = this.getTabAddons(tabKey, pKey);
+      if (addons.length <= 1) return '';
+
+      const activeAddons = addons.filter(a => this.isAddonActive(doc, a.id));
+      const addedCount = activeAddons.length;
+      const totalCount = addons.length;
+      const availableCount = totalCount - addedCount;
+
+      return `
+        <div class="tab-addons-bar" id="addons-bar-${tabKey}">
+          <div class="tab-addons-info">
+            <div class="tab-addons-icon-orb">🎡</div>
+            <div class="tab-addons-meta">
+              <span class="tab-addons-title">
+                <span>${this.escapeHtml(tabTitle)}</span>
+                <span class="badge ${addedCount > 0 ? 'badge-passed' : 'badge-info'}" style="font-size: 11px;">
+                  ${addedCount > 0 ? `${addedCount} of ${totalCount} Addons Active` : 'Minimal Inputs Mode'}
+                </span>
+              </span>
+              <span class="tab-addons-desc">
+                ${availableCount > 0
+                  ? `${availableCount} optional section${availableCount > 1 ? 's' : ''} available on the Addons Wheel`
+                  : 'All available addons are active on this tab'}
+              </span>
+            </div>
+          </div>
+          <button type="button" class="btn-addons-wheel-trigger" data-tab="${tabKey}" title="Open Addons Wheel to attach or dismiss optional sections">
+            <span class="wheel-icon">🎡</span>
+            <span>Addons Wheel</span>
+            <span class="wheel-count-badge" id="badge-wheel-count-${tabKey}">${addedCount}/${totalCount}</span>
+          </button>
+        </div>
+      `;
+    },
+
+    updateTabWheelCount(tabKey) {
+      const doc = this.currentDoc;
+      if (!doc) return;
+      const pKey = doc.teamProfile || this.getActiveProfileKey() || 'data_quality';
+      const addons = this.getTabAddons(tabKey, pKey);
+      if (addons.length === 0) return;
+
+      if (!Array.isArray(doc.activeSections)) {
+        doc.activeSections = this.detectActiveSections(doc);
+      }
+
+      const activeAddons = addons.filter(a => this.isAddonActive(doc, a.id));
+      const addedCount = activeAddons.length;
+      const totalCount = addons.length;
+      const availableCount = totalCount - addedCount;
+
+      // 1. Update tab banner trigger badge on the active editor tab
+      const tabBadge = document.getElementById(`badge-wheel-count-${tabKey}`);
+      if (tabBadge) {
+        tabBadge.textContent = `${addedCount}/${totalCount}`;
+        tabBadge.classList.toggle('has-active', addedCount > 0);
+      }
+
+      // 2. Update tab bar addons status pill & description
+      const bar = document.getElementById(`addons-bar-${tabKey}`);
+      if (bar) {
+        const statusPill = bar.querySelector('.tab-addons-title .badge');
+        if (statusPill) {
+          statusPill.className = `badge ${addedCount > 0 ? 'badge-passed' : 'badge-info'}`;
+          statusPill.textContent = addedCount > 0 ? `${addedCount} of ${totalCount} Addons Active` : 'Minimal Inputs Mode';
+        }
+        const descEl = bar.querySelector('.tab-addons-desc');
+        if (descEl) {
+          descEl.textContent = availableCount > 0
+            ? `${availableCount} optional section${availableCount > 1 ? 's' : ''} available on the Addons Wheel`
+            : 'All available addons are active on this tab';
+        }
+      }
+
+      // 3. Update tab header button pill
+      const tabBtn = document.querySelector(`.tab-btn[data-tab="${tabKey}"]`);
+      if (tabBtn) {
+        let addonDot = tabBtn.querySelector('.tab-addon-count-pill');
+        if (addedCount > 0) {
+          if (!addonDot) {
+            addonDot = document.createElement('span');
+            addonDot.className = 'tab-addon-count-pill';
+            tabBtn.appendChild(addonDot);
+          }
+          addonDot.textContent = `+${addedCount}`;
+          addonDot.title = `${addedCount} active optional addon(s)`;
+        } else if (addonDot) {
+          addonDot.remove();
+        }
+      }
+    },
+
+    showAddonsWheelModal(tabKey) {
+      this.syncDocFromForm();
+      const doc = this.currentDoc;
+      if (!doc) return;
+      const pKey = doc.teamProfile || this.getActiveProfileKey() || 'data_quality';
+      const profile = (this.config && this.config.teamProfiles && this.config.teamProfiles[pKey]) || this.getActiveProfile();
+      const addons = this.getTabAddons(tabKey, pKey);
+      if (addons.length === 0) {
+        this.showToast('No optional addons available for this tab.', 'info');
+        return;
+      }
+
+      // Existing modal cleanup
+      document.getElementById('modal-addons-wheel-overlay')?.remove();
+
+      const activeAddons = addons.filter(a => this.isAddonActive(doc, a.id));
+      const addedCount = activeAddons.length;
+      const totalCount = addons.length;
+      const availableCount = totalCount - addedCount;
+
+      const overlay = document.createElement('div');
+      overlay.className = 'addons-wheel-overlay';
+      overlay.id = 'modal-addons-wheel-overlay';
+
+      const tabNames = {
+        'tab-meta': '1. Overview & Metadata',
+        'tab-sources': '2. Data Sources & Mappings',
+        'tab-rules': '3. Validation Rules',
+        'tab-sql': '4. SQL Query & Workbench',
+        'tab-screenshots': '5. Screenshots & Evidence',
+        'tab-executions': '6. Executions & Results',
+        'tab-issues': '7. Remediation & Issues',
+        'tab-governance': '8. Versions & Approvals'
+      };
+      const tabTitle = tabNames[tabKey] || 'Active Tab';
+
+      overlay.innerHTML = `
+        <div class="addons-wheel-modal">
+          <div class="addons-wheel-header">
+            <div class="addons-wheel-header-title">
+              <span style="font-size: 24px;">🎡</span>
+              <div>
+                <h3>Addons Wheel — ${this.escapeHtml(tabTitle)}</h3>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">
+                  Profile: <strong>${this.escapeHtml(profile.label || profile.name)}</strong> • Track and attach optional inputs & sections
+                </div>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <button type="button" class="btn btn-primary btn-sm" id="btn-done-addons-wheel" style="font-size: 12px; font-weight: 700; padding: 5px 12px;">✓ Apply & Close</button>
+              <button type="button" class="addons-wheel-close" id="btn-close-addons-wheel" title="Close modal">&times;</button>
+            </div>
+          </div>
+
+          <div class="addons-wheel-body">
+            <!-- Left: Interactive Rotary Disc Stage -->
+            <div class="addons-wheel-disc-container">
+              <div style="font-size: 12px; font-weight: 700; color: var(--primary-color); margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+                <span>🎯 Interactive Rotary Hub</span>
+              </div>
+              <div style="font-size: 11px; color: var(--text-muted); text-align: center; margin-bottom: 8px;">
+                Click any spoke or button to add/remove section
+              </div>
+
+              <div class="addons-wheel-stage">
+                <div class="addons-wheel-disc" id="addons-rotary-disc">
+                  ${addons.map((a, idx) => {
+                    const angle = (360 / addons.length) * idx;
+                    const isAdded = this.isAddonActive(doc, a.id);
+                    return `
+                      <div class="addons-wheel-spoke ${isAdded ? 'is-added' : 'is-available'}" 
+                        data-addon-id="${a.id}" 
+                        data-angle="${angle}"
+                        style="--spoke-angle: ${angle}deg;"
+                        title="${this.escapeHtml(a.shortTitle || a.title)} (${isAdded ? 'Added' : 'Click to Add'})">
+                        ${a.icon || '✨'}
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+
+                <div class="addons-wheel-hub">
+                  <span style="font-size: 22px;">🎡</span>
+                  <strong style="font-size: 13px; margin-top: 2px;" id="hub-live-count">${addedCount}/${totalCount}</strong>
+                  <span style="font-size: 9.5px; opacity: 0.85; letter-spacing: 0.5px;">ACTIVE</span>
+                </div>
+              </div>
+
+              <div class="addons-wheel-controls">
+                <button type="button" class="btn btn-outline btn-sm" id="btn-spin-wheel-prev" title="Rotate counter-clockwise">↺ Rotate</button>
+                <button type="button" class="btn btn-outline btn-sm" id="btn-spin-wheel-reset" title="Reset rotation">⟲ Reset</button>
+                <button type="button" class="btn btn-outline btn-sm" id="btn-spin-wheel-next" title="Rotate clockwise">Rotate ↻</button>
+              </div>
+            </div>
+
+            <!-- Right: Addons Deck List -->
+            <div class="addons-deck">
+              <div class="addons-deck-search-bar">
+                <input type="text" id="addons-search-input" class="form-control form-control-sm" placeholder="🔍 Search available attributes & sections...">
+                <div style="display: flex; gap: 6px;">
+                  <button type="button" class="btn btn-outline btn-sm btn-wheel-filter active" data-filter="all">All (${totalCount})</button>
+                  <button type="button" class="btn btn-outline btn-sm btn-wheel-filter" data-filter="available">Available (${availableCount})</button>
+                  <button type="button" class="btn btn-outline btn-sm btn-wheel-filter" data-filter="active">Active (${addedCount})</button>
+                </div>
+              </div>
+
+              <div class="addons-deck-cards-list" id="addons-deck-list">
+                ${addons.map(a => {
+                  const isAdded = this.isAddonActive(doc, a.id);
+                  return `
+                    <div class="addon-deck-card ${isAdded ? 'is-added' : ''}" data-addon-id="${a.id}" data-status="${isAdded ? 'active' : 'available'}">
+                      <div class="addon-deck-card-content">
+                        <div class="addon-deck-card-icon">${a.icon || '✨'}</div>
+                        <div class="addon-deck-card-text">
+                          <div class="addon-deck-card-title">
+                            <span>${this.escapeHtml(a.title)}</span>
+                            <span class="badge badge-info" style="font-size: 10px;">${this.escapeHtml(a.badge || a.category || 'Addon')}</span>
+                            ${isAdded ? '<span class="badge-active-on-tab">✓ Active on Tab</span>' : ''}
+                          </div>
+                          <div class="addon-deck-card-desc">${this.escapeHtml(a.desc)}</div>
+                        </div>
+                      </div>
+                      <div class="addon-deck-card-action">
+                        ${isAdded ? `
+                          <button type="button" class="btn-deck-remove" data-addon-id="${a.id}" title="Remove this section from tab">
+                            <span>✕</span> Remove
+                          </button>
+                        ` : `
+                          <button type="button" class="btn-deck-add" data-addon-id="${a.id}" title="Add this section to tab">
+                            <span>➕</span> Add Section
+                          </button>
+                        `}
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(overlay);
+
+      // Event Handlers for the Addons Wheel Modal
+      let hasChanged = false;
+      let lastAddedId = null;
+
+      const closeModal = () => {
+        overlay.classList.add('fade-out');
+        setTimeout(() => {
+          overlay.remove();
+          if (hasChanged) {
+            const container = document.getElementById('main-content-view');
+            if (container && this.currentView === 'editor') {
+              this.renderEditor(container, { activeTab: tabKey });
+              if (lastAddedId) {
+                setTimeout(() => {
+                  const addedEl = document.getElementById(`addon-card-${lastAddedId}`) || document.getElementById(`section-${lastAddedId}`);
+                  if (addedEl) {
+                    addedEl.classList.add('addon-section-entrance');
+                    addedEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }
+                }, 80);
+              }
+            }
+          }
+        }, 200);
+      };
+
+      overlay.querySelector('#btn-close-addons-wheel')?.addEventListener('click', closeModal);
+      overlay.querySelector('#btn-done-addons-wheel')?.addEventListener('click', closeModal);
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) closeModal();
+      });
+
+      // Filter buttons
+      overlay.querySelectorAll('.btn-wheel-filter').forEach(btn => {
+        btn.addEventListener('click', () => {
+          overlay.querySelectorAll('.btn-wheel-filter').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          const filter = btn.dataset.filter;
+          const searchVal = (overlay.querySelector('#addons-search-input')?.value || '').toLowerCase().trim();
+          filterAddonsList(filter, searchVal);
+        });
+      });
+
+      // Search input live filter
+      const searchInp = overlay.querySelector('#addons-search-input');
+      const filterAddonsList = (filter, searchVal) => {
+        overlay.querySelectorAll('.addon-deck-card').forEach(card => {
+          const status = card.dataset.status;
+          const text = card.textContent.toLowerCase();
+          const matchesFilter = filter === 'all' || status === filter;
+          const matchesSearch = !searchVal || text.includes(searchVal);
+          card.style.display = (matchesFilter && matchesSearch) ? 'flex' : 'none';
+        });
+      };
+
+      if (searchInp) {
+        searchInp.addEventListener('input', (e) => {
+          const activeFilter = overlay.querySelector('.btn-wheel-filter.active')?.dataset.filter || 'all';
+          filterAddonsList(activeFilter, e.target.value.toLowerCase().trim());
+        });
+      }
+
+      // Disc Rotation
+      let currentDiscAngle = 0;
+      const rotaryDisc = overlay.querySelector('#addons-rotary-disc');
+      const applyDiscRotation = (delta) => {
+        currentDiscAngle += delta;
+        if (rotaryDisc) {
+          rotaryDisc.style.transform = `rotate(${currentDiscAngle}deg)`;
+          rotaryDisc.style.setProperty('--disc-rot', `${currentDiscAngle}deg`);
+        }
+      };
+
+      overlay.querySelector('#btn-spin-wheel-prev')?.addEventListener('click', () => applyDiscRotation(-45));
+      overlay.querySelector('#btn-spin-wheel-next')?.addEventListener('click', () => applyDiscRotation(45));
+      overlay.querySelector('#btn-spin-wheel-reset')?.addEventListener('click', () => {
+        currentDiscAngle = 0;
+        if (rotaryDisc) {
+          rotaryDisc.style.transform = 'rotate(0deg)';
+          rotaryDisc.style.setProperty('--disc-rot', '0deg');
+        }
+      });
+
+      // Spoke click: highlights the card in the deck
+      overlay.querySelectorAll('.addons-wheel-spoke').forEach(spoke => {
+        spoke.addEventListener('click', () => {
+          const addonId = spoke.dataset.addonId;
+          const card = overlay.querySelector(`.addon-deck-card[data-addon-id="${addonId}"]`);
+          if (card) {
+            card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            card.style.borderColor = 'var(--accent-color)';
+            card.style.boxShadow = '0 0 15px rgba(0, 166, 166, 0.4)';
+            setTimeout(() => {
+              card.style.borderColor = '';
+              card.style.boxShadow = '';
+            }, 1200);
+          }
+        });
+      });
+
+      // Interactive in-place toggle inside the modal
+      const toggleModalAddon = (addonId, forceState) => {
+        if (!Array.isArray(doc.activeSections)) {
+          doc.activeSections = this.detectActiveSections(doc);
+        }
+        const isCurrentlyActive = doc.activeSections.includes(addonId);
+        const shouldBeActive = forceState !== undefined ? forceState : !isCurrentlyActive;
+
+        if (shouldBeActive && !isCurrentlyActive) {
+          doc.activeSections.push(addonId);
+          lastAddedId = addonId;
+        } else if (!shouldBeActive && isCurrentlyActive) {
+          doc.activeSections = doc.activeSections.filter(id => id !== addonId);
+        }
+
+        hasChanged = true;
+
+        const currentActive = addons.filter(a => doc.activeSections.includes(a.id));
+        const newAddedCount = currentActive.length;
+        const newAvailableCount = totalCount - newAddedCount;
+
+        // 1. Update Hub live count
+        const liveCountEl = overlay.querySelector('#hub-live-count');
+        if (liveCountEl) liveCountEl.textContent = `${newAddedCount}/${totalCount}`;
+
+        // 2. Update Rotary Spoke
+        const spoke = overlay.querySelector(`.addons-wheel-spoke[data-addon-id="${addonId}"]`);
+        if (spoke) {
+          spoke.classList.toggle('is-added', shouldBeActive);
+          spoke.classList.toggle('is-available', !shouldBeActive);
+          const targetAddon = addons.find(a => a.id === addonId);
+          spoke.title = `${this.escapeHtml(targetAddon?.shortTitle || targetAddon?.title || addonId)} (${shouldBeActive ? 'Added' : 'Click to Add'})`;
+        }
+
+        // 3. Update Card in Deck
+        const card = overlay.querySelector(`.addon-deck-card[data-addon-id="${addonId}"]`);
+        if (card) {
+          card.classList.toggle('is-added', shouldBeActive);
+          card.dataset.status = shouldBeActive ? 'active' : 'available';
+
+          const titleEl = card.querySelector('.addon-deck-card-title');
+          if (titleEl) {
+            let activeBadge = titleEl.querySelector('.badge-active-on-tab');
+            if (shouldBeActive && !activeBadge) {
+              const b = document.createElement('span');
+              b.className = 'badge-active-on-tab';
+              b.textContent = 'Active on Tab';
+              titleEl.appendChild(b);
+            } else if (!shouldBeActive && activeBadge) {
+              activeBadge.remove();
+            }
+          }
+
+          const actionEl = card.querySelector('.addon-deck-card-action');
+          if (actionEl) {
+            actionEl.innerHTML = shouldBeActive ? `
+              <button type="button" class="btn-deck-remove" data-addon-id="${addonId}" title="Remove this section from tab">
+                <span>✕</span> Remove
+              </button>
+            ` : `
+              <button type="button" class="btn-deck-add" data-addon-id="${addonId}" title="Add this section to tab">
+                <span>➕</span> Add Section
+              </button>
+            `;
+            // Attach listener to newly swapped button
+            actionEl.querySelector('.btn-deck-add')?.addEventListener('click', () => toggleModalAddon(addonId, true));
+            actionEl.querySelector('.btn-deck-remove')?.addEventListener('click', () => toggleModalAddon(addonId, false));
+          }
+        }
+
+        // 4. Update Filter Pills count
+        overlay.querySelectorAll('.btn-wheel-filter').forEach(fBtn => {
+          const f = fBtn.dataset.filter;
+          if (f === 'all') fBtn.textContent = `All (${totalCount})`;
+          if (f === 'available') fBtn.textContent = `Available (${newAvailableCount})`;
+          if (f === 'active') fBtn.textContent = `Active (${newAddedCount})`;
+        });
+
+        // 5. Update background tab banner badge immediately!
+        this.updateTabWheelCount(tabKey);
+
+        const targetAddon = addons.find(a => a.id === addonId);
+        const name = targetAddon ? (targetAddon.shortTitle || targetAddon.title) : addonId;
+        if (shouldBeActive) {
+          this.showToast(`✨ Added "${name}" to tab!`, 'success');
+        } else {
+          this.showToast(`Removed "${name}" from tab. Still available on wheel.`, 'info');
+        }
+      };
+
+      // Add / Remove buttons initial attachment
+      overlay.querySelectorAll('.btn-deck-add').forEach(btn => {
+        btn.addEventListener('click', () => toggleModalAddon(btn.dataset.addonId, true));
+      });
+
+      overlay.querySelectorAll('.btn-deck-remove').forEach(btn => {
+        btn.addEventListener('click', () => toggleModalAddon(btn.dataset.addonId, false));
+      });
+    },
+
+    toggleAddonSection(tabKey, addonId, forceState) {
+      this.syncDocFromForm();
+      const doc = this.currentDoc;
+      if (!doc) return;
+
+      if (!Array.isArray(doc.activeSections)) {
+        doc.activeSections = this.detectActiveSections(doc);
+      }
+
+      const isCurrentlyActive = doc.activeSections.includes(addonId);
+      const shouldBeActive = forceState !== undefined ? forceState : !isCurrentlyActive;
+
+      if (shouldBeActive && !isCurrentlyActive) {
+        doc.activeSections.push(addonId);
+      } else if (!shouldBeActive && isCurrentlyActive) {
+        doc.activeSections = doc.activeSections.filter(id => id !== addonId);
+      }
+
+      const pKey = doc.teamProfile || this.getActiveProfileKey() || 'data_quality';
+      const addons = this.getTabAddons(tabKey, pKey);
+      const targetAddon = addons.find(a => a.id === addonId);
+      const title = targetAddon ? (targetAddon.shortTitle || targetAddon.title) : addonId;
+
+      // Re-render editor staying on the active tab
+      const container = document.getElementById('main-content-view');
+      if (container && this.currentView === 'editor') {
+        this.renderEditor(container, { activeTab: tabKey });
+      }
+
+      this.updateTabWheelCount(tabKey);
+
+      if (shouldBeActive) {
+        setTimeout(() => {
+          const addedEl = document.getElementById(`addon-card-${addonId}`) || document.getElementById(`section-${addonId}`);
+          if (addedEl) {
+            addedEl.classList.add('addon-section-entrance');
+            addedEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 50);
+        this.showToast(`✨ Added "${title}" to tab!`, 'success');
+      } else {
+        this.showToast(`Removed "${title}" from tab. Still available on Addons Wheel.`, 'info');
+      }
     },
 
     async storeQueriesFromDocument(doc) {
@@ -11019,6 +12868,8 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
       }
 
       const queries = doc.sqlQueries || [];
+      const hasCaptions = this.isAddonActive(doc, 'technical_captions');
+      const hasPlacement = this.isAddonActive(doc, 'placement_config');
 
       return doc.screenshots.map((ss, idx) => `
         <div class="screenshot-card" data-id="${ss.id}" data-idx="${idx}" draggable="true">
@@ -11027,8 +12878,12 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
             <img src="${ss.dataUrl}" alt="${this.escapeHtml(ss.caption || 'Screenshot')}" class="screenshot-thumb-img">
           </div>
           <div>
-            <label class="form-label" style="font-size: 11px; margin-bottom: 2px;">Evidence Caption / Title</label>
-            <input type="text" class="form-control form-control-sm ss-caption" value="${this.escapeHtml(ss.caption || '')}" placeholder="e.g. Trino Query 1 Terminal Output showing 0 failures">
+            <label class="form-label" style="font-size: 11px; margin-bottom: 2px;">Evidence Name / Caption</label>
+            ${hasCaptions ? `
+              <input type="text" class="form-control form-control-sm ss-caption" value="${this.escapeHtml(ss.caption || '')}" placeholder="e.g. Trino Query 1 Terminal Output showing 0 failures">
+            ` : `
+              <div style="font-weight: 600; font-size: 12px; color: var(--text-color);">${this.escapeHtml(ss.caption || ss.name || `Evidence #${idx + 1}`)}</div>
+            `}
             <div style="font-size: 10px; color: var(--text-muted); margin-top: 3px;">${this.escapeHtml(ss.name || 'image.png')}</div>
           </div>
           <div>
@@ -11041,16 +12896,22 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
               `).join('')}
             </select>
           </div>
-          <div>
-            <label class="form-label" style="font-size: 11px; margin-bottom: 2px;">PDF Placement</label>
-            <select class="form-control form-control-sm ss-placement-select">
-              <option value="under_query" ${ss.placement === 'under_query' ? 'selected' : ''}>Under Query</option>
-              <option value="executive_summary" ${ss.placement === 'executive_summary' ? 'selected' : ''}>In Exec Summary</option>
-              <option value="data_sources" ${ss.placement === 'data_sources' ? 'selected' : ''}>Next to Mappings</option>
-              <option value="executions" ${ss.placement === 'executions' ? 'selected' : ''}>Under Executions</option>
-              <option value="appendix" ${ss.placement === 'appendix' ? 'selected' : ''}>Appendix at End</option>
-            </select>
-          </div>
+          ${hasPlacement ? `
+            <div>
+              <label class="form-label" style="font-size: 11px; margin-bottom: 2px;">PDF Placement</label>
+              <select class="form-control form-control-sm ss-placement-select">
+                <option value="under_query" ${ss.placement === 'under_query' ? 'selected' : ''}>Under Query</option>
+                <option value="executive_summary" ${ss.placement === 'executive_summary' ? 'selected' : ''}>In Exec Summary</option>
+                <option value="data_sources" ${ss.placement === 'data_sources' ? 'selected' : ''}>Next to Mappings</option>
+                <option value="executions" ${ss.placement === 'executions' ? 'selected' : ''}>Under Executions</option>
+                <option value="appendix" ${ss.placement === 'appendix' ? 'selected' : ''}>Appendix at End</option>
+              </select>
+            </div>
+          ` : `
+            <div style="font-size: 11px; color: var(--text-muted); display: flex; align-items: center;">
+              <span>Placement: Under Query (Default)</span>
+            </div>
+          `}
           <div style="display: flex; flex-direction: column; gap: 4px; align-items: flex-end;">
             <div style="display: flex; gap: 2px;">
               <button type="button" class="btn btn-outline btn-sm btn-ss-move-up" data-idx="${idx}" title="Move up" style="padding: 2px 6px;">▲</button>
