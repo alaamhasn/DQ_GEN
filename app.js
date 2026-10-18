@@ -1520,16 +1520,6 @@
       const inReviewDocs = this.documents.filter(d => (d.status || '').toLowerCase() === 'in review' || (d.status || '').toLowerCase() === 'review').length;
       const draftDocs = this.documents.filter(d => (d.status || '').toLowerCase() === 'draft' || !d.status).length;
 
-      // Quality Health Score Calculation
-      let healthScore = 100;
-      if (execCount > 0) {
-        const baseRate = (passedCount / execCount) * 100;
-        const penalty = criticalIssues * 5;
-        healthScore = Math.max(0, Math.min(100, Math.round(baseRate - penalty)));
-      } else if (openIssues > 0) {
-        healthScore = Math.max(70, 100 - openIssues * 5);
-      }
-
       // Dimension breakdown
       const dimCounts = {};
       this.rules.forEach(r => {
@@ -1557,13 +1547,9 @@
               </p>
             </div>
             <div class="dash-hero-actions">
-              <div class="dash-hero-health-card">
-                <div class="dash-health-ring">${healthScore}%</div>
-                <div class="dash-health-info">
-                  <span class="dash-health-label">Quality Health Index</span>
-                  <span class="dash-health-val">${healthScore >= 90 ? '🟢 Optimal Health' : (healthScore >= 75 ? '🟡 Stable' : '🔴 Action Needed')}</span>
-                </div>
-              </div>
+              <button class="btn btn-outline" id="dash-hero-btn-templates" style="padding: 10px 16px; font-weight: 600; background: #FFFFFF;">
+                <span>📋</span> Use Template
+              </button>
               <button class="btn btn-primary" id="dash-hero-btn-new-doc" style="padding: 10px 18px; font-weight: 700;">
                 <span>➕</span> New Document
               </button>
@@ -2040,6 +2026,9 @@
         this.currentDoc = null;
         this.currentEditorTab = 'tab-meta';
         this.navigateTo('editor');
+      });
+      document.getElementById('dash-hero-btn-templates')?.addEventListener('click', () => {
+        this.navigateTo('templates');
       });
       document.getElementById('dash-tile-docs')?.addEventListener('click', () => this.navigateTo('documents'));
       document.getElementById('dash-tile-executions')?.addEventListener('click', () => this.navigateTo('executions'));
