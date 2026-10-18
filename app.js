@@ -1633,46 +1633,6 @@
             </div>
           </div>
 
-          <!-- 3. Dual Visual Analytics Row (Charts) -->
-          <div class="grid-cols-2">
-            <!-- Chart A: Rules by Dimension -->
-            <div class="dash-chart-card">
-              <div class="card-header">
-                <div class="card-title">
-                  <span>📊</span> Validation Rules by Quality Dimension
-                </div>
-                <span class="badge badge-info" id="dash-badge-dim-count">${Object.keys(dimCounts).length} Dimensions</span>
-              </div>
-              <div class="dash-chart-body">
-                <div style="height: 190px; position: relative;">
-                  <canvas id="dash-chart-dimensions"></canvas>
-                </div>
-                <div class="dash-chart-legend" id="dash-dim-legend"></div>
-              </div>
-            </div>
-
-            <!-- Chart B: Execution Outcomes & Health Pipeline -->
-            <div class="dash-chart-card">
-              <div class="card-header">
-                <div class="card-title">
-                  <span>📈</span> Quality Execution Status & Run Outcomes
-                </div>
-                <span class="badge ${failedCount === 0 ? 'badge-success' : 'badge-danger'}">
-                  ${failedCount === 0 ? 'Healthy' : `${failedCount} Failed`}
-                </span>
-              </div>
-              <div class="dash-chart-body">
-                <div style="height: 190px; position: relative;">
-                  <canvas id="dash-chart-executions"></canvas>
-                </div>
-                <div class="dash-chart-legend">
-                  <span class="dash-legend-chip"><span class="dash-legend-chip-dot" style="background: #10B981;"></span> Passed: ${passedCount}</span>
-                  <span class="dash-legend-chip"><span class="dash-legend-chip-dot" style="background: #EF4444;"></span> Failed: ${failedCount}</span>
-                  <span class="dash-legend-chip"><span class="dash-legend-chip-dot" style="background: #F59E0B;"></span> Warnings: ${warningCount}</span>
-                </div>
-              </div>
-            </div>
-          </div>
 
           <!-- 4. Recent Specifications & Quality Contracts Table -->
           <div class="card" style="box-shadow: var(--shadow-sm);">
@@ -1900,86 +1860,10 @@
         });
       }
 
-      // Render Charts with Chart.js
-      if (window.Chart) {
-        if (this._dashCharts) {
-          if (this._dashCharts.dimChart) { try { this._dashCharts.dimChart.destroy(); } catch(e) {} }
-          if (this._dashCharts.execChart) { try { this._dashCharts.execChart.destroy(); } catch(e) {} }
-        }
+      if (this._dashCharts) {
+        if (this._dashCharts.dimChart) { try { this._dashCharts.dimChart.destroy(); } catch(e) {} }
+        if (this._dashCharts.execChart) { try { this._dashCharts.execChart.destroy(); } catch(e) {} }
         this._dashCharts = {};
-
-        // 1. Dimensions Chart
-        const dimLabels = Object.keys(dimCounts).length > 0 ? Object.keys(dimCounts) : ['Completeness', 'Validity', 'Uniqueness', 'Accuracy', 'Consistency', 'Timeliness'];
-        const dimData = Object.keys(dimCounts).length > 0 ? Object.values(dimCounts) : [2, 1, 1, 1, 1, 0];
-        const dimColors = ['#1F4E79', '#4472C4', '#00A6A6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#64748B'];
-
-        const ctxDim = document.getElementById('dash-chart-dimensions');
-        if (ctxDim) {
-          this._dashCharts.dimChart = new Chart(ctxDim, {
-            type: 'doughnut',
-            data: {
-              labels: dimLabels,
-              datasets: [{
-                data: dimData,
-                backgroundColor: dimColors.slice(0, dimLabels.length),
-                borderWidth: 2,
-                borderColor: '#ffffff'
-              }]
-            },
-            options: {
-              responsive: true,
-              maintainAspectRatio: false,
-              plugins: {
-                legend: { display: false },
-                tooltip: {
-                  callbacks: {
-                    label: (ctx) => ` ${ctx.label}: ${ctx.raw} rules`
-                  }
-                }
-              },
-              cutout: '65%'
-            }
-          });
-
-          // Render custom legend chips
-          const legendBox = document.getElementById('dash-dim-legend');
-          if (legendBox) {
-            legendBox.innerHTML = dimLabels.map((lbl, idx) => `
-              <span class="dash-legend-chip">
-                <span class="dash-legend-chip-dot" style="background: ${dimColors[idx % dimColors.length]};"></span>
-                ${this.escapeHtml(lbl)}: ${dimData[idx]}
-              </span>
-            `).join('');
-          }
-        }
-
-        // 2. Execution Chart
-        const ctxExec = document.getElementById('dash-chart-executions');
-        if (ctxExec) {
-          const passCount = passedCount > 0 || failedCount > 0 ? passedCount : (execCount === 0 ? 1 : 0);
-          const failCount = failedCount;
-          const warnCount = warningCount;
-          this._dashCharts.execChart = new Chart(ctxExec, {
-            type: 'doughnut',
-            data: {
-              labels: ['Passed', 'Failed', 'Warnings'],
-              datasets: [{
-                data: [passCount, failCount, warnCount],
-                backgroundColor: ['#10B981', '#EF4444', '#F59E0B'],
-                borderWidth: 2,
-                borderColor: '#ffffff'
-              }]
-            },
-            options: {
-              responsive: true,
-              maintainAspectRatio: false,
-              plugins: {
-                legend: { display: false }
-              },
-              cutout: '65%'
-            }
-          });
-        }
       }
 
       // Render Activity Stream from Audit Logs
