@@ -3477,6 +3477,7 @@
           validationType: defaultType,
           team: profile.name,
           usernames: defaultAuthorName ? [defaultAuthorName] : [],
+          activeSections: ['quick_types', 'bulk_import', 'catalog_picker', 'custom_rule_builder'],
           dynamicInputs: [],
           validatedModels: [],
           validatedTables: [],
@@ -3967,7 +3968,7 @@
 
           <!-- CARD 7A: COMPOSITE MULTI-VALIDATION (MODELS) (ADDON) -->
           ${this.isAddonActive(doc, 'validated_models') ? `
-            <div id="section-validated-models" class="addon-section-card" style="${(doc.validationType === 'Model Validation' || doc.validationType === 'Model and Table Validation') ? '' : 'display: none;'} margin-bottom: 20px;">
+            <div id="addon-card-validated_models" class="addon-section-card" style="margin-bottom: 20px;">
               <div class="card" style="border: 1px solid var(--surface-border-strong);">
                 <div class="card-header" style="background: var(--surface-alt); padding: 12px 20px; justify-content: space-between; align-items: center;">
                   <div style="display: flex; align-items: center; gap: 8px;">
@@ -4021,7 +4022,7 @@
 
           <!-- CARD 7B: COMPOSITE MULTI-VALIDATION (PHYSICAL TABLES) (ADDON) -->
           ${this.isAddonActive(doc, 'validated_tables') ? `
-            <div id="section-validated-tables" class="addon-section-card" style="${(doc.validationType === 'Table Validation' || doc.validationType === 'Model and Table Validation') ? '' : 'display: none;'} margin-bottom: 20px;">
+            <div id="addon-card-validated_tables" class="addon-section-card" style="margin-bottom: 20px;">
               <div class="card" style="border: 1px solid var(--surface-border-strong);">
                 <div class="card-header" style="background: var(--surface-alt); padding: 12px 20px; justify-content: space-between; align-items: center;">
                   <div style="display: flex; align-items: center; gap: 8px;">
@@ -4246,11 +4247,21 @@
                       <th>Target Column</th>
                       <th>Data Type</th>
                       ${this.isAddonActive(doc, 'transform_rules') ? `
-                        <th>Transformation Logic</th>
+                        <th>
+                          <div style="display: flex; align-items: center; justify-content: space-between; gap: 4px;">
+                            <span>Transformation Logic</span>
+                            <button type="button" class="btn-remove-addon-card" data-tab="tab-sources" data-addon-id="transform_rules" title="Remove Transformation Rules from table" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:12px; padding:0 2px;">&times;</button>
+                          </div>
+                        </th>
                         <th>Nullable?</th>
                       ` : ''}
                       ${this.isAddonActive(doc, 'column_descriptions') ? `
-                        <th>Description</th>
+                        <th>
+                          <div style="display: flex; align-items: center; justify-content: space-between; gap: 4px;">
+                            <span>Description</span>
+                            <button type="button" class="btn-remove-addon-card" data-tab="tab-sources" data-addon-id="column_descriptions" title="Remove Descriptions from table" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:12px; padding:0 2px;">&times;</button>
+                          </div>
+                        </th>
                       ` : ''}
                       <th></th>
                     </tr>
@@ -4297,12 +4308,23 @@
                   <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Verification assertions and quality dimension thresholds</div>
                 </div>
               </div>
-              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
                 ${this.isAddonActive(doc, 'catalog_picker') ? `
-                  <button class="btn btn-outline btn-sm" id="btn-doc-pick-rule-catalog">🛡️ Add from Rule Catalog</button>
+                  <div style="display: inline-flex; align-items: center; gap: 4px;">
+                    <button class="btn btn-outline btn-sm" id="btn-doc-pick-rule-catalog">🛡️ Add from Rule Catalog</button>
+                    <button type="button" class="btn-remove-addon-card" data-tab="tab-rules" data-addon-id="catalog_picker" title="Remove Rule Catalog Browser" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:12px; padding:0 2px;">&times;</button>
+                  </div>
                 ` : ''}
                 ${this.isAddonActive(doc, 'custom_rule_builder') ? `
-                  <button class="btn btn-primary btn-sm" id="btn-doc-add-custom-rule">➕ Add Custom Rule</button>
+                  <div style="display: inline-flex; align-items: center; gap: 4px;">
+                    <button class="btn btn-primary btn-sm" id="btn-doc-add-custom-rule">➕ Add Custom Rule</button>
+                    <button type="button" class="btn-remove-addon-card" data-tab="tab-rules" data-addon-id="custom_rule_builder" title="Remove Custom Rule Builder" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:12px; padding:0 2px;">&times;</button>
+                  </div>
+                ` : ''}
+                ${(!this.isAddonActive(doc, 'catalog_picker') && !this.isAddonActive(doc, 'custom_rule_builder')) ? `
+                  <button type="button" class="btn btn-outline btn-sm btn-addons-wheel-trigger" data-tab="tab-rules">
+                    <span class="wheel-icon-spin">🎡</span> Add Rule Tools
+                  </button>
                 ` : ''}
               </div>
             </div>
@@ -4351,10 +4373,13 @@
               <span class="card-title" style="margin: 0; font-size: 16px; font-weight: 700; color: var(--primary-color);">${docProfileKey === 'data_analysis' ? 'Analytical Queries & Business Computations' : docProfileKey === 'data_engineering' ? 'Transformation, Ingestion & Operational SQL' : docProfileKey === 'data_modelling' ? 'DDL, Schema Definitions & Modeling Queries' : 'SQL Assertions & Verification Queries'}</span>
               <span class="badge badge-info" id="badge-sql-query-count">${(doc.sqlQueries || []).length} ${(doc.sqlQueries || []).length === 1 ? 'Query' : 'Queries'}</span>
             </div>
-            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
               ${this.isAddonActive(doc, 'secondary_queries') ? `
                 <button class="btn btn-outline btn-sm" id="btn-copy-all-sql-queries" title="Copy all SQL queries combined into clipboard">📑 Copy All Queries</button>
-                <button class="btn btn-primary btn-sm" id="btn-add-new-sql-query" title="Add another SQL query to this document">➕ Add SQL Query</button>
+                <div style="display: inline-flex; align-items: center; gap: 4px;">
+                  <button class="btn btn-primary btn-sm" id="btn-add-new-sql-query" title="Add another SQL query to this document">➕ Add SQL Query</button>
+                  <button type="button" class="btn-remove-addon-card" data-tab="tab-sql" data-addon-id="secondary_queries" title="Disable Multi-Query support (keep Primary Query)" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:12px; padding:0 2px;">&times;</button>
+                </div>
               ` : ''}
             </div>
           </div>
@@ -4434,10 +4459,24 @@
           ${this.renderTabAddonsBarHtml('tab-screenshots', '5. Screenshots & Evidence', doc)}
           
           <div class="card">
-            <div class="card-header" style="justify-content: space-between; align-items: center; background: var(--surface-alt); padding: 12px 20px;">
-              <div>
-                <span class="card-title">📸 Screenshot Images & Evidence</span>
-                <span style="font-size: 12px; color: var(--text-muted); margin-left: 8px;">Attach terminal execution outputs, query proof, or validation charts</span>
+            <div class="card-header" style="justify-content: space-between; align-items: center; background: var(--surface-alt); padding: 12px 20px; flex-wrap: wrap; gap: 8px;">
+              <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <div>
+                  <span class="card-title">📸 Screenshot Images & Evidence</span>
+                  <span style="font-size: 12px; color: var(--text-muted); margin-left: 8px;">Attach terminal execution outputs, query proof, or validation charts</span>
+                </div>
+                ${this.isAddonActive(doc, 'technical_captions') ? `
+                  <span class="badge badge-info" style="font-size: 11px; display: inline-flex; align-items: center; gap: 4px;">
+                    ✍️ Captions
+                    <button type="button" class="btn-remove-addon-card" data-tab="tab-screenshots" data-addon-id="technical_captions" title="Remove Technical Captions" style="background:none; border:none; color:inherit; cursor:pointer; font-size:12px; padding:0 2px;">&times;</button>
+                  </span>
+                ` : ''}
+                ${this.isAddonActive(doc, 'placement_config') ? `
+                  <span class="badge badge-info" style="font-size: 11px; display: inline-flex; align-items: center; gap: 4px;">
+                    🏷️ Placement Config
+                    <button type="button" class="btn-remove-addon-card" data-tab="tab-screenshots" data-addon-id="placement_config" title="Remove Layout & Placement Config" style="background:none; border:none; color:inherit; cursor:pointer; font-size:12px; padding:0 2px;">&times;</button>
+                  </span>
+                ` : ''}
               </div>
               <span class="badge badge-info" id="badge-tab-ss-count-header">${(doc.screenshots || []).length} Screenshot(s)</span>
             </div>
@@ -4867,15 +4906,7 @@
             });
           }
 
-          // Toggle composite models/tables visibility
-          const secModels = document.getElementById('section-validated-models');
-          const secTables = document.getElementById('section-validated-tables');
-          if (secModels) {
-            secModels.style.display = (selectedType === 'Model Validation' || selectedType === 'Model and Table Validation') ? '' : 'none';
-          }
-          if (secTables) {
-            secTables.style.display = (selectedType === 'Table Validation' || selectedType === 'Model and Table Validation') ? '' : 'none';
-          }
+          // Composite models & tables remain controlled by Addons Wheel
         });
       });
 
@@ -5474,6 +5505,7 @@
         doc.sqlNotes = doc.sqlQueries[0]?.notes || '';
       }
 
+      if (document.getElementById('doc-input-sql-notes')) doc.sqlNotes = document.getElementById('doc-input-sql-notes').value;
       if (document.getElementById('doc-input-expected-result')) doc.expectedResult = document.getElementById('doc-input-expected-result').value;
       if (document.getElementById('doc-input-actual-result')) doc.actualResult = document.getElementById('doc-input-actual-result').value;
       if (document.getElementById('doc-input-threshold')) doc.threshold = document.getElementById('doc-input-threshold').value;
@@ -6174,23 +6206,6 @@
         }
       });
 
-      // Spoke click: highlights the card in the deck
-      overlay.querySelectorAll('.addons-wheel-spoke').forEach(spoke => {
-        spoke.addEventListener('click', () => {
-          const addonId = spoke.dataset.addonId;
-          const card = overlay.querySelector(`.addon-deck-card[data-addon-id="${addonId}"]`);
-          if (card) {
-            card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            card.style.borderColor = 'var(--accent-color)';
-            card.style.boxShadow = '0 0 15px rgba(0, 166, 166, 0.4)';
-            setTimeout(() => {
-              card.style.borderColor = '';
-              card.style.boxShadow = '';
-            }, 1200);
-          }
-        });
-      });
-
       // Interactive in-place toggle inside the modal
       const toggleModalAddon = (addonId, forceState) => {
         if (!Array.isArray(doc.activeSections)) {
@@ -6280,6 +6295,25 @@
           this.showToast(`Removed "${name}" from tab. Still available on wheel.`, 'info');
         }
       };
+
+      // Spoke click: toggles addon and highlights card in deck
+      overlay.querySelectorAll('.addons-wheel-spoke').forEach(spoke => {
+        spoke.addEventListener('click', () => {
+          const addonId = spoke.dataset.addonId;
+          toggleModalAddon(addonId);
+          const card = overlay.querySelector(`.addon-deck-card[data-addon-id="${addonId}"]`);
+          if (card) {
+            card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            card.style.borderColor = 'var(--accent-color)';
+            card.style.boxShadow = '0 0 15px rgba(0, 166, 166, 0.4)';
+            setTimeout(() => {
+              card.style.borderColor = '';
+              card.style.boxShadow = '';
+            }, 1200);
+          }
+        });
+      });
+
 
       // Add / Remove buttons initial attachment
       overlay.querySelectorAll('.btn-deck-add').forEach(btn => {
