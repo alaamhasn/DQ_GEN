@@ -9147,7 +9147,7 @@ WHERE order_id IS NULL
           <div class="form-group">
             <label class="form-label">SQL Dialect</label>
             <select id="lib-in-dialect" class="form-control">
-              <option value="Trino">Trino</option>
+              <option value="Trino" selected>Trino</option>
               <option value="Snowflake">Snowflake</option>
               <option value="PostgreSQL">PostgreSQL</option>
               <option value="BigQuery">BigQuery</option>
@@ -9161,9 +9161,44 @@ WHERE order_id IS NULL
             <input type="text" id="lib-in-docid" class="form-control" placeholder="e.g. DOC-20261011-001">
           </div>
         </div>
-        <div class="form-group">
-          <label class="form-label required">SQL Assertion Query</label>
-          <textarea id="lib-in-sql" class="form-control" rows="5" spellcheck="false" placeholder="SELECT * FROM table WHERE ..."></textarea>
+        <div class="form-group" style="margin-bottom: 14px;">
+          <label class="form-label required" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span style="font-weight: 700;">SQL Assertion Query</span>
+            <span style="font-size: 11px; color: var(--text-muted); font-weight: 500;">Tab key indents 2 spaces • Exact assertion logic preserved</span>
+          </label>
+          <div class="sql-editor-container" style="border: 1px solid #1E293B; border-radius: 8px; overflow: hidden; background: #0F172A; box-shadow: 0 4px 14px rgba(0,0,0,0.35);">
+            <div class="sql-editor-toolbar" style="display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; background: #1E293B; border-bottom: 1px solid #334155; flex-wrap: wrap; gap: 8px;">
+              <div class="sql-toolbar-left" style="display: flex; align-items: center; gap: 8px; font-family: monospace; font-size: 11px; color: #94A3B8;">
+                <span class="terminal-dot red" style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#EF4444;"></span>
+                <span class="terminal-dot yellow" style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#F59E0B;"></span>
+                <span class="terminal-dot green" style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#10B981;"></span>
+                <span class="badge" id="lib-in-sql-dialect-badge" style="background: #334155; color: #38BDF8; font-weight: 600; padding: 2px 7px; border-radius: 4px; font-size: 10.5px;">Trino</span>
+                <span id="lib-in-sql-stats" style="color: #CBD5E1;">1 line</span>
+              </div>
+              <div class="sql-toolbar-right" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                <select id="lib-in-sql-snippet-select" class="form-control form-control-sm" style="padding: 2px 8px; font-size: 11px; height: 26px; width: 180px; background: #334155 !important; color: #FFFFFF !important; border: 1px solid #64748B !important; font-weight: 500;">
+                  <option value="">⚡ Insert Assertion Template...</option>
+                  <option value="null_check">Null / Missing Value Check</option>
+                  <option value="duplicate_check">Duplicate Primary Key Check</option>
+                  <option value="range_check">Boundary & Range Check</option>
+                  <option value="referential_check">Foreign Key Orphan Check</option>
+                  <option value="date_freshness_check">Date & Freshness Lag Check</option>
+                  <option value="regex_format_check">Pattern / Regex Format Check</option>
+                  <option value="exec_verify_query">Verification Assertion Query</option>
+                  <option value="exec_defect_audit">Defect Rate & Volume Audit</option>
+                </select>
+                <button type="button" class="btn btn-sm sql-btn-format" id="btn-format-lib-sql" style="background: #0284C7 !important; color: #FFFFFF !important; border: 1px solid #38BDF8 !important; font-weight: 700 !important; padding: 2px 10px; font-size: 11px; height: 26px; box-shadow: 0 1px 3px rgba(2, 132, 199, 0.4);" title="Beautify & capitalize SQL keywords">🎨 Format</button>
+                <button type="button" class="btn btn-sm sql-btn-syntax" id="btn-toggle-lib-syntax" style="background: #7C3AED !important; color: #FFFFFF !important; border: 1px solid #A78BFA !important; font-weight: 700 !important; padding: 2px 10px; font-size: 11px; height: 26px; box-shadow: 0 1px 3px rgba(124, 58, 237, 0.4);" title="Toggle syntax-highlighted preview">👁️ Syntax</button>
+                <button type="button" class="btn btn-sm sql-btn-copy" id="btn-copy-lib-sql" style="background: #059669 !important; color: #FFFFFF !important; border: 1px solid #34D399 !important; font-weight: 700 !important; padding: 2px 10px; font-size: 11px; height: 26px; box-shadow: 0 1px 3px rgba(5, 150, 105, 0.4);" title="Copy query to clipboard">📋 Copy</button>
+                <button type="button" class="btn btn-sm sql-btn-clear" id="btn-clear-lib-sql" style="background: #DC2626 !important; color: #FFFFFF !important; border: 1px solid #F87171 !important; font-weight: 700 !important; padding: 2px 10px; font-size: 11px; height: 26px; box-shadow: 0 1px 3px rgba(220, 38, 38, 0.4);" title="Clear editor content">🧹 Clear</button>
+              </div>
+            </div>
+            <div class="sql-editor-body" style="position: relative; display: flex; min-height: 180px; max-height: 300px; overflow: auto; background: #0F172A; font-family: 'Consolas', 'Fira Code', 'Courier New', monospace; font-size: 12.5px; line-height: 1.6;">
+              <div id="lib-in-sql-lines" class="sql-line-numbers" style="padding: 10px 8px; background: #090D16; color: #64748B; text-align: right; user-select: none; border-right: 1px solid #1E293B; min-width: 40px; white-space: pre-line; font-size: 12px;">1</div>
+              <textarea id="lib-in-sql" class="sql-input-area" spellcheck="false" style="flex: 1; padding: 10px 12px; background: transparent; color: #F8FAFC; border: none; outline: none; font-family: inherit; font-size: inherit; line-height: inherit; resize: none; white-space: pre; overflow-wrap: normal; overflow-x: auto;" placeholder="-- Enter SQL validation assertion here...&#10;SELECT *&#10;FROM target_table&#10;WHERE column_name IS NULL;"></textarea>
+            </div>
+            <div id="lib-in-sql-preview" class="sql-syntax-preview" style="max-height: 250px; font-size: 12px; padding: 10px 14px;"></div>
+          </div>
         </div>
         <div class="form-group">
           <label class="form-label">Execution Notes / Context</label>
@@ -9204,7 +9239,22 @@ WHERE order_id IS NULL
           this.renderSqlLibrary(document.getElementById('main-content-view'));
           this.showToast('SQL assertion query saved to library', 'success');
         }}
-      ]);
+      ], { size: 'lg' });
+
+      // Initialize the modal SQL Editor controls
+      this.initModalSqlEditorControls({
+        textareaId: 'lib-in-sql',
+        linesId: 'lib-in-sql-lines',
+        statsId: 'lib-in-sql-stats',
+        dialectSelectId: 'lib-in-dialect',
+        dialectBadgeId: 'lib-in-sql-dialect-badge',
+        formatBtnId: 'btn-format-lib-sql',
+        syntaxBtnId: 'btn-toggle-lib-syntax',
+        copyBtnId: 'btn-copy-lib-sql',
+        clearBtnId: 'btn-clear-lib-sql',
+        previewId: 'lib-in-sql-preview',
+        snippetSelectId: 'lib-in-sql-snippet-select'
+      });
     },
 
     showEditSqlAssertionModal(id) {
@@ -9234,9 +9284,44 @@ WHERE order_id IS NULL
             <input type="text" id="lib-edit-docid" class="form-control" value="${this.escapeHtml(item.documentId || '')}">
           </div>
         </div>
-        <div class="form-group">
-          <label class="form-label required">SQL Assertion Query</label>
-          <textarea id="lib-edit-sql" class="form-control" rows="5" spellcheck="false">${this.escapeHtml(item.sql || '')}</textarea>
+        <div class="form-group" style="margin-bottom: 14px;">
+          <label class="form-label required" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span style="font-weight: 700;">SQL Assertion Query</span>
+            <span style="font-size: 11px; color: var(--text-muted); font-weight: 500;">Tab key indents 2 spaces • Exact query preserved</span>
+          </label>
+          <div class="sql-editor-container" style="border: 1px solid #1E293B; border-radius: 8px; overflow: hidden; background: #0F172A; box-shadow: 0 4px 14px rgba(0,0,0,0.35);">
+            <div class="sql-editor-toolbar" style="display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; background: #1E293B; border-bottom: 1px solid #334155; flex-wrap: wrap; gap: 8px;">
+              <div class="sql-toolbar-left" style="display: flex; align-items: center; gap: 8px; font-family: monospace; font-size: 11px; color: #94A3B8;">
+                <span class="terminal-dot red" style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#EF4444;"></span>
+                <span class="terminal-dot yellow" style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#F59E0B;"></span>
+                <span class="terminal-dot green" style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#10B981;"></span>
+                <span class="badge" id="lib-edit-sql-dialect-badge" style="background: #334155; color: #38BDF8; font-weight: 600; padding: 2px 7px; border-radius: 4px; font-size: 10.5px;">${this.escapeHtml(item.dialect || 'Trino')}</span>
+                <span id="lib-edit-sql-stats" style="color: #CBD5E1;">1 line</span>
+              </div>
+              <div class="sql-toolbar-right" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                <select id="lib-edit-sql-snippet-select" class="form-control form-control-sm" style="padding: 2px 8px; font-size: 11px; height: 26px; width: 180px; background: #334155 !important; color: #FFFFFF !important; border: 1px solid #64748B !important; font-weight: 500;">
+                  <option value="">⚡ Insert Assertion Template...</option>
+                  <option value="null_check">Null / Missing Value Check</option>
+                  <option value="duplicate_check">Duplicate Primary Key Check</option>
+                  <option value="range_check">Boundary & Range Check</option>
+                  <option value="referential_check">Foreign Key Orphan Check</option>
+                  <option value="date_freshness_check">Date & Freshness Lag Check</option>
+                  <option value="regex_format_check">Pattern / Regex Format Check</option>
+                  <option value="exec_verify_query">Verification Assertion Query</option>
+                  <option value="exec_defect_audit">Defect Rate & Volume Audit</option>
+                </select>
+                <button type="button" class="btn btn-sm sql-btn-format" id="btn-format-lib-edit-sql" style="background: #0284C7 !important; color: #FFFFFF !important; border: 1px solid #38BDF8 !important; font-weight: 700 !important; padding: 2px 10px; font-size: 11px; height: 26px; box-shadow: 0 1px 3px rgba(2, 132, 199, 0.4);" title="Beautify & capitalize SQL keywords">🎨 Format</button>
+                <button type="button" class="btn btn-sm sql-btn-syntax" id="btn-toggle-lib-edit-syntax" style="background: #7C3AED !important; color: #FFFFFF !important; border: 1px solid #A78BFA !important; font-weight: 700 !important; padding: 2px 10px; font-size: 11px; height: 26px; box-shadow: 0 1px 3px rgba(124, 58, 237, 0.4);" title="Toggle syntax-highlighted preview">👁️ Syntax</button>
+                <button type="button" class="btn btn-sm sql-btn-copy" id="btn-copy-lib-edit-sql" style="background: #059669 !important; color: #FFFFFF !important; border: 1px solid #34D399 !important; font-weight: 700 !important; padding: 2px 10px; font-size: 11px; height: 26px; box-shadow: 0 1px 3px rgba(5, 150, 105, 0.4);" title="Copy query to clipboard">📋 Copy</button>
+                <button type="button" class="btn btn-sm sql-btn-clear" id="btn-clear-lib-edit-sql" style="background: #DC2626 !important; color: #FFFFFF !important; border: 1px solid #F87171 !important; font-weight: 700 !important; padding: 2px 10px; font-size: 11px; height: 26px; box-shadow: 0 1px 3px rgba(220, 38, 38, 0.4);" title="Clear editor content">🧹 Clear</button>
+              </div>
+            </div>
+            <div class="sql-editor-body" style="position: relative; display: flex; min-height: 180px; max-height: 300px; overflow: auto; background: #0F172A; font-family: 'Consolas', 'Fira Code', 'Courier New', monospace; font-size: 12.5px; line-height: 1.6;">
+              <div id="lib-edit-sql-lines" class="sql-line-numbers" style="padding: 10px 8px; background: #090D16; color: #64748B; text-align: right; user-select: none; border-right: 1px solid #1E293B; min-width: 40px; white-space: pre-line; font-size: 12px;">1</div>
+              <textarea id="lib-edit-sql" class="sql-input-area" spellcheck="false" style="flex: 1; padding: 10px 12px; background: transparent; color: #F8FAFC; border: none; outline: none; font-family: inherit; font-size: inherit; line-height: inherit; resize: none; white-space: pre; overflow-wrap: normal; overflow-x: auto;" placeholder="SELECT * FROM table WHERE ...">${this.escapeHtml(item.sql || '')}</textarea>
+            </div>
+            <div id="lib-edit-sql-preview" class="sql-syntax-preview" style="max-height: 250px; font-size: 12px; padding: 10px 14px;"></div>
+          </div>
         </div>
         <div class="form-group">
           <label class="form-label">Execution Notes / Context</label>
@@ -9269,7 +9354,22 @@ WHERE order_id IS NULL
           this.renderSqlLibrary(document.getElementById('main-content-view'));
           this.showToast('SQL assertion updated successfully', 'success');
         }}
-      ]);
+      ], { size: 'lg' });
+
+      // Initialize the modal SQL Editor controls
+      this.initModalSqlEditorControls({
+        textareaId: 'lib-edit-sql',
+        linesId: 'lib-edit-sql-lines',
+        statsId: 'lib-edit-sql-stats',
+        dialectSelectId: 'lib-edit-dialect',
+        dialectBadgeId: 'lib-edit-sql-dialect-badge',
+        formatBtnId: 'btn-format-lib-edit-sql',
+        syntaxBtnId: 'btn-toggle-lib-edit-syntax',
+        copyBtnId: 'btn-copy-lib-edit-sql',
+        clearBtnId: 'btn-clear-lib-edit-sql',
+        previewId: 'lib-edit-sql-preview',
+        snippetSelectId: 'lib-edit-sql-snippet-select'
+      });
     },
 
     async deleteSqlAssertion(id) {
