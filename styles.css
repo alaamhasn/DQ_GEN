@@ -4235,6 +4235,294 @@ html, body {
   box-sizing: border-box;
 }
 
+/* ====================================================================
+   DOCUMENT EDITOR ACTION BAR & DROPDOWN MENUS (Option 1)
+   ==================================================================== */
+.editor-action-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  background: var(--surface-color);
+  padding: 12px 18px;
+  border-radius: var(--border-radius-md);
+  border: 1px solid var(--surface-border);
+  box-shadow: var(--shadow-sm);
+  flex-wrap: wrap;
+  gap: 12px;
+  position: relative;
+}
+
+.editor-action-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.btn-editor-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  transition: all var(--transition-fast);
+}
+
+.btn-editor-back:hover {
+  background: var(--surface-alt);
+  transform: translateX(-2px);
+}
+
+.editor-action-btns {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* Editor Dropdown Component */
+.editor-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.editor-dropdown .dropdown-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  transition: all var(--transition-fast);
+  padding: 6px 12px;
+  border-radius: var(--border-radius-sm);
+}
+
+.editor-dropdown.open .dropdown-toggle,
+.editor-dropdown .dropdown-toggle:hover {
+  background: var(--surface-alt);
+  border-color: var(--secondary-color, #4472C4);
+  color: var(--secondary-color, #4472C4);
+  box-shadow: var(--shadow-sm);
+}
+
+.editor-dropdown .dropdown-caret {
+  display: inline-block;
+  font-size: 10px;
+  transition: transform var(--transition-fast);
+  color: var(--text-muted);
+}
+
+.editor-dropdown.open .dropdown-caret {
+  transform: rotate(180deg);
+  color: var(--secondary-color, #4472C4);
+}
+
+.editor-dropdown .dropdown-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  left: auto;
+  min-width: 280px;
+  max-width: min(340px, calc(100vw - 24px));
+  max-height: 420px;
+  background: var(--surface-color);
+  border: 1px solid var(--surface-border-strong);
+  border-radius: var(--border-radius-md);
+  box-shadow: 0 14px 35px -4px rgba(0, 0, 0, 0.18), 0 8px 16px -4px rgba(0, 0, 0, 0.1);
+  padding: 6px;
+  z-index: 1050;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  animation: editorDropdownFadeIn 0.15s ease-out;
+}
+
+.editor-dropdown .dropdown-menu.dropdown-menu-right {
+  right: 0;
+  left: auto;
+}
+
+/* Dropup: opens upward above the toggle button */
+.editor-dropdown.dropup .dropdown-menu {
+  top: auto;
+  bottom: calc(100% + 4px);
+  box-shadow: 0 -14px 35px -4px rgba(0, 0, 0, 0.18), 0 -8px 16px -4px rgba(0, 0, 0, 0.1);
+}
+
+.editor-dropdown.open > .dropdown-menu {
+  display: block;
+}
+
+@keyframes editorDropdownFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.editor-dropdown .dropdown-header {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: var(--text-muted);
+  padding: 6px 10px 4px 10px;
+  user-select: none;
+}
+
+.editor-dropdown .dropdown-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--border-radius-sm);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  text-decoration: none;
+  color: var(--text-color);
+  box-sizing: border-box;
+}
+
+.editor-dropdown .dropdown-item:hover,
+.editor-dropdown .dropdown-item:focus {
+  background: var(--surface-alt);
+  color: var(--primary-color);
+  outline: none;
+}
+
+.editor-dropdown .dropdown-item-icon {
+  font-size: 16px;
+  width: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.editor-dropdown .dropdown-item-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.editor-dropdown .dropdown-item-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text-color);
+}
+
+.editor-dropdown .dropdown-item:hover .dropdown-item-title {
+  color: var(--primary-color);
+}
+
+.editor-dropdown .dropdown-item-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.25;
+  margin-top: 1px;
+}
+
+.editor-dropdown .dropdown-item:hover .dropdown-item-desc {
+  color: var(--text-color);
+}
+
+.editor-dropdown .dropdown-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  background: var(--status-passed-bg);
+  color: var(--status-passed);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 6px;
+  white-space: nowrap;
+  letter-spacing: 0.3px;
+}
+
+.editor-dropdown .dropdown-divider {
+  height: 1px;
+  background: var(--surface-border);
+  margin: 6px 0;
+}
+
+.editor-dropdown .dropdown-item-danger {
+  color: var(--severity-critical);
+}
+
+.editor-dropdown .dropdown-item-danger .dropdown-item-title {
+  color: var(--severity-critical);
+}
+
+.editor-dropdown .dropdown-item-danger:hover,
+.editor-dropdown .dropdown-item-danger:focus {
+  background: var(--severity-critical-bg);
+}
+
+.editor-dropdown .dropdown-item-danger:hover .dropdown-item-title,
+.editor-dropdown .dropdown-item-danger:hover .dropdown-item-desc {
+  color: #b91c1c;
+}
+
+.editor-save-kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  font-size: 10.5px;
+  font-family: inherit;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 4px;
+  margin-left: 6px;
+  letter-spacing: 0.3px;
+  line-height: 1.2;
+}
+
+#editor-btn-save:hover .editor-save-kbd {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+/* Table Dropdown Styles & Dropup Support */
+.table-custom tr {
+  position: relative;
+}
+
+.table-custom tr:has(.editor-dropdown.open) {
+  position: relative;
+  z-index: 100;
+}
+
+.table-responsive:has(.editor-dropdown.open),
+#documents-table-container:has(.editor-dropdown.open),
+#documents-table-container.dropdown-open-active,
+.card:has(.editor-dropdown.open) {
+  overflow: visible !important;
+}
+
+.table-action-dropdown {
+  position: relative;
+}
+
+.table-action-dropdown .dropdown-toggle {
+  padding: 5px 9px;
+  font-size: 12px;
+}
+
+.table-action-dropdown .dropdown-menu {
+  min-width: 250px;
+}
+
 /* --------------------------------------------------------------------
    1. LAPTOP & SMALL DESKTOP (max-width: 1200px)
    -------------------------------------------------------------------- */
@@ -4483,6 +4771,7 @@ html, body {
     gap: 10px !important;
   }
 
+  .editor-action-header-left,
   .editor-action-header > div:first-child {
     width: 100%;
     justify-content: space-between;
@@ -4490,15 +4779,36 @@ html, body {
 
   .editor-action-btns {
     width: 100%;
-    gap: 6px !important;
+    gap: 8px !important;
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .editor-action-btns .editor-dropdown {
+    flex: 1;
+    min-width: 120px;
+  }
+
+  .editor-action-btns .editor-dropdown .dropdown-toggle {
+    width: 100%;
+    justify-content: center;
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+
+  .editor-action-btns .editor-dropdown .dropdown-menu {
+    min-width: 260px;
+    max-width: calc(100vw - 24px);
+    right: 0;
+    left: auto;
   }
 
   #editor-btn-save {
     width: 100%;
     order: 10;
     margin-top: 4px;
-    padding: 8px 14px;
-    font-size: 12.5px;
+    padding: 9px 14px;
+    font-size: 13px;
     justify-content: center;
   }
 

@@ -1110,10 +1110,60 @@
     },
 
     // ====================================================================
+    // DROPDOWN POSITIONING SYSTEM
+    // ====================================================================
+
+    closeAllEditorDropdowns() {
+      document.querySelectorAll('.editor-dropdown.open').forEach(dd => {
+        dd.classList.remove('open', 'dropup');
+        dd.querySelector('.dropdown-toggle')?.setAttribute('aria-expanded', 'false');
+        const tr = dd.closest('tr');
+        if (tr) tr.style.zIndex = '';
+        const tableCont = dd.closest('#documents-table-container');
+        if (tableCont) tableCont.classList.remove('dropdown-open-active');
+      });
+    },
+
+    toggleEditorDropdown(dd, e) {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      const toggleBtn = dd.querySelector('.dropdown-toggle');
+      const menu = dd.querySelector('.dropdown-menu');
+      if (!toggleBtn || !menu) return;
+
+      const isAlreadyOpen = dd.classList.contains('open');
+      this.closeAllEditorDropdowns();
+
+      if (!isAlreadyOpen) {
+        // Check if button is near bottom of viewport to decide dropup vs dropdown
+        const rect = toggleBtn.getBoundingClientRect();
+        const spaceBelow = window.innerHeight - rect.bottom;
+        // If less than 280px below and more room above, open as dropup
+        if (spaceBelow < 280 && rect.top > spaceBelow) {
+          dd.classList.add('dropup');
+        } else {
+          dd.classList.remove('dropup');
+        }
+
+        // Elevate parent row and table container
+        const tr = dd.closest('tr');
+        if (tr) tr.style.zIndex = '100';
+        const tableCont = dd.closest('#documents-table-container');
+        if (tableCont) tableCont.classList.add('dropdown-open-active');
+
+        dd.classList.add('open');
+        toggleBtn.setAttribute('aria-expanded', 'true');
+      }
+    },
+
+    // ====================================================================
     // 3. NAVIGATION & VIEW SWITCHING
     // ====================================================================
 
     navigateTo(viewName, params = {}) {
+      this.closeAllEditorDropdowns();
       this.currentView = viewName;
 
       // Update sidebar active class & ensure parent section is expanded
@@ -1328,6 +1378,18 @@
           }
         });
       }
+
+      // Global outside-click and Escape listeners for action dropdowns
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('.editor-dropdown')) {
+          this.closeAllEditorDropdowns();
+        }
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          this.closeAllEditorDropdowns();
+        }
+      });
 
       // Global screenshot paste listener (Ctrl+V) when in document editor
       window.addEventListener('paste', (e) => {
@@ -2803,11 +2865,45 @@
                 ${allUsers.map(u => `<option value="${this.escapeHtml(u)}">${this.escapeHtml(u)}</option>`).join('')}
               </select>
             </div>
-            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-              <button class="btn btn-outline btn-sm" id="btn-batch-export-pack" title="Export entire workspace package (.dqpack)">📦 Batch Pack</button>
-              <button class="btn btn-outline btn-sm" id="btn-batch-import-pack" title="Import complete workspace package (.dqpack)">📥 Import Pack</button>
-              <button class="btn btn-outline btn-sm" id="btn-import-doc-dldoc">📥 Import .dldoc</button>
-              <button class="btn btn-primary btn-sm" id="btn-create-doc-from-list">➕ Create Document</button>
+            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+              <!-- Package & Import Dropdown -->
+              <div class="dropdown editor-dropdown" id="dropdown-doc-lib-package">
+                <button type="button" class="btn btn-outline btn-sm dropdown-toggle" id="btn-dropdown-doc-lib-package" aria-haspopup="true" aria-expanded="false" title="Package & Import options">
+                  <span>📦 Package & Import</span>
+                  <span class="dropdown-caret">▾</span>
+                </button>
+                <div class="dropdown-menu dropdown-menu-right">
+                  <div class="dropdown-header">Workspace Package (.dqpack)</div>
+                  <button type="button" class="dropdown-item" id="btn-batch-export-pack" title="Export entire workspace package (.dqpack)">
+                    <span class="dropdown-item-icon">📦</span>
+                    <div class="dropdown-item-content">
+                      <span class="dropdown-item-title">Batch Pack Export</span>
+                      <span class="dropdown-item-desc">Export entire workspace into .dqpack</span>
+                    </div>
+                  </button>
+                  <button type="button" class="dropdown-item" id="btn-batch-import-pack" title="Import complete workspace package (.dqpack)">
+                    <span class="dropdown-item-icon">📥</span>
+                    <div class="dropdown-item-content">
+                      <span class="dropdown-item-title">Batch Pack Import</span>
+                      <span class="dropdown-item-desc">Import complete workspace from .dqpack</span>
+                    </div>
+                  </button>
+                  <div class="dropdown-divider"></div>
+                  <div class="dropdown-header">Single Document Import</div>
+                  <button type="button" class="dropdown-item" id="btn-import-doc-dldoc" title="Import portable .dldoc file">
+                    <span class="dropdown-item-icon">📄</span>
+                    <div class="dropdown-item-content">
+                      <span class="dropdown-item-title">Import .dldoc Document</span>
+                      <span class="dropdown-item-desc">Import single .dldoc file into library</span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Primary Create Document Button -->
+              <button class="btn btn-primary btn-sm" id="btn-create-doc-from-list" title="Create a new document">
+                ➕ Create Document
+              </button>
             </div>
           </div>
           <div class="card-body" style="padding: 0;">
@@ -2819,6 +2915,20 @@
       `;
 
       this.updateDocumentsTable();
+
+      // Bind header package & import dropdown
+      const pkgDropdown = document.getElementById('dropdown-doc-lib-package');
+      if (pkgDropdown) {
+        const toggleBtn = pkgDropdown.querySelector('.dropdown-toggle');
+        toggleBtn?.addEventListener('click', (e) => {
+          this.toggleEditorDropdown(pkgDropdown, e);
+        });
+        pkgDropdown.querySelectorAll('.dropdown-item').forEach(item => {
+          item.addEventListener('click', () => {
+            this.closeAllEditorDropdowns();
+          });
+        });
+      }
 
       document.getElementById('doc-filter-search')?.addEventListener('input', () => this.updateDocumentsTable());
       document.getElementById('doc-filter-profile')?.addEventListener('change', (e) => {
@@ -2970,14 +3080,85 @@
                   <td><span style="font-family: monospace; font-weight: 600;">v${doc.version || '1.0'}</span></td>
                   <td>${doc.updatedAt ? new Date(doc.updatedAt).toLocaleDateString() : 'N/A'}</td>
                   <td style="text-align: right; white-space: nowrap;">
-                    <button class="btn btn-outline btn-sm btn-doc-action-edit" data-id="${doc.id}" title="Edit Document">✏️ Edit</button>
-                    <button class="btn btn-outline btn-sm btn-doc-action-share" data-id="${doc.id}" title="Share to Slack / Teams / Email">💬 Share</button>
-                    <button class="btn btn-outline btn-sm btn-doc-action-clone" data-id="${doc.id}" title="Clone Document">📑 Clone</button>
-                    <button class="btn btn-outline btn-sm btn-doc-action-pdf" data-id="${doc.id}" title="Generate PDF Report (Only)">📄 PDF</button>
-                    <button class="btn btn-outline btn-sm btn-doc-action-dldoc" data-id="${doc.id}" title="Generate .dldoc file (Only)">📦 .dldoc</button>
-                    <button class="btn btn-outline btn-sm btn-doc-action-both" data-id="${doc.id}" title="Generate Both (PDF + .dldoc files)">📦 Both</button>
-                    <button class="btn btn-outline btn-sm btn-doc-action-export" data-id="${doc.id}" title="Export JSON">💾</button>
-                    <button class="btn btn-danger btn-sm btn-doc-action-delete" data-id="${doc.id}" title="Delete Document">🗑️</button>
+                    <div class="row-action-btns" style="display: inline-flex; gap: 6px; align-items: center; justify-content: flex-end;">
+                      <!-- Actions Dropdown -->
+                      <div class="dropdown editor-dropdown table-action-dropdown">
+                        <button type="button" class="btn btn-outline btn-sm dropdown-toggle" aria-haspopup="true" aria-expanded="false" title="More document actions">
+                          <span>⚙️ Actions</span>
+                          <span class="dropdown-caret">▾</span>
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-right">
+                          <div class="dropdown-header">Document Actions</div>
+                          <button type="button" class="dropdown-item btn-doc-action-share" data-id="${doc.id}" title="Share to Slack / Teams / Email">
+                            <span class="dropdown-item-icon">💬</span>
+                            <div class="dropdown-item-content">
+                              <span class="dropdown-item-title">Share Markdown</span>
+                              <span class="dropdown-item-desc">Copy summary for Slack / Teams / Email</span>
+                            </div>
+                          </button>
+                          <button type="button" class="dropdown-item btn-doc-action-clone" data-id="${doc.id}" title="Clone Document">
+                            <span class="dropdown-item-icon">📑</span>
+                            <div class="dropdown-item-content">
+                              <span class="dropdown-item-title">Clone Document</span>
+                              <span class="dropdown-item-desc">Duplicate into a new document</span>
+                            </div>
+                          </button>
+                          <div class="dropdown-divider"></div>
+                          <button type="button" class="dropdown-item dropdown-item-danger btn-doc-action-delete" data-id="${doc.id}" title="Delete Document">
+                            <span class="dropdown-item-icon">🗑️</span>
+                            <div class="dropdown-item-content">
+                              <span class="dropdown-item-title">Delete Document</span>
+                              <span class="dropdown-item-desc">Permanently remove from library</span>
+                            </div>
+                          </button>
+                        </div>
+                      </div>
+
+                      <!-- Export Dropdown -->
+                      <div class="dropdown editor-dropdown table-action-dropdown">
+                        <button type="button" class="btn btn-outline btn-sm dropdown-toggle" aria-haspopup="true" aria-expanded="false" title="Export document">
+                          <span>📄 Export</span>
+                          <span class="dropdown-caret">▾</span>
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-right">
+                          <div class="dropdown-header">Export & Distribution</div>
+                          <button type="button" class="dropdown-item btn-doc-action-pdf" data-id="${doc.id}" title="Generate PDF Report (Only)">
+                            <span class="dropdown-item-icon">📄</span>
+                            <div class="dropdown-item-content">
+                              <span class="dropdown-item-title">Generate PDF Report (Only)</span>
+                              <span class="dropdown-item-desc">Official PDF document</span>
+                            </div>
+                          </button>
+                          <button type="button" class="dropdown-item btn-doc-action-dldoc" data-id="${doc.id}" title="Generate .dldoc file (Only)">
+                            <span class="dropdown-item-icon">📦</span>
+                            <div class="dropdown-item-content">
+                              <span class="dropdown-item-title">Generate .dldoc Data (Only)</span>
+                              <span class="dropdown-item-desc">Portable metadata file</span>
+                            </div>
+                          </button>
+                          <button type="button" class="dropdown-item btn-doc-action-both" data-id="${doc.id}" title="Generate Both (PDF + .dldoc files)">
+                            <span class="dropdown-item-icon">📑</span>
+                            <div class="dropdown-item-content">
+                              <span class="dropdown-item-title">Both (PDF + .dldoc)</span>
+                              <span class="dropdown-item-desc">Complete dual export package</span>
+                            </div>
+                          </button>
+                          <div class="dropdown-divider"></div>
+                          <button type="button" class="dropdown-item btn-doc-action-export" data-id="${doc.id}" title="Export JSON">
+                            <span class="dropdown-item-icon">💾</span>
+                            <div class="dropdown-item-content">
+                              <span class="dropdown-item-title">Download Raw JSON</span>
+                              <span class="dropdown-item-desc">Underlying JSON specification</span>
+                            </div>
+                          </button>
+                        </div>
+                      </div>
+
+                      <!-- Primary Edit Button -->
+                      <button class="btn btn-primary btn-sm btn-doc-action-edit" data-id="${doc.id}" title="Edit Document">
+                        ✏️ Edit
+                      </button>
+                    </div>
                   </td>
                 </tr>
                 `;
@@ -2986,6 +3167,23 @@
           </table>
         </div>
       `;
+
+      // Bind table action dropdowns
+      container.querySelectorAll('.table-action-dropdown').forEach(dd => {
+        const toggleBtn = dd.querySelector('.dropdown-toggle');
+        if (toggleBtn) {
+          toggleBtn.addEventListener('click', (e) => {
+            this.toggleEditorDropdown(dd, e);
+          });
+        }
+      });
+
+      // Auto-close table dropdown when an item inside is clicked
+      container.querySelectorAll('.table-action-dropdown .dropdown-item').forEach(item => {
+        item.addEventListener('click', () => {
+          this.closeAllEditorDropdowns();
+        });
+      });
 
       // Action Handlers
       container.querySelectorAll('.btn-doc-action-edit').forEach(btn => {
@@ -3479,16 +3677,15 @@
 
       const doc = this.currentDoc;
       const docUser = this.getUserInfo(doc);
-
-      // Status mode check
-      const missingRequired = this.getMissingRequiredFields(doc);
-      const isMissingFields = missingRequired.length > 0;
       const isStepperCollapsed = localStorage.getItem('dqd_editor_stepper_collapsed') === 'true';
 
       container.innerHTML = `
         <!-- Action Header Bar -->
-        <div class="editor-action-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; background: var(--surface-color); padding: 14px 20px; border-radius: var(--border-radius-md); border: 1px solid var(--surface-border); box-shadow: var(--shadow-sm); flex-wrap: wrap; gap: 12px;">
-          <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+        <div class="editor-action-header">
+          <div class="editor-action-header-left">
+            <button class="btn btn-outline btn-sm btn-editor-back" id="editor-btn-cancel" title="Discard unsaved changes and return to documents list">
+              <span style="font-size: 13px; line-height: 1;">&larr;</span> Back
+            </button>
             <div class="inline-doc-id-box" title="Click to edit Document ID inline (e.g. DOC-20261011-7927)">
               <label for="doc-input-id" style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--text-muted); margin: 0; user-select: none;">DOC ID:</label>
               <input type="text" id="doc-input-id" value="${this.escapeHtml(doc.id || '')}" 
@@ -3498,33 +3695,92 @@
               <span style="font-size: 12px; opacity: 0.7; pointer-events: none; margin-left: 2px;" title="Inline editable">✏️</span>
             </div>
             <span class="badge ${doc.status === 'Approved' ? 'badge-passed' : 'badge-status-draft'}">${doc.status}</span>
-            <span style="font-size: 12px; color: var(--text-muted);">Version ${doc.version}</span>
+            <span style="font-size: 12px; color: var(--text-muted); font-weight: 600;">v${doc.version || '1.0'}</span>
           </div>
-          <div class="editor-action-btns" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-            <button class="btn btn-outline btn-sm" id="editor-btn-cancel">Discard / Back</button>
-            <button class="btn btn-outline btn-sm" id="editor-btn-share-markdown" title="Export formatted Slack / Microsoft Teams / Email Markdown">💬 Share</button>
-            <button class="btn btn-outline btn-sm" id="editor-btn-clone">📑 Clone</button>
-            <button class="btn btn-outline btn-sm" id="editor-btn-snapshot">📌 New Version</button>
-            <button class="btn ${(this.config.pdf?.generationMode === 'dldoc_only' || this.config.pdf?.onlyGenerateDldoc) ? 'btn-secondary' : 'btn-outline'} btn-sm" id="editor-btn-dldoc-only" title="Generate and download portable .dldoc data file only (without PDF report)">📦 Generate .dldoc (Only)</button>
-            <button class="btn ${(this.config.pdf?.generationMode !== 'dldoc_only' && !this.config.pdf?.onlyGenerateDldoc && this.config.pdf?.generationMode !== 'both') ? 'btn-secondary' : 'btn-outline'} btn-sm" id="editor-btn-pdf-only" title="Generate and download official PDF Report only (without .dldoc file)">📄 Generate PDF (Only)</button>
-            <button class="btn ${this.config.pdf?.generationMode === 'both' ? 'btn-secondary' : 'btn-outline'} btn-sm" id="editor-btn-pdf" title="Generate both PDF Report and .dldoc data file">📦 Both (PDF + .dldoc)</button>
-            ${(this.documents.some(d => d.id === doc.id) || doc._originalId) ? `<button class="btn btn-danger btn-sm" id="editor-btn-delete" title="Permanently delete this document">🗑️ Delete</button>` : ''}
-            <button class="btn btn-primary btn-sm" id="editor-btn-save">💾 Save Document (Ctrl+S)</button>
-          </div>
-        </div>
-
-        ${isMissingFields ? `
-          <div class="alert-banner alert-warning" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-            <div style="display: flex; gap: 10px; align-items: center;">
-              <span style="font-size: 18px;">⚠️</span>
-              <div>
-                <strong>Missing Fields (${missingRequired.length}):</strong> ${missingRequired.join(', ')}.<br>
-                <span style="font-size: 11px;">Publication and approval are allowed with incomplete records. You can save, approve, and generate official PDFs at any time.</span>
+          <div class="editor-action-btns">
+            <!-- Actions Dropdown -->
+            <div class="dropdown editor-dropdown" id="dropdown-editor-actions">
+              <button type="button" class="btn btn-outline btn-sm dropdown-toggle" id="btn-dropdown-editor-actions" aria-haspopup="true" aria-expanded="false" title="Document operations & utilities">
+                <span>⚙️ Actions</span>
+                <span class="dropdown-caret">▾</span>
+              </button>
+              <div class="dropdown-menu dropdown-menu-right" id="menu-editor-actions">
+                <div class="dropdown-header">Document Actions</div>
+                <button type="button" class="dropdown-item" id="editor-btn-share-markdown" title="Export formatted Slack / Microsoft Teams / Email Markdown">
+                  <span class="dropdown-item-icon">💬</span>
+                  <div class="dropdown-item-content">
+                    <span class="dropdown-item-title">Share Markdown</span>
+                    <span class="dropdown-item-desc">Copy summary for Slack, Teams or Email</span>
+                  </div>
+                </button>
+                <button type="button" class="dropdown-item" id="editor-btn-clone" title="Clone as a new independent document">
+                  <span class="dropdown-item-icon">📑</span>
+                  <div class="dropdown-item-content">
+                    <span class="dropdown-item-title">Clone Document</span>
+                    <span class="dropdown-item-desc">Duplicate into a new document</span>
+                  </div>
+                </button>
+                <button type="button" class="dropdown-item" id="editor-btn-snapshot" title="Create a version snapshot">
+                  <span class="dropdown-item-icon">📌</span>
+                  <div class="dropdown-item-content">
+                    <span class="dropdown-item-title">New Version Snapshot</span>
+                    <span class="dropdown-item-desc">Increment version & tag changelog entry</span>
+                  </div>
+                </button>
+                ${(this.documents.some(d => d.id === doc.id) || doc._originalId) ? `
+                  <div class="dropdown-divider"></div>
+                  <button type="button" class="dropdown-item dropdown-item-danger" id="editor-btn-delete" title="Permanently delete this document">
+                    <span class="dropdown-item-icon">🗑️</span>
+                    <div class="dropdown-item-content">
+                      <span class="dropdown-item-title">Delete Document</span>
+                      <span class="dropdown-item-desc">Permanently remove this document</span>
+                    </div>
+                  </button>
+                ` : ''}
               </div>
             </div>
-            <span class="badge badge-passed" style="font-size: 11px; white-space: nowrap;">Publication Allowed</span>
+
+            <!-- Export Dropdown -->
+            <div class="dropdown editor-dropdown" id="dropdown-editor-export">
+              <button type="button" class="btn btn-outline btn-sm dropdown-toggle" id="btn-dropdown-editor-export" aria-haspopup="true" aria-expanded="false" title="Export & generation options">
+                <span>📄 Export</span>
+                <span class="dropdown-caret">▾</span>
+              </button>
+              <div class="dropdown-menu dropdown-menu-right" id="menu-editor-export">
+                <div class="dropdown-header">Export & Distribution</div>
+                <button type="button" class="dropdown-item" id="editor-btn-pdf-only" title="Generate and download official PDF Report only (without .dldoc file)">
+                  <span class="dropdown-item-icon">📄</span>
+                  <div class="dropdown-item-content">
+                    <span class="dropdown-item-title">Generate PDF Report (Only)</span>
+                    <span class="dropdown-item-desc">Official PDF document for stakeholders</span>
+                  </div>
+                  ${(this.config.pdf?.generationMode !== 'dldoc_only' && !this.config.pdf?.onlyGenerateDldoc && this.config.pdf?.generationMode !== 'both') ? '<span class="dropdown-badge">Default</span>' : ''}
+                </button>
+                <button type="button" class="dropdown-item" id="editor-btn-dldoc-only" title="Generate and download portable .dldoc data file only (without PDF report)">
+                  <span class="dropdown-item-icon">📦</span>
+                  <div class="dropdown-item-content">
+                    <span class="dropdown-item-title">Generate .dldoc Data (Only)</span>
+                    <span class="dropdown-item-desc">Portable metadata file for backup & import</span>
+                  </div>
+                  ${(this.config.pdf?.generationMode === 'dldoc_only' || this.config.pdf?.onlyGenerateDldoc) ? '<span class="dropdown-badge">Default</span>' : ''}
+                </button>
+                <button type="button" class="dropdown-item" id="editor-btn-pdf" title="Generate both PDF Report and .dldoc data file">
+                  <span class="dropdown-item-icon">📑</span>
+                  <div class="dropdown-item-content">
+                    <span class="dropdown-item-title">Both (PDF + .dldoc)</span>
+                    <span class="dropdown-item-desc">Full package with document and data file</span>
+                  </div>
+                  ${this.config.pdf?.generationMode === 'both' ? '<span class="dropdown-badge">Default</span>' : ''}
+                </button>
+              </div>
+            </div>
+
+            <!-- Primary Save Button -->
+            <button class="btn btn-primary btn-sm" id="editor-btn-save" title="Save document to local storage (Ctrl+S)">
+              💾 Save Document <kbd class="editor-save-kbd">Ctrl+S</kbd>
+            </button>
           </div>
-        ` : ''}
+        </div>
 
         <!-- Stepper Rail & Main Content Layout -->
         <div class="editor-workspace-layout ${isStepperCollapsed ? 'stepper-collapsed' : ''}" id="editor-workspace-layout">
@@ -4714,6 +4970,23 @@
 
       // Bind delete rule buttons without destroying editor DOM
       this.bindEditorRulesDeleteButtons();
+
+      // Action bar dropdowns
+      container.querySelectorAll('.editor-dropdown').forEach(dd => {
+        const toggleBtn = dd.querySelector('.dropdown-toggle');
+        if (toggleBtn) {
+          toggleBtn.addEventListener('click', (e) => {
+            this.toggleEditorDropdown(dd, e);
+          });
+        }
+      });
+
+      // Auto-close dropdown when any item inside is clicked
+      container.querySelectorAll('.editor-dropdown .dropdown-item').forEach(item => {
+        item.addEventListener('click', () => {
+          this.closeAllEditorDropdowns();
+        });
+      });
 
       // Action bar buttons
       document.getElementById('editor-btn-save').addEventListener('click', () => this.saveCurrentDocument());
