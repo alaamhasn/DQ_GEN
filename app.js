@@ -2327,9 +2327,11 @@
         const teamMatch = (doc.team || '').toLowerCase().includes(q);
         const userMatch = (doc.usernames || []).some(u => (u || '').toLowerCase().includes(q));
         const domainMatch = (doc.businessDomain || '').toLowerCase().includes(q);
+        const notesMatch = (doc.notes || '').toLowerCase().includes(q);
 
         if (titleMatch) score += 14;
         if (idMatch) score += 10;
+        if (notesMatch) score += 8;
         if (typeMatch || teamMatch || userMatch || domainMatch) score += 6;
 
         if (score > 0) {
@@ -3282,7 +3284,8 @@
           desc: 'Defects, RCA & action plans', 
           icon: '⚠️' 
         },
-        { key: 'tab-governance', num: 8, title: '8. Versions & Approvals', shortTitle: 'Governance', desc: 'Peer sign-offs & audit history', icon: '✅' }
+        { key: 'tab-governance', num: 8, title: '8. Versions & Approvals', shortTitle: 'Governance', desc: 'Peer sign-offs & audit history', icon: '✅' },
+        { key: 'tab-notes', num: 9, title: '9. Notes', shortTitle: 'Notes', desc: 'Documentation notes & rich text editor', icon: '📝' }
       ];
     },
 
@@ -3326,6 +3329,11 @@
         case 'tab-governance': {
           const hasVersion = Boolean(doc.version);
           return { isComplete: hasVersion, isWarning: false, label: `v${doc.version || '1.0'}` };
+        }
+        case 'tab-notes': {
+          const stripped = (doc.notes || '').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim();
+          const hasNotes = Boolean(stripped);
+          return { isComplete: hasNotes, isWarning: false, label: hasNotes ? 'Documented' : 'Optional' };
         }
         default:
           return { isComplete: false, isWarning: false, label: '' };
@@ -3615,6 +3623,7 @@
           executions: [],
           issues: [],
           approvals: [],
+          notes: "",
           versionHistory: [
             {
               version: "1.0",
@@ -3672,6 +3681,9 @@
               notes: this.currentDoc.sqlNotes || ""
             }
           ];
+        }
+        if (typeof this.currentDoc.notes !== 'string') {
+          this.currentDoc.notes = "";
         }
       }
 
@@ -4814,6 +4826,170 @@
           </div>
           ${this.renderStepperPaneFooterHtml('tab-governance', docProfileKey)}
         </div>
+
+        <!-- TAB 9: NOTES (LAST SECTION) -->
+        <div class="tab-pane ${activeTab === 'tab-notes' ? 'active' : ''}" id="tab-notes">
+          <div class="card notes-editor-card">
+            <div class="card-header" style="justify-content: space-between; align-items: center; background: var(--surface-alt); padding: 12px 20px;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 20px;">📝</span>
+                <div>
+                  <span class="card-title" style="font-size: 15px; font-weight: 700; margin: 0;">9. Documentation Notes</span>
+                  <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">
+                    Rich text editor for operational guidelines, handover instructions, technical caveats, and unstructured notes
+                  </div>
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="badge badge-info" id="notes-badge-status" style="font-size: 11px;">Drafting</span>
+                <button type="button" class="btn btn-outline btn-sm" id="btn-notes-clear-all" title="Clear all editor notes" style="color: var(--text-muted);">
+                  <span>🗑️</span> Clear
+                </button>
+              </div>
+            </div>
+
+            <div class="card-body" style="padding: 20px;">
+              <div class="notes-editor-wrapper">
+                <!-- Rich Text Toolbar -->
+                <div class="notes-editor-toolbar" id="notes-editor-toolbar">
+                  <!-- Group 1: Block Style / Heading Dropdown -->
+                  <div class="notes-toolbar-group">
+                    <select class="notes-tool-select" id="notes-format-block-select" title="Text Style & Headings">
+                      <option value="p">Paragraph (Normal)</option>
+                      <option value="h1">Heading 1</option>
+                      <option value="h2">Heading 2</option>
+                      <option value="h3">Heading 3</option>
+                      <option value="blockquote">Quote Block</option>
+                      <option value="pre">Code Block</option>
+                    </select>
+                  </div>
+
+                  <!-- Group 2: Inline Styles -->
+                  <div class="notes-toolbar-group">
+                    <button type="button" class="notes-tool-btn" data-command="bold" title="Bold (Ctrl+B)">
+                      <strong>B</strong>
+                    </button>
+                    <button type="button" class="notes-tool-btn" data-command="italic" title="Italic (Ctrl+I)">
+                      <em>I</em>
+                    </button>
+                    <button type="button" class="notes-tool-btn" data-command="underline" title="Underline (Ctrl+U)">
+                      <u>U</u>
+                    </button>
+                    <button type="button" class="notes-tool-btn" data-command="strikeThrough" title="Strikethrough">
+                      <s>S</s>
+                    </button>
+                    <button type="button" class="notes-tool-btn" id="btn-notes-inline-code" title="Inline Code">
+                      <code>&lt;&gt;</code>
+                    </button>
+                  </div>
+
+                  <!-- Group 3: Colors -->
+                  <div class="notes-toolbar-group">
+                    <label class="notes-tool-btn notes-color-input-wrapper" title="Text Color">
+                      <span style="font-weight: 700; color: #1F4E79;">A</span>
+                      <input type="color" id="notes-input-fore-color" value="#1F4E79">
+                    </label>
+                    <label class="notes-tool-btn notes-color-input-wrapper" title="Highlight Color">
+                      <span style="background: #fef08a; padding: 0 4px; border-radius: 2px; font-weight: 700;">H</span>
+                      <input type="color" id="notes-input-bg-color" value="#fef08a">
+                    </label>
+                  </div>
+
+                  <!-- Group 4: Text Alignment -->
+                  <div class="notes-toolbar-group">
+                    <button type="button" class="notes-tool-btn" data-command="justifyLeft" title="Align Left">
+                      <span>⬅️</span>
+                    </button>
+                    <button type="button" class="notes-tool-btn" data-command="justifyCenter" title="Align Center">
+                      <span>↔️</span>
+                    </button>
+                    <button type="button" class="notes-tool-btn" data-command="justifyRight" title="Align Right">
+                      <span>➡️</span>
+                    </button>
+                  </div>
+
+                  <!-- Group 5: Lists & Indent -->
+                  <div class="notes-toolbar-group">
+                    <button type="button" class="notes-tool-btn" data-command="insertUnorderedList" title="Bullet List">
+                      <span>•≡</span>
+                    </button>
+                    <button type="button" class="notes-tool-btn" data-command="insertOrderedList" title="Numbered List">
+                      <span>1≡</span>
+                    </button>
+                    <button type="button" class="notes-tool-btn" data-command="outdent" title="Decrease Indent">
+                      <span>⇤</span>
+                    </button>
+                    <button type="button" class="notes-tool-btn" data-command="indent" title="Increase Indent">
+                      <span>⇥</span>
+                    </button>
+                  </div>
+
+                  <!-- Group 6: Rich Elements (Table, Link, Divider) -->
+                  <div class="notes-toolbar-group">
+                    <button type="button" class="notes-tool-btn" id="btn-notes-insert-table" title="Insert Table (3x3)">
+                      <span>⊞ Table</span>
+                    </button>
+                    <button type="button" class="notes-tool-btn" id="btn-notes-insert-link" title="Insert Web / Docs Link">
+                      <span>🔗 Link</span>
+                    </button>
+                    <button type="button" class="notes-tool-btn" data-command="insertHorizontalRule" title="Insert Horizontal Rule / Divider">
+                      <span>―</span>
+                    </button>
+                  </div>
+
+                  <!-- Group 7: Callouts -->
+                  <div class="notes-toolbar-group">
+                    <select class="notes-tool-select" id="notes-callout-select" title="Insert Alert / Callout Box">
+                      <option value="">+ Callout Box...</option>
+                      <option value="info">ℹ️ Info Callout</option>
+                      <option value="warning">⚠️ Warning Callout</option>
+                      <option value="success">✅ Success Callout</option>
+                      <option value="danger">🔥 Critical Alert</option>
+                    </select>
+                  </div>
+
+                  <!-- Group 8: Clear & History -->
+                  <div class="notes-toolbar-group">
+                    <button type="button" class="notes-tool-btn" data-command="removeFormat" title="Clear Formatting">
+                      <span>Tx</span>
+                    </button>
+                    <button type="button" class="notes-tool-btn" data-command="undo" title="Undo (Ctrl+Z)">
+                      <span>↶</span>
+                    </button>
+                    <button type="button" class="notes-tool-btn" data-command="redo" title="Redo (Ctrl+Y)">
+                      <span>↷</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Rich Text Editable Container -->
+                <div id="doc-notes-editor" 
+                     class="notes-content-editable" 
+                     contenteditable="true" 
+                     role="textbox"
+                     aria-multiline="true"
+                     data-placeholder="Enter technical notes, implementation guidelines, domain context, data pipeline quirks, or operational observations here..."></div>
+
+                <!-- Footer with Stats & Quick Starter Templates -->
+                <div class="notes-editor-footer">
+                  <div style="display: flex; gap: 14px; align-items: center;">
+                    <span class="notes-stat-pill" id="notes-word-count">📊 0 words</span>
+                    <span class="notes-stat-pill" id="notes-char-count">🔤 0 characters</span>
+                  </div>
+
+                  <div class="notes-templates-bar">
+                    <span style="font-weight: 600; font-size: 11px;">Insert Starter:</span>
+                    <button type="button" class="btn-note-template" data-tpl="handover">📋 Handover Runbook</button>
+                    <button type="button" class="btn-note-template" data-tpl="caveats">⚠️ Pipeline Caveats</button>
+                    <button type="button" class="btn-note-template" data-tpl="rca">🔍 Root Cause Analysis</button>
+                    <button type="button" class="btn-note-template" data-tpl="audit">🛡️ Audit Observations</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          ${this.renderStepperPaneFooterHtml('tab-notes', docProfileKey)}
+        </div>
       </main>
     </div>
   `;
@@ -4886,6 +5062,9 @@
 
       // SQL Queries Management
       this.bindEditorSqlQueries();
+
+      // Notes Rich Text Editor (Section 9 - Last Section)
+      this.bindNotesEditor(container);
 
       // Add Mapping Row
       document.getElementById('btn-add-mapping-row')?.addEventListener('click', () => {
@@ -5667,6 +5846,10 @@
       if (document.getElementById('doc-input-actual-result')) doc.actualResult = document.getElementById('doc-input-actual-result').value;
       if (document.getElementById('doc-input-threshold')) doc.threshold = document.getElementById('doc-input-threshold').value;
       if (document.getElementById('doc-input-remediation')) doc.remediation = document.getElementById('doc-input-remediation').value;
+      const notesEl = document.getElementById('doc-notes-editor');
+      if (notesEl) {
+        doc.notes = notesEl.innerHTML;
+      }
 
       // Auto-reapproval check: If document was Approved and user altered SQL query, revert to Draft
       if (doc.status === 'Approved' && oldQuery && oldQuery !== doc.sqlQuery) {
@@ -6017,6 +6200,7 @@
         ],
         'tab-executions': [],
         'tab-issues': [],
+        'tab-notes': [],
         'tab-governance': [
           {
             id: 'version_snapshotting',
@@ -6168,7 +6352,8 @@
         'tab-screenshots': '5. Screenshots & Evidence',
         'tab-executions': '6. Executions & Results',
         'tab-issues': '7. Remediation & Issues',
-        'tab-governance': '8. Versions & Approvals'
+        'tab-governance': '8. Versions & Approvals',
+        'tab-notes': '9. Notes'
       };
       const tabTitle = tabNames[tabKey] || 'Active Tab';
 
@@ -7497,6 +7682,213 @@ ${q.query || '-- No SQL specified'}
       }
     },
 
+    bindNotesEditor(container) {
+      const editor = document.getElementById('doc-notes-editor');
+      if (!editor) return;
+
+      const wordCountEl = document.getElementById('notes-word-count');
+      const charCountEl = document.getElementById('notes-char-count');
+      const statusBadge = document.getElementById('notes-badge-status');
+
+      const updateStats = () => {
+        const text = (editor.innerText || editor.textContent || '').replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+        const charCount = text.length;
+        const words = text ? text.split(/\s+/).filter(Boolean) : [];
+        const wordCount = words.length;
+
+        if (wordCountEl) wordCountEl.textContent = `📊 ${wordCount} word${wordCount === 1 ? '' : 's'}`;
+        if (charCountEl) charCountEl.textContent = `🔤 ${charCount} char${charCount === 1 ? '' : 's'}`;
+        if (statusBadge) {
+          statusBadge.textContent = wordCount > 0 ? 'Documented' : 'Drafting';
+          statusBadge.className = `badge ${wordCount > 0 ? 'badge-passed' : 'badge-info'}`;
+        }
+        editor.setAttribute('data-empty', charCount === 0 ? 'true' : 'false');
+      };
+
+      editor.innerHTML = (this.currentDoc && typeof this.currentDoc.notes === 'string') ? this.currentDoc.notes : '';
+      updateStats();
+
+      // Listen for typing and input
+      editor.addEventListener('input', () => {
+        updateStats();
+        if (this.currentDoc) {
+          this.currentDoc.notes = editor.innerHTML;
+        }
+        this.updateStepperRailState();
+      });
+
+      // Insert HTML at cursor
+      const insertHtmlAtCursor = (html) => {
+        editor.focus();
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0) {
+          let range = sel.getRangeAt(0);
+          if (!editor.contains(range.commonAncestorContainer)) {
+            range = document.createRange();
+            range.selectNodeContents(editor);
+            range.collapse(false);
+            sel.removeAllRanges();
+            sel.addRange(range);
+          }
+          range.deleteContents();
+          const temp = document.createElement('div');
+          temp.innerHTML = html;
+          const frag = document.createDocumentFragment();
+          let node, lastNode;
+          while ((node = temp.firstChild)) {
+            lastNode = frag.appendChild(node);
+          }
+          range.insertNode(frag);
+          if (lastNode) {
+            range = range.cloneRange();
+            range.setStartAfter(lastNode);
+            range.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(range);
+          }
+        } else {
+          editor.innerHTML += html;
+        }
+        editor.dispatchEvent(new Event('input', { bubbles: true }));
+      };
+
+      // Toolbar Command Buttons
+      container.querySelectorAll('.notes-tool-btn[data-command]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          const cmd = btn.dataset.command;
+          if (cmd) {
+            document.execCommand(cmd, false, null);
+            editor.focus();
+            editor.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+        });
+      });
+
+      // Block Format Dropdown
+      const formatSelect = document.getElementById('notes-format-block-select');
+      if (formatSelect) {
+        formatSelect.addEventListener('change', (e) => {
+          const val = e.target.value;
+          if (val) {
+            if (val === 'p' || val === 'h1' || val === 'h2' || val === 'h3' || val === 'blockquote' || val === 'pre') {
+              document.execCommand('formatBlock', false, `<${val}>`);
+            }
+            editor.focus();
+            editor.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+        });
+      }
+
+      // Foreground Color Picker
+      const foreColorInp = document.getElementById('notes-input-fore-color');
+      if (foreColorInp) {
+        foreColorInp.addEventListener('input', (e) => {
+          document.execCommand('foreColor', false, e.target.value);
+          editor.focus();
+          editor.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+      }
+
+      // Background Highlight Color Picker
+      const bgColorInp = document.getElementById('notes-input-bg-color');
+      if (bgColorInp) {
+        bgColorInp.addEventListener('input', (e) => {
+          document.execCommand('hiliteColor', false, e.target.value);
+          editor.focus();
+          editor.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+      }
+
+      // Inline Code Button
+      document.getElementById('btn-notes-inline-code')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        const sel = window.getSelection();
+        const selectedText = sel ? sel.toString() : '';
+        if (selectedText) {
+          insertHtmlAtCursor(`<code>${this.escapeHtml(selectedText)}</code>`);
+        } else {
+          insertHtmlAtCursor(`<code>code_identifier</code>`);
+        }
+      });
+
+      // Insert Table Button (3x3 with headers)
+      document.getElementById('btn-notes-insert-table')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        const tableHtml = `<table><thead><tr><th>Item / Parameter</th><th>Specification / Value</th><th>Status / Verification</th></tr></thead><tbody><tr><td>Data Grain &amp; Freshness</td><td>Daily 06:00 UTC batch</td><td>Verified PASS</td></tr><tr><td>Partition Key</td><td>event_date (YYYY-MM-DD)</td><td>Active Index</td></tr></tbody></table><p><br></p>`;
+        insertHtmlAtCursor(tableHtml);
+      });
+
+      // Insert Link Button
+      document.getElementById('btn-notes-insert-link')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        const url = prompt('Enter link URL (e.g. https://wiki.enterprise.com/runbook or relative link):');
+        if (url && url.trim()) {
+          const sel = window.getSelection();
+          const selectedText = sel ? sel.toString() : '';
+          const label = selectedText || prompt('Enter link text:', url) || url;
+          insertHtmlAtCursor(`<a href="${this.escapeHtml(url.trim())}" target="_blank" rel="noopener noreferrer">${this.escapeHtml(label)}</a> `);
+        }
+      });
+
+      // Callouts Select
+      const calloutSelect = document.getElementById('notes-callout-select');
+      if (calloutSelect) {
+        calloutSelect.addEventListener('change', (e) => {
+          const type = e.target.value;
+          if (!type) return;
+
+          const configs = {
+            info: { icon: 'ℹ️', label: 'Technical Note', text: 'Document any design assumptions, pipeline quirks, or operational conditions here.' },
+            warning: { icon: '⚠️', label: 'Operational Caveat', text: 'Important alert: upstream delays or edge-case anomalies to be aware of.' },
+            success: { icon: '✅', label: 'Audit Verification', text: 'Confirmation of data reconciliation and stakeholder compliance sign-off.' },
+            danger: { icon: '🔥', label: 'Critical Alert', text: 'Immediate remediation step if validation failure threshold is exceeded.' }
+          };
+
+          const cfg = configs[type] || configs.info;
+          const calloutHtml = `<div class="note-callout note-callout-${type}"><strong>${cfg.icon} ${cfg.label}:</strong> ${cfg.text}</div><p><br></p>`;
+          insertHtmlAtCursor(calloutHtml);
+          calloutSelect.value = '';
+        });
+      }
+
+      // Starter Templates Buttons
+      container.querySelectorAll('.btn-note-template').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const tplKey = btn.dataset.tpl;
+          let tplHtml = '';
+
+          if (tplKey === 'handover') {
+            tplHtml = `<h3>📋 Operational Handover Runbook</h3><p><strong>Primary On-Call Contact:</strong> Data Quality Engineering Team (#dq-ops-support)<br><strong>Handover Date:</strong> ${new Date().toLocaleDateString()}</p><div class="note-callout note-callout-info"><strong>ℹ️ Key Service SLA:</strong> Nightly SLA execution cut-off is 05:00 UTC. Upstream Trino query duration should not exceed 180 seconds.</div><ul><li><strong>Pipeline Schedule:</strong> Triggered via Airflow DAG <code>dag_dq_daily_verification</code>.</li><li><strong>Threshold Violation:</strong> If defect count &gt; 0, trigger alert to PagerDuty and halt downstream Mart ingestion.</li><li><strong>Backfill Procedure:</strong> Re-run staging backfill task with partition parameter <code>--date YYYY-MM-DD</code>.</li></ul><p><br></p>`;
+          } else if (tplKey === 'caveats') {
+            tplHtml = `<h3>⚠️ Known Pipeline Caveats &amp; Data Quirks</h3><div class="note-callout note-callout-warning"><strong>⚠️ Historical Schema Variance:</strong> Records prior to Q3 2024 use legacy customer key formats without ISO prefix.</div><ul><li><strong>Nullability Note:</strong> <code>account_tier</code> can legitimately be NULL for guest checkout sessions.</li><li><strong>Timezone Handling:</strong> All raw source timestamps are stored in UTC; business reporting models convert to EST.</li><li><strong>Partition Pruning:</strong> Ensure all audit queries include <code>event_date &gt;= CURRENT_DATE - INTERVAL '30' DAY</code> to prevent full table scans.</li></ul><p><br></p>`;
+          } else if (tplKey === 'rca') {
+            tplHtml = `<h3>🔍 Root Cause Analysis (RCA) Incident Record</h3><p><strong>Incident Ref:</strong> INC-${Math.floor(10000 + Math.random() * 90000)} &bull; <strong>Severity:</strong> Medium (P2)</p><blockquote><strong>Summary of Issue:</strong> Intermittent duplication detected in staging customer dimension table due to concurrent Kafka consumer rebalances.</blockquote><p><strong>Remediation Actions Taken:</strong></p><ol><li>Applied idempotent merge pattern on surrogate key <code>customer_sk</code>.</li><li>Added Trino uniqueness validation assertion rule to pre-load check gate.</li><li>Backfilled impacted date partitions.</li></ol><p><br></p>`;
+          } else if (tplKey === 'audit') {
+            tplHtml = `<h3>🛡️ Governance &amp; Regulatory Audit Observations</h3><p><strong>Compliance Standard:</strong> Enterprise Data Quality &amp; BCBS 239 Governance Framework</p><div class="note-callout note-callout-success"><strong>✅ Audit Status: Verified:</strong> 100% of Critical Data Elements (CDEs) mapped to validation rules with zero active defect breaches.</div><ul><li>Source-to-target lineage fully documented across Trino and Lakehouse catalog.</li><li>PII masking policy active on sensitive customer identity columns.</li><li>Automated test execution logs archived for 365-day statutory compliance audit retention.</li></ul><p><br></p>`;
+          }
+
+          if (tplHtml) {
+            insertHtmlAtCursor(tplHtml);
+            this.showToast('Inserted starter template into Notes', 'info');
+          }
+        });
+      });
+
+      // Clear Notes Button
+      document.getElementById('btn-notes-clear-all')?.addEventListener('click', () => {
+        if (confirm('Are you sure you want to clear all documentation notes?')) {
+          editor.innerHTML = '';
+          updateStats();
+          if (this.currentDoc) {
+            this.currentDoc.notes = '';
+          }
+          this.updateStepperRailState();
+          this.showToast('Notes cleared', 'info');
+        }
+      });
+    },
+
     updateEditorRulesTable() {
       const tbody = document.getElementById('tbody-doc-rules');
       if (!tbody) return;
@@ -7803,6 +8195,7 @@ ${q.query || '-- No SQL specified'}
             issues: document.getElementById('clone-chk-issues').checked ? JSON.parse(JSON.stringify(source.issues || [])) : [],
             approvals: document.getElementById('clone-chk-approvals').checked ? JSON.parse(JSON.stringify(source.approvals || [])) : [],
             screenshots: Array.isArray(source.screenshots) ? JSON.parse(JSON.stringify(source.screenshots)) : [],
+            notes: source.notes || '',
             versionHistory: [
               {
                 version: '1.0',
@@ -10437,6 +10830,7 @@ WHERE order_id IS NULL
           if ((d.sqlQueries || []).some(sq => (sq.query || '').toLowerCase().includes(q) || (sq.title || '').toLowerCase().includes(q))) foundIn.push('Trino Query');
           if ((d.executiveSummary || '').toLowerCase().includes(q)) foundIn.push('Summary');
           if ((d.businessObjective || '').toLowerCase().includes(q)) foundIn.push('Objective');
+          if ((d.notes || '').toLowerCase().includes(q)) foundIn.push('Notes');
           if (foundIn.length > 0) {
             matches.push({ type: 'Document', title: d.title || d.id, id: d.id, foundIn: foundIn.join(', '), doc: d });
           }
@@ -13358,6 +13752,220 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
     },
 
     // ====================================================================
+    htmlToPlainText(html) {
+      if (!html) return '';
+      const div = document.createElement('div');
+      div.innerHTML = html;
+      return (div.innerText || div.textContent || '').trim();
+    },
+
+    htmlToMarkdown(html) {
+      if (!html) return '';
+      let md = html
+        .replace(/<h1[^>]*>(.*?)<\/h1>/gi, '\n# $1\n')
+        .replace(/<h2[^>]*>(.*?)<\/h2>/gi, '\n## $1\n')
+        .replace(/<h3[^>]*>(.*?)<\/h3>/gi, '\n### $1\n')
+        .replace(/<strong[^>]*>(.*?)<\/strong>/gi, '**$1**')
+        .replace(/<b[^>]*>(.*?)<\/b>/gi, '**$1**')
+        .replace(/<em[^>]*>(.*?)<\/em>/gi, '*$1*')
+        .replace(/<i[^>]*>(.*?)<\/i>/gi, '*$1*')
+        .replace(/<s[^>]*>(.*?)<\/s>/gi, '~~$1~~')
+        .replace(/<code[^>]*>(.*?)<\/code>/gi, '`$1`')
+        .replace(/<blockquote[^>]*>(.*?)<\/blockquote>/gi, '\n> $1\n')
+        .replace(/<li[^>]*>(.*?)<\/li>/gi, '- $1\n')
+        .replace(/<p[^>]*>(.*?)<\/p>/gi, '$1\n\n')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+      return md;
+    },
+
+    renderNotesHtmlToPdf(pdf, html, margin, startY, contentWidth, pageHeight, primaryRgb, borderSlate, cardBgSlate, bodySlate, mutedSlate) {
+      let y = startY;
+      if (!html) return y;
+
+      const ensureSpace = (neededHeight) => {
+        if (y + neededHeight > pageHeight - 35) {
+          pdf.addPage();
+          y = margin + 25;
+        }
+      };
+
+      const container = document.createElement('div');
+      container.innerHTML = html;
+
+      const children = Array.from(container.children);
+      if (children.length === 0 && container.textContent.trim()) {
+        ensureSpace(20);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(8);
+        pdf.setTextColor(bodySlate[0], bodySlate[1], bodySlate[2]);
+        const lines = pdf.splitTextToSize(container.textContent.trim(), contentWidth);
+        lines.forEach(line => {
+          ensureSpace(12);
+          pdf.text(line, margin, y);
+          y += 11;
+        });
+        return y + 6;
+      }
+
+      for (const el of children) {
+        const tag = el.tagName.toLowerCase();
+        const text = (el.innerText || el.textContent || '').trim();
+        if (!text && tag !== 'hr') continue;
+
+        if (tag === 'h1' || tag === 'h2' || tag === 'h3') {
+          ensureSpace(25);
+          pdf.setFont('helvetica', 'bold');
+          pdf.setFontSize(tag === 'h1' ? 10.5 : (tag === 'h2' ? 9.5 : 8.5));
+          pdf.setTextColor(primaryRgb[0], primaryRgb[1], primaryRgb[2]);
+          const lines = pdf.splitTextToSize(text, contentWidth);
+          lines.forEach(l => {
+            ensureSpace(14);
+            pdf.text(l, margin, y);
+            y += tag === 'h1' ? 13 : 11;
+          });
+          y += 3;
+        } else if (el.classList.contains('note-callout') || tag === 'blockquote') {
+          const isWarning = el.classList.contains('note-callout-warning');
+          const isDanger = el.classList.contains('note-callout-danger');
+          const isSuccess = el.classList.contains('note-callout-success');
+
+          const accentColor = isWarning ? [217, 119, 6] : (isDanger ? [220, 38, 38] : (isSuccess ? [16, 185, 129] : primaryRgb));
+          const boxBg = isWarning ? [254, 243, 199] : (isDanger ? [254, 226, 226] : (isSuccess ? [209, 250, 229] : cardBgSlate));
+
+          pdf.setFont('helvetica', 'normal');
+          pdf.setFontSize(7.5);
+          const lines = pdf.splitTextToSize(text, contentWidth - 24);
+          const boxH = Math.max(24, lines.length * 10 + 12);
+
+          ensureSpace(boxH + 8);
+          pdf.setFillColor(boxBg[0], boxBg[1], boxBg[2]);
+          pdf.setDrawColor(borderSlate[0], borderSlate[1], borderSlate[2]);
+          pdf.roundedRect(margin, y, contentWidth, boxH, 3, 3, 'FD');
+
+          pdf.setFillColor(accentColor[0], accentColor[1], accentColor[2]);
+          pdf.roundedRect(margin, y, 3, boxH, 1, 1, 'F');
+
+          pdf.setTextColor(bodySlate[0], bodySlate[1], bodySlate[2]);
+          let lineY = y + 10;
+          lines.forEach(line => {
+            pdf.text(line, margin + 10, lineY);
+            lineY += 10;
+          });
+          y += boxH + 8;
+        } else if (tag === 'ul' || tag === 'ol') {
+          const items = Array.from(el.querySelectorAll('li'));
+          items.forEach((li, idx) => {
+            const liText = (li.innerText || li.textContent || '').trim();
+            if (!liText) return;
+            pdf.setFont('helvetica', 'normal');
+            pdf.setFontSize(7.5);
+            pdf.setTextColor(bodySlate[0], bodySlate[1], bodySlate[2]);
+            const bullet = tag === 'ol' ? `${idx + 1}. ` : '• ';
+            const bulletW = pdf.getTextWidth(bullet);
+            const lines = pdf.splitTextToSize(liText, contentWidth - bulletW - 12);
+
+            ensureSpace(lines.length * 10 + 4);
+            pdf.setFont('helvetica', 'bold');
+            pdf.setTextColor(primaryRgb[0], primaryRgb[1], primaryRgb[2]);
+            pdf.text(bullet, margin + 6, y);
+            pdf.setFont('helvetica', 'normal');
+            pdf.setTextColor(bodySlate[0], bodySlate[1], bodySlate[2]);
+
+            lines.forEach((l, lIdx) => {
+              if (lIdx > 0) ensureSpace(10);
+              pdf.text(l, margin + 6 + bulletW, y);
+              y += 10;
+            });
+            y += 2;
+          });
+          y += 4;
+        } else if (tag === 'table') {
+          const rows = Array.from(el.querySelectorAll('tr'));
+          if (rows.length > 0) {
+            const rowData = rows.map(r => Array.from(r.querySelectorAll('th, td')).map(cell => (cell.innerText || cell.textContent || '').trim()));
+            const colCount = Math.max(...rowData.map(r => r.length), 1);
+            const colWidth = contentWidth / colCount;
+
+            ensureSpace(rowData.length * 16 + 10);
+            rowData.forEach((row, rIdx) => {
+              const isHeader = rIdx === 0 && el.querySelector('th') !== null;
+              const rowH = 15;
+              ensureSpace(rowH + 2);
+
+              if (isHeader) {
+                pdf.setFillColor(primaryRgb[0], primaryRgb[1], primaryRgb[2]);
+                pdf.rect(margin, y, contentWidth, rowH, 'F');
+                pdf.setFont('helvetica', 'bold');
+                pdf.setFontSize(7);
+                pdf.setTextColor(255, 255, 255);
+              } else {
+                pdf.setFillColor(rIdx % 2 === 0 ? 255 : cardBgSlate[0], rIdx % 2 === 0 ? 255 : cardBgSlate[1], rIdx % 2 === 0 ? 255 : cardBgSlate[2]);
+                pdf.rect(margin, y, contentWidth, rowH, 'F');
+                pdf.setDrawColor(borderSlate[0], borderSlate[1], borderSlate[2]);
+                pdf.setLineWidth(0.3);
+                pdf.rect(margin, y, contentWidth, rowH, 'S');
+                pdf.setFont('helvetica', 'normal');
+                pdf.setFontSize(6.8);
+                pdf.setTextColor(bodySlate[0], bodySlate[1], bodySlate[2]);
+              }
+
+              row.forEach((cellText, cIdx) => {
+                const cellX = margin + (cIdx * colWidth) + 5;
+                const truncated = pdf.splitTextToSize(cellText, colWidth - 8)[0] || '';
+                pdf.text(truncated, cellX, y + 10);
+              });
+              y += rowH;
+            });
+            y += 8;
+          }
+        } else if (tag === 'pre') {
+          pdf.setFont('courier', 'normal');
+          pdf.setFontSize(6.8);
+          const lines = pdf.splitTextToSize(text, contentWidth - 16);
+          const blockH = lines.length * 9 + 10;
+          ensureSpace(blockH + 6);
+
+          pdf.setFillColor(cardBgSlate[0], cardBgSlate[1], cardBgSlate[2]);
+          pdf.setDrawColor(borderSlate[0], borderSlate[1], borderSlate[2]);
+          pdf.roundedRect(margin, y, contentWidth, blockH, 3, 3, 'FD');
+
+          pdf.setTextColor(primaryRgb[0], primaryRgb[1], primaryRgb[2]);
+          let codeY = y + 9;
+          lines.forEach(line => {
+            pdf.text(line, margin + 8, codeY);
+            codeY += 9;
+          });
+          y += blockH + 6;
+        } else if (tag === 'hr') {
+          ensureSpace(8);
+          pdf.setDrawColor(borderSlate[0], borderSlate[1], borderSlate[2]);
+          pdf.setLineWidth(0.5);
+          pdf.line(margin, y + 3, margin + contentWidth, y + 3);
+          y += 8;
+        } else {
+          pdf.setFont('helvetica', 'normal');
+          pdf.setFontSize(7.5);
+          pdf.setTextColor(bodySlate[0], bodySlate[1], bodySlate[2]);
+          const lines = pdf.splitTextToSize(text, contentWidth);
+          lines.forEach(line => {
+            ensureSpace(11);
+            pdf.text(line, margin, y);
+            y += 10;
+          });
+          y += 4;
+        }
+      }
+
+      return y;
+    },
+
     // SLACK / TEAMS / EMAIL MARKDOWN EXPORTER
     // ====================================================================
 
@@ -13370,6 +13978,10 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
       const valType = doc.validationType || doc.documentType || 'Model Validation';
       const statusEmoji = doc.status === 'Approved' ? '✅' : (doc.status === 'In Review' ? '⏳' : '📝');
       const slackStatus = doc.status === 'Approved' ? ':white_check_mark: *Approved*' : (doc.status === 'In Review' ? ':hourglass_flowing_sand: *In Review*' : ':pencil2: *Draft*');
+
+      const notesPlain = this.htmlToPlainText(doc.notes);
+      const notesMd = this.htmlToMarkdown(doc.notes);
+      const hasNotes = Boolean(notesPlain);
 
       // 1. Slack Markdown
       const slackMd = `:page_facing_up: *[DQ Validation] ${doc.title || 'Untitled'}* (${doc.id || 'N/A'})\n` +
@@ -13384,7 +13996,8 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
         `• *Visual Evidence:* ${doc.screenshots?.length || 0} screenshot(s) attached\n\n` +
         `:mag: *SQL Assertions (${queries.length} Queries):*\n` +
         queries.map((q, i) => `*#${i+1} ${q.title || 'Query'} (${q.dialect || 'Trino'}):*\n\`\`\`sql\n${(q.query || '').trim()}\n\`\`\``).join('\n') + '\n\n' +
-        `:shield: *Remediation Protocol:*\n${doc.remediation || 'Standard runbook execution applies.'}`;
+        `:shield: *Remediation Protocol:*\n${doc.remediation || 'Standard runbook execution applies.'}` +
+        (hasNotes ? `\n\n:memo: *Documentation Notes:*\n${notesMd}` : '');
 
       // 2. Microsoft Teams Markdown
       const teamsMd = `### 📑 Data Quality Validation Report: ${doc.title || 'Untitled'}\n\n` +
@@ -13407,7 +14020,8 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
         `#### 💾 Verification SQL Queries\n` +
         queries.map((q, i) => `##### ${i+1}. ${q.title || 'Query'} (${q.dialect || 'Trino'})\n\`\`\`sql\n${(q.query || '').trim()}\n\`\`\``).join('\n\n') + '\n\n' +
         `#### 🛠️ Remediation Protocol\n` +
-        `${doc.remediation || 'Refer to enterprise data operations runbook.'}`;
+        `${doc.remediation || 'Refer to enterprise data operations runbook.'}` +
+        (hasNotes ? `\n\n#### 📝 Documentation Notes\n${notesMd}` : '');
 
       // 3. Email / Plain Text
       const emailText = `DATA QUALITY VALIDATION SPECIFICATION\n` +
@@ -13429,7 +14043,8 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
         `SQL QUERIES (${queries.length}):\n` +
         queries.map((q, i) => `[Query ${i+1}] ${q.title} (${q.dialect || 'Trino'})\n${q.query}\n`).join('\n') + '\n\n' +
         `REMEDIATION PROTOCOL:\n` +
-        `${doc.remediation || 'N/A'}\n`;
+        `${doc.remediation || 'N/A'}\n` +
+        (hasNotes ? `\nDOCUMENTATION NOTES:\n${notesPlain}\n` : '');
 
       const modalHtml = `
         <div>
@@ -14408,6 +15023,9 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
         `§ 5. ${section5Name}`,
         '§ 6. Governance Sign-off & Digital Certificate'
       ];
+      if (this.htmlToPlainText(doc.notes)) {
+        tocRightCol.push('§ 7. Notes & Technical Annotations');
+      }
 
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(7);
@@ -15223,6 +15841,18 @@ FEATURE_FILESYSTEM_SEARCH=${this.config.features?.filesystemSearch !== false}
       pdf.text(`Audit Timestamp: ${new Date().toISOString().replace('T', ' ').slice(0, 19)} UTC  •  Status: ${docStatus.toUpperCase()}  •  Version: ${doc.version || '1.0'}`, margin + 10, y + 37);
 
       y += certBoxH + 22;
+
+      // SECTION 8: Documentation Notes & Technical Annotations (if present)
+      const docNotesPlain = this.htmlToPlainText(doc.notes);
+      if (docNotesPlain) {
+        if (y > pageHeight - 160) {
+          pdf.addPage();
+          y = margin + 25;
+        }
+        renderSectionHeader('07', 'Documentation Notes & Technical Annotations', 'Operational guidelines, runbook caveats & engineering observations');
+        y = this.renderNotesHtmlToPdf(pdf, doc.notes, margin, y, contentWidth, pageHeight, primaryRgb, borderSlate, cardBgSlate, bodySlate, mutedSlate);
+        y += 18;
+      }
 
       // APPENDIX: Visual Screenshot Evidence
       const appendixScreenshots = (doc.screenshots || []).filter(s => s.placement === 'appendix' || (!s.placement));
