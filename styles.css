@@ -5500,3 +5500,21 @@ html, body {
   border-color: var(--primary-color);
 }
 
+
+/* Table Name Auto-Detection Pulse Highlight */
+@keyframes auto-detect-flash {
+  0% {
+    background-color: rgba(0, 166, 166, 0.22);
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(0, 166, 166, 0.25);
+  }
+  100% {
+    background-color: var(--surface);
+    border-color: var(--surface-border);
+    box-shadow: none;
+  }
+}
+
+.input-auto-detected {
+  animation: auto-detect-flash 1.6s ease-out forwards;
+}

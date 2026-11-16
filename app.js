@@ -5066,6 +5066,9 @@
       // Notes Rich Text Editor (Section 9 - Last Section)
       this.bindNotesEditor(container);
 
+      // Data Source Tables Auto-Detection (Catalog.Schema.Table)
+      this.bindDataSourceTableParser(container);
+
       // Add Mapping Row
       document.getElementById('btn-add-mapping-row')?.addEventListener('click', () => {
         const tbody = document.getElementById('tbody-source-mappings');
@@ -5797,8 +5800,27 @@
       if (document.getElementById('doc-input-src-catalog')) doc.dataSource.catalog = document.getElementById('doc-input-src-catalog').value;
       if (document.getElementById('doc-input-src-schema')) doc.dataSource.schema = document.getElementById('doc-input-src-schema').value;
       if (document.getElementById('doc-input-src-tables')) {
-        const tablesRaw = document.getElementById('doc-input-src-tables').value;
-        doc.dataSource.tables = tablesRaw.split(',').map(s => s.trim()).filter(Boolean);
+        const tablesInput = document.getElementById('doc-input-src-tables');
+        const parsed = this.parseDottedTableName(tablesInput.value);
+        if (parsed) {
+          if (parsed.catalog) {
+            doc.dataSource.catalog = parsed.catalog;
+            const catInp = document.getElementById('doc-input-src-catalog');
+            if (catInp) catInp.value = parsed.catalog;
+          }
+          if (parsed.schema) {
+            doc.dataSource.schema = parsed.schema;
+            const schInp = document.getElementById('doc-input-src-schema');
+            if (schInp) schInp.value = parsed.schema;
+          }
+          if (parsed.cleanTables) {
+            tablesInput.value = parsed.cleanTables;
+            doc.dataSource.tables = parsed.cleanTables.split(',').map(s => s.trim()).filter(Boolean);
+          }
+        } else {
+          const tablesRaw = tablesInput.value;
+          doc.dataSource.tables = tablesRaw.split(',').map(s => s.trim()).filter(Boolean);
+        }
       }
       if (document.getElementById('doc-input-src-dependencies')) doc.dataSource.dependencies = document.getElementById('doc-input-src-dependencies').value;
 
@@ -7885,6 +7907,177 @@ ${q.query || '-- No SQL specified'}
           }
           this.updateStepperRailState();
           this.showToast('Notes cleared', 'info');
+        }
+      });
+    },
+
+    parseDottedTableName(rawInput) {
+      if (!rawInput || typeof rawInput !== 'string') return null;
+      const trimmed = rawInput.trim();
+      if (!trimmed.includes('.')) return null;
+
+      const tokens = trimmed.split(',').map(s => s.trim()).filter(Boolean);
+      if (tokens.length === 0) return null;
+
+      let detectedCatalog = '';
+      let detectedSchema = '';
+      const cleanTables = [];
+      let hadDots = false;
+
+      tokens.forEach(tok => {
+        const cleanTok = tok.replace(/[`"[\]]/g, '').trim();
+        if (cleanTok.includes('.')) {
+          hadDots = true;
+          const parts = cleanTok.split('.').map(p => p.trim().replace(/[`"[\]]/g, '')).filter(Boolean);
+          if (parts.length >= 3) {
+            if (!detectedCatalog) detectedCatalog = parts[0];
+            if (!detectedSchema) detectedSchema = parts[1];
+            cleanTables.push(parts.slice(2).join('.'));
+          } else if (parts.length === 2) {
+            if (!detectedSchema) detectedSchema = parts[0];
+            cleanTables.push(parts[1]);
+          } else {
+            cleanTables.push(cleanTok);
+          }
+        } else {
+          cleanTables.push(cleanTok);
+        }
+      });
+
+      if (!hadDots) return null;
+
+      return {
+        catalog: detectedCatalog,
+        schema: detectedSchema,
+        cleanTables: cleanTables.join(', ')
+      };
+    },
+
+    applyTableAutoDetection(tableInput, isSilent = false) {
+      if (!tableInput) return;
+      const rawVal = tableInput.value;
+      const parsed = this.parseDottedTableName(rawVal);
+      if (!parsed) return;
+
+      const { catalog, schema, cleanTables } = parsed;
+
+      // Update table input with cut table name only
+      tableInput.value = cleanTables;
+      if (this.currentDoc) {
+        this.currentDoc.dataSource = this.currentDoc.dataSource || {};
+        this.currentDoc.dataSource.tables = cleanTables.split(',').map(s => s.trim()).filter(Boolean);
+      }
+
+      // Check if catalog/schema addon card is present in DOM
+      let catInput = document.getElementById('doc-input-src-catalog');
+      let schInput = document.getElementById('doc-input-src-schema');
+
+      if (!catInput || !schInput) {
+        if (this.currentDoc) {
+          if (!Array.isArray(this.currentDoc.activeSections)) {
+            this.currentDoc.activeSections = this.detectActiveSections(this.currentDoc);
+          }
+          if (!this.currentDoc.activeSections.includes('catalog_schema')) {
+            this.currentDoc.activeSections.push('catalog_schema');
+          }
+        }
+
+        const gridEl = tableInput.closest('.grid-cols-2');
+        if (gridEl) {
+          const addonCardHtml = `
+            <div class="addon-section-card addon-section-entrance" id="addon-card-catalog_schema" style="margin-top: 14px; background: var(--surface-alt); border: 1px dashed var(--accent-color); border-radius: var(--border-radius-sm); padding: 12px 16px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--accent-color);">
+                  <span>🏢</span>
+                  <span>Database / Catalog & Schema Scope</span>
+                </div>
+                <button type="button" class="btn-remove-addon-card" data-tab="tab-sources" data-addon-id="catalog_schema" title="Remove and return to Addons Wheel">
+                  <span>🎡</span> Remove
+                </button>
+              </div>
+              <div class="grid-cols-2">
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label class="form-label">Database / Catalog</label>
+                  <input type="text" id="doc-input-src-catalog" class="form-control" list="dl-catalogs" value="${this.escapeHtml(catalog || '')}" placeholder="e.g. EDW_PROD">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label class="form-label">Schema</label>
+                  <input type="text" id="doc-input-src-schema" class="form-control" list="dl-schemas" value="${this.escapeHtml(schema || '')}" placeholder="e.g. CUSTOMER">
+                </div>
+              </div>
+            </div>
+          `;
+          gridEl.insertAdjacentHTML('afterend', addonCardHtml);
+
+          const newCard = document.getElementById('addon-card-catalog_schema');
+          newCard?.querySelector('.btn-remove-addon-card')?.addEventListener('click', () => {
+            this.toggleAddonSection('tab-sources', 'catalog_schema', false);
+          });
+
+          this.updateTabWheelCount('tab-sources');
+
+          catInput = document.getElementById('doc-input-src-catalog');
+          schInput = document.getElementById('doc-input-src-schema');
+        }
+      }
+
+      if (catInput && catalog) {
+        catInput.value = catalog;
+        catInput.classList.remove('input-auto-detected');
+        void catInput.offsetWidth;
+        catInput.classList.add('input-auto-detected');
+      }
+      if (schInput && schema) {
+        schInput.value = schema;
+        schInput.classList.remove('input-auto-detected');
+        void schInput.offsetWidth;
+        schInput.classList.add('input-auto-detected');
+      }
+
+      if (this.currentDoc) {
+        this.currentDoc.dataSource = this.currentDoc.dataSource || {};
+        if (catalog) this.currentDoc.dataSource.catalog = catalog;
+        if (schema) this.currentDoc.dataSource.schema = schema;
+      }
+
+      this.updateStepperRailState();
+
+      if (!isSilent) {
+        const detectedMsg = catalog && schema
+          ? `Auto-detected Catalog "${catalog}" & Schema "${schema}" (Table: "${cleanTables}")`
+          : (schema ? `Auto-detected Schema "${schema}" (Table: "${cleanTables}")` : `Auto-detected Catalog "${catalog}"`);
+        this.showToast(detectedMsg, 'success');
+      }
+    },
+
+    bindDataSourceTableParser(container) {
+      const tableInput = container ? container.querySelector('#doc-input-src-tables') : document.getElementById('doc-input-src-tables');
+      if (!tableInput) return;
+
+      tableInput.addEventListener('blur', () => {
+        this.applyTableAutoDetection(tableInput);
+      });
+
+      tableInput.addEventListener('change', () => {
+        this.applyTableAutoDetection(tableInput);
+      });
+
+      tableInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          this.applyTableAutoDetection(tableInput);
+        }
+      });
+
+      tableInput.addEventListener('paste', () => {
+        setTimeout(() => {
+          this.applyTableAutoDetection(tableInput);
+        }, 15);
+      });
+
+      tableInput.addEventListener('input', () => {
+        const val = tableInput.value;
+        if ((val.endsWith(',') || val.endsWith(' ')) && val.includes('.')) {
+          this.applyTableAutoDetection(tableInput);
         }
       });
     },
